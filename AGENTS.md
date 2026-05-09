@@ -1,0 +1,136 @@
+# AGENTS.md — Powerfin POS
+
+## Architecture (3 systems, each with ONE job)
+
+```
+PowerFin ERP  — do NOT modify core. Only add /api/pos/* endpoints.
+  OpenXava / Java 8 / PostgreSQL / :8080
+  Source of truth for all business data.
+
+FusionBridge  — bridge between software and hardware.
+  Quarkus 3.x / Java 21 / :8090
+  Dir: fusion-bridge/
+
+Powerfin POS   — dispatcher touch UI (PWA).
+  SvelteKit 2.x / TypeScript / Tailwind CSS
+  Dir: pos/
+```
+
+**Rule: none duplicates another's responsibility.** FusionBridge and Powerfin POS have NO business database of their own.
+
+## Hardware (validated against real Wayne Synergy)
+
+```
+Wayne Synergy:    192.168.1.20:3011  (Firmware Rel-5.19.1)
+Printer Island 1: 192.168.1.31:9100  (ESC/POS, raw TCP socket, no CUPS/drivers)
+Printer Island 2: 192.168.1.32:9100
+Server:           192.168.1.10       (Debian 12, direct install, NO Docker)
+```
+
+## Fusion Protocol (critical — easy to get wrong)
+
+- Plain text, pipe-delimited, `^` terminator
+- Format: `<len>|<crypt>|<version>|<user_id>|<msg_type>|<event>|<dest>|<origin>|<params>|^`
+- `crypt=5` means no encryption
+- `len` = 5-digit length from `<version>` to `^` **inclusive** — this is the most common bug
+- Keep-alive: ECHO every 120s (Timeout: 360s)
+- Single persistent TCP connection to Fusion
+- Event params format: `KEY=VALUE|KEY=VALUE`
+- `dispatch_order_id` travels in `PAY_IN` field for recovery: `OV=orderId~CLI=...`
+
+## Key architecture decisions (do NOT reverse)
+
+1. No Docker — FusionBridge needs direct LAN TCP access
+2. SSE (not WebSockets) for FusionBridge → Powerfin POS events
+3. FusionBridge maintains one single TCP connection to Synergy
+4. Printing is FusionBridge's responsibility, not the browser's
+5. `accounting_date` ≠ shift date — turns can cross midnight
+
+## Language rules
+
+- Documentation (docs/\*.md): Spanish
+- Source code (Java, TypeScript, SQL, comments): English
+- Commit messages: English, conventional commits format
+
+## Commit conventions
+
+```
+feat(fusion-bridge): ...
+fix(pos): ...
+test(fusion-bridge): ...
+docs: ...
+chore: ...
+```
+
+Branches: `main` (stable), `develop` (WIP), `feature/*`, `fix/*`
+Tags per phase: v0.1.0, v0.2.0, ..., v1.0.0
+
+## Git versioning — mandatory after every phase
+
+Three-level versioning: **MAJOR.MINOR.PATCH**
+
+```
+MAJOR (X.0.0)  — breaking change, breaks backward compatibility
+MINOR (0.X.0)  — new feature, no breaking changes
+PATCH (0.0.X)  — bug fix or minor improvement
+```
+
+**Every phase MUST be versioned.** The flow at end of each phase:
+
+```
+1. Run all tests → must pass 100%
+   FusionBridge:  ./mvnw test
+   Powerfin POS:       npm run test && npm run check
+2. Update ROADMAP.md → mark completed tasks with [x], advance phase
+3. Update AGENTS.md → if changed conventions, new rules, or phase status
+4. Commit all changes
+5. Tag the version:
+   git tag -a v0.1.0 -m "Phase 1: FusionBridge TCP connection"
+   git push origin develop --tags
+```
+
+**If any test fails → do NOT version, fix first.**
+Nunca se versiona código roto.
+
+## Repo layout — where to find things
+
+```
+powerfin_pos_gas/
+├── docs/                        ← authoritative reference (read before coding)
+│   ├── FUSION_PROTOCOL.md       ← TCP protocol (validated real data)
+│   ├── FUSION_BRIDGE.md         ← Quarkus architecture + code sketches
+│   ├── POWERFIN_POS.md          ← SvelteKit architecture + code sketches
+│   ├── API_CONTRACT.md          ← endpoint contracts between all 3 systems
+│   ├── INFRAESTRUCTURA.md       ← Debian setup, systemd, Nginx, deploy
+│   ├── FLUJOS_OPERATIVOS.md     ← dispatcher workflows + mockups
+│   └── ROADMAP.md               ← 8-phase development plan
+├── fusion-bridge/               ← Quarkus sub-project (Java 21)
+└── pos/                         ← SvelteKit sub-project (TypeScript)
+```
+
+## Current state
+
+**Phase 1 — Foundation.** No code written yet. Directories exist but are empty. The docs/ directory contains the complete design. Everything in `docs/FUSION_BRIDGE.md` and `docs/POWERFIN_POS.md` is reference architecture, not implemented code.
+
+## When building
+
+- Java package base: `com.powerfin.pos.bridge.*`
+- Quarkus annotations: `@ApplicationScoped`, `@RunOnVirtualThread` (I/O), `@Scheduled`, `@ConfigProperty`
+- Logging: `io.quarkus.logging.Log` — never `System.out.println`
+- Svelte components: PascalCase (e.g. `DispenserCard.svelte`), TS files: kebab-case
+- No business logic in Svelte components — use `$lib/api/` and stores
+- Print policy config: `PRINTER_POLICY` env var (ALWAYS | ASK | NEVER)
+- ESC/POS library: `escpos-coffee` 4.1.0
+
+## Connectivity tests (from server)
+
+```bash
+# Test Synergy
+echo -n "00012|5|2||ECHO||||^" | nc -v 192.168.1.20 3011
+
+# Test printer
+nc -zv 192.168.1.31 9100
+
+# Health check (once FusionBridge is running)
+curl -s http://localhost:8090/health
+```

@@ -1,0 +1,60 @@
+# ── Java / Quarkus ──────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# Quarkus
+.quarkus/
+*.dmp
+
+# ── Maven ──────────────────────────────────────────────
+pom.xml.versionsBackup
+.mvn/wrapper/maven-wrapper.properties
+
+# ── Node / React / Vite ────────────────────────────────
+node_modules/
+dist/
+.vite/
+*.local
+
+# ── Environment ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── IDE ────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ── OS ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.bak
+
+# ── Security ───────────────────────────────────────────
+*.pem
+!src/main/resources/publicKey.pem
+privateKey.pem
+
+# ── Docker ─────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Logs ───────────────────────────────────────────────
+*.log
+logs/
+
+# ── PrintAgent ─────────────────────────────────────────
+print-agent/target/
+
+# ── Coverage / Reports ─────────────────────────────────
+jacoco.exec
+coverage/
