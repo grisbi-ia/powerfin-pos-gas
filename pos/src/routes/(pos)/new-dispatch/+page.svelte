@@ -99,6 +99,8 @@
 				price_list: 'STANDARD',
 				price_list_name: 'Precio Normal'
 			};
+			confirmedOwner = vehicleResult.owner;
+			currentStep = 'plate';
 			showAmountSection = true;
 		} catch {
 			error = 'Error al registrar';
