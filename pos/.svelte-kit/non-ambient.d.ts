@@ -45,7 +45,7 @@ declare module "$app/types" {
 			"/shift/close": Record<string, never>;
 			"/shift/open": Record<string, never>
 		};
-		Pathname(): "/" | "/login" | "/shift/open";
+		Pathname(): "/" | "/history" | "/login" | "/new-dispatch" | "/shift/close" | "/shift/open";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): string & {};
 	}

@@ -13,11 +13,14 @@ target/
 pom.xml.versionsBackup
 .mvn/wrapper/maven-wrapper.properties
 
-# ── Node / React / Vite ────────────────────────────────
+# ── Node / SvelteKit / Vite ────────────────────────────
 node_modules/
 dist/
+build/
 .vite/
 *.local
+.svelte-kit/output/
+.svelte-kit/generated/
 
 # ── Environment ────────────────────────────────────────
 .env

@@ -1,6 +1,9 @@
 {
 	"/(pos)": [],
 	"/": [],
+	"/(pos)/history": [],
 	"/login": [],
+	"/(pos)/new-dispatch": [],
+	"/shift/close": [],
 	"/shift/open": []
 }

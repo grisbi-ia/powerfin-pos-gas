@@ -5,13 +5,14 @@
 	import { configStore } from '$lib/stores/config';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 
 	// Mock imports — swap to real imports when backends are available
 	import * as powerfin from '$lib/api/powerfin.mock';
 	import * as bridge from '$lib/api/bridge.mock';
 
-	$: currentPath = $page.url.pathname;
+	$: currentPath = browser ? $page.url.pathname : '';
 
 	onMount(async () => {
 		// If we have a token but no user loaded yet, load config
@@ -25,15 +26,16 @@
 		}
 	});
 
-	// Redirect logic
-	$: if ($auth.token) {
-		// Authenticated
-		if (currentPath === '/login' || currentPath === '/') {
-			goto('/pos', { replaceState: true });
-		}
-	} else {
-		if (currentPath !== '/login') {
-			goto('/login', { replaceState: true });
+	// Redirect logic — only on client
+	$: if (browser) {
+		if ($auth.token) {
+			if (currentPath === '/login') {
+				goto('/', { replaceState: true });
+			}
+		} else {
+			if (currentPath !== '/login') {
+				goto('/login', { replaceState: true });
+			}
 		}
 	}
 </script>

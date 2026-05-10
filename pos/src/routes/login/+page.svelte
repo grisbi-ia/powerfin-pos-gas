@@ -23,7 +23,7 @@
 		try {
 			const response = await powerfin.login({ username, pin });
 			auth.login(response.access_token, response.user);
-			goto('/pos');
+			goto('/');
 		} catch {
 			error = 'Credenciales inválidas';
 			pin = '';

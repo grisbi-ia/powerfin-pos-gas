@@ -144,12 +144,23 @@ export async function openShift(_token: string, data: OpenShiftRequest): Promise
 		opening_cash: data.opening_cash,
 		dispenser_ids: data.dispenser_ids
 	};
+	if (typeof localStorage !== 'undefined') {
+		localStorage.setItem('shift', JSON.stringify(mockShift));
+	}
 	return { ...mockShift };
 }
 
 export async function getCurrentShift(_token: string): Promise<Shift | null> {
 	await delay(200);
-	return mockShift;
+	// In production, PowerFin is the source of truth.
+	// The mock simulates persistence via localStorage on refresh.
+	if (!mockShift && typeof localStorage !== 'undefined') {
+		const stored = localStorage.getItem('shift');
+		if (stored) {
+			try { mockShift = JSON.parse(stored); } catch { /* ignore */ }
+		}
+	}
+	return mockShift ? { ...mockShift } : null;
 }
 
 export async function closeShift(

@@ -28,19 +28,24 @@
 			}
 		}
 
-		// 2. Check shift
+		// 2. Check shift — optimistic UI from localStorage, verified against server
 		if ($auth.token) {
 			try {
-				const currentShift = await powerfin.getCurrentShift($auth.token);
-				if (!currentShift) {
+				const serverShift = await powerfin.getCurrentShift($auth.token);
+				if (!serverShift) {
+					// No shift on server → redirect even if localStorage had stale data
+					shift.clear();
 					goto('/shift/open');
 					return;
 				}
-				if (!$shift) shift.set(currentShift);
+				// Update store with authoritative server data
+				shift.set(serverShift);
 			} catch {
-				// No shift — redirect
-				goto('/shift/open');
-				return;
+				// API failed → trust localStorage if available
+				if (!$shift) {
+					goto('/shift/open');
+					return;
+				}
 			}
 		}
 
@@ -89,11 +94,11 @@
 	});
 
 	function handleNewDispatch(dispenserId: number) {
-		goto(`/pos/new-dispatch?dispenser=${dispenserId}`);
+		goto(`/new-dispatch?dispenser=${dispenserId}`);
 	}
 
 	function handleHistory() {
-		goto('/pos/history');
+		goto('/history');
 	}
 
 	function handleCloseShift() {
@@ -146,7 +151,7 @@
 	<div class="flex justify-around">
 		<button
 			class="touch-btn flex flex-col items-center gap-1 text-primary"
-			on:click={() => goto('/pos')}
+			on:click={() => goto('/')}
 		>
 			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />

@@ -40,7 +40,7 @@
 				notes
 			});
 			shift.set(result);
-			goto('/pos');
+			goto('/');
 		} catch {
 			error = 'Error al abrir el turno';
 		} finally {
