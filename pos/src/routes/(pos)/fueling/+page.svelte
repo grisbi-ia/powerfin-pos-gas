@@ -10,8 +10,9 @@
 	let orderId = '';
 	let dispenserId = 0;
 	let presetAmount = 0;
-	let paymentMethod = '';
 	let unitPrice = 0;
+	let customerName = '';
+	let priceList = 'STANDARD';
 
 	let currentVolume = 0;
 	let currentAmount = 0;
@@ -26,8 +27,9 @@
 		orderId = $page.url.searchParams.get('order') ?? '';
 		dispenserId = Number($page.url.searchParams.get('dispenser') ?? '0');
 		presetAmount = parseFloat($page.url.searchParams.get('amount') ?? '0');
-		paymentMethod = $page.url.searchParams.get('method') ?? '';
 		unitPrice = parseFloat($page.url.searchParams.get('price') ?? '0');
+		customerName = decodeURIComponent($page.url.searchParams.get('customerName') ?? '');
+		priceList = $page.url.searchParams.get('priceList') ?? 'STANDARD';
 
 		// Connect SSE to track progress
 		eventSource = connectToEvents(
@@ -42,7 +44,7 @@
 					if (dispenserStatus === 'IDLE' && currentAmount > 0) {
 						// Sale completed — go to confirmation
 						eventSource?.close();
-						goto(`/confirmation?order=${orderId}&dispenser=${dispenserId}&amount=${currentAmount.toFixed(2)}&volume=${estimatedVolume}&preset=${presetAmount}&method=${paymentMethod}&price=${unitPrice}`);
+						goto(`/confirmation?order=${orderId}&dispenser=${dispenserId}&amount=${currentAmount.toFixed(2)}&volume=${estimatedVolume}&preset=${presetAmount}&price=${unitPrice}&customerName=${encodeURIComponent(customerName)}&priceList=${priceList}`);
 					}
 				}
 			}
@@ -113,8 +115,8 @@
 				<span class="text-sm font-semibold">${remaining.toFixed(2)}</span>
 			</div>
 			<div class="flex justify-between">
-				<span class="text-sm text-gray-500">Pago</span>
-				<span class="text-sm font-semibold">{paymentMethod}</span>
+				<span class="text-sm text-gray-500">Precio</span>
+				<span class="text-sm font-semibold">${unitPrice.toFixed(3)}/L</span>
 			</div>
 		</div>
 

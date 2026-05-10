@@ -26,6 +26,13 @@ export interface AppConfig {
 	dispensers: DispenserConfig[];
 	grades: GradeConfig[];
 	price_lists: PriceListConfig[];
+	payment_methods: PaymentMethodConfig[];
+}
+
+export interface PaymentMethodConfig {
+	code: string;
+	name: string;
+	requires_reference: boolean;
 }
 
 export interface DispenserConfig {

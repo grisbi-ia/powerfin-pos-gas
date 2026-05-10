@@ -42,7 +42,13 @@ const MOCK_DISPENSERS: Map<number, DispenserState> = new Map([
 ]);
 
 let mockFusionConnected = true;
-export let mockEventSource: MockEventSource | null = null;
+const activeEventSources = new Set<MockEventSource>();
+
+function broadcastToAll(event: string, data: Record<string, unknown>) {
+	for (const es of activeEventSources) {
+		es.emit(event, data);
+	}
+}
 
 // ── Mock delay ───────────────────────────────────────────────
 
@@ -78,53 +84,65 @@ export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: 
 			presetAmount: parseFloat(data.preset_value) || 0
 		});
 
-		if (mockEventSource) {
-			setTimeout(() => {
-				mockEventSource!.send('PUMP_STATUS_CHANGE', {
+		// Simulate fueling events — broadcast to ALL connected clients
+		setTimeout(() => broadcastToAll('PUMP_STATUS_CHANGE', {
+			dispenserId: data.dispenser_id,
+			status: 'AUTHORIZED',
+			subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
+			presetAmount: parseFloat(data.preset_value) || 0
+		}), 1000);
+
+		setTimeout(() => {
+			const d = MOCK_DISPENSERS.get(data.dispenser_id);
+			if (d) {
+				MOCK_DISPENSERS.set(data.dispenser_id, { ...d, status: 'FUELLING', subStatus: 'MONEY_PRESET' });
+				broadcastToAll('PUMP_STATUS_CHANGE', {
 					dispenserId: data.dispenser_id,
-					status: 'AUTHORIZED',
-					subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
+					status: 'FUELLING',
+					subStatus: 'MONEY_PRESET',
 					presetAmount: parseFloat(data.preset_value) || 0
 				});
+			}
 
-				// Simulate fuelling
-				setTimeout(() => {
-					const d = MOCK_DISPENSERS.get(data.dispenser_id);
-					if (d) {
-						MOCK_DISPENSERS.set(data.dispenser_id, {
-							...d,
-							status: 'FUELLING',
-							subStatus: 'MONEY_PRESET'
-						});
-						mockEventSource!.send('PUMP_STATUS_CHANGE', {
-							dispenserId: data.dispenser_id,
-							status: 'FUELLING',
-							subStatus: 'MONEY_PRESET',
-							presetAmount: parseFloat(data.preset_value) || 0
-						});
-					}
-				}, 2000);
+			// Simulate delivery progress
+			broadcastToAll('DELIVERY_PROGRESS', {
+				dispenserId: data.dispenser_id,
+				volume: '1.500',
+				amount: '15.00'
+			});
+		}, 3000);
 
-				// Simulate completion
-				setTimeout(() => {
-					const d = MOCK_DISPENSERS.get(data.dispenser_id);
-					if (d) {
-						MOCK_DISPENSERS.set(data.dispenser_id, {
-							...d,
-							status: 'IDLE',
-							subStatus: '',
-							presetAmount: 0
-						});
-						mockEventSource!.send('PUMP_STATUS_CHANGE', {
-							dispenserId: data.dispenser_id,
-							status: 'IDLE',
-							subStatus: '',
-							presetAmount: 0
-						});
-					}
-				}, 5000);
-			}, 1000);
-		}
+		setTimeout(() => {
+			const d = MOCK_DISPENSERS.get(data.dispenser_id);
+			if (d) {
+				MOCK_DISPENSERS.set(data.dispenser_id, { ...d, status: 'FUELLING', subStatus: 'MONEY_PRESET' });
+				broadcastToAll('DELIVERY_PROGRESS', {
+					dispenserId: data.dispenser_id,
+					volume: '3.200',
+					amount: '32.00'
+				});
+			}
+		}, 4500);
+
+		setTimeout(() => {
+			const d = MOCK_DISPENSERS.get(data.dispenser_id);
+			if (d) {
+				const finalAmount = parseFloat(data.preset_value) * 0.85;
+				const finalVolume = finalAmount / (data.unit_price ?? 1.500);
+				MOCK_DISPENSERS.set(data.dispenser_id, {
+					...d,
+					status: 'IDLE',
+					subStatus: '',
+					presetAmount: 0
+				});
+				broadcastToAll('PUMP_STATUS_CHANGE', {
+					dispenserId: data.dispenser_id,
+					status: 'IDLE',
+					subStatus: '',
+					presetAmount: 0
+				});
+			}
+		}, 6000);
 	}
 	return { status: 'AUTHORIZED' };
 }
@@ -161,7 +179,7 @@ export class MockEventSource {
 	private closed = false;
 
 	constructor() {
-		mockEventSource = this;
+		activeEventSources.add(this);
 
 		// Send INIT event after connection
 		setTimeout(() => {
@@ -187,6 +205,10 @@ export class MockEventSource {
 	}
 
 	send(event: string, data: Record<string, unknown>): void {
+		emit(this, event, data);
+	}
+
+	emit = (event: string, data: Record<string, unknown>): void => {
 		if (this.closed) return;
 		const handlers = this.listeners.get(event);
 		if (handlers) {
@@ -202,8 +224,12 @@ export class MockEventSource {
 
 	close(): void {
 		this.closed = true;
-		mockEventSource = null;
+		activeEventSources.delete(this);
 	}
+}
+
+function emit(es: MockEventSource, event: string, data: Record<string, unknown>) {
+	es.emit(event, data);
 }
 
 export function connectToEvents(

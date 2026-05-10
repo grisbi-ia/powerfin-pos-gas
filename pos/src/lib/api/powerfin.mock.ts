@@ -45,6 +45,15 @@ const MOCK_CONFIG: AppConfig = {
 	price_lists: [
 		{ code: 'STANDARD', name: 'Precio Normal' },
 		{ code: 'VIP', name: 'Cliente VIP' }
+	],
+	payment_methods: [
+		{ code: 'EFECTIVO', name: 'Efectivo', requires_reference: false },
+		{ code: 'TARJETA', name: 'Tarjeta Crédito/Débito', requires_reference: true },
+		{ code: 'QR', name: 'QR / Transferencia', requires_reference: false },
+		{ code: 'CREDITO', name: 'Crédito', requires_reference: false },
+		{ code: 'DEUNA', name: 'DeUna', requires_reference: true },
+		{ code: 'JEPFAST', name: 'JepFast', requires_reference: true },
+		{ code: 'SIPY', name: 'Sipy', requires_reference: true }
 	]
 };
 

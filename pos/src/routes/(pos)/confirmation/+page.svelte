@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import PrintPrompt from '$lib/components/PrintPrompt.svelte';
 	import type { PrintPolicy } from '$lib/api/types';
+	import { config } from '$lib/stores/config';
 
 	// Mock imports
 	import * as bridge from '$lib/api/bridge.mock';
@@ -14,12 +15,21 @@
 	let finalAmount = 0;
 	let finalVolume = '';
 	let presetAmount = 0;
-	let paymentMethod = '';
 	let unitPrice = 0;
+	let customerName = '';
+	let priceList = '';
 	let printPolicy: PrintPolicy = 'ASK';
 	let printing = false;
+	let paymentMethod = '';
+	let confirmed = false;
+	let referenceCode = '';
+
+	$: paymentMethods = $config?.payment_methods ?? [{ code: 'EFECTIVO', name: 'Efectivo', requires_reference: false }];
+	$: selectedMethod = paymentMethods.find(m => m.code === paymentMethod);
+	$: needsReference = selectedMethod?.requires_reference ?? false;
 
 	$: change = presetAmount > 0 ? Math.max(0, presetAmount - finalAmount) : 0;
+	$: canConfirm = paymentMethod !== '' && (!needsReference || referenceCode.trim() !== '');
 
 	onMount(async () => {
 		orderId = $page.url.searchParams.get('order') ?? '';
@@ -27,21 +37,27 @@
 		finalAmount = parseFloat($page.url.searchParams.get('amount') ?? '0');
 		finalVolume = $page.url.searchParams.get('volume') ?? '0.00';
 		presetAmount = parseFloat($page.url.searchParams.get('preset') ?? '0');
-		paymentMethod = $page.url.searchParams.get('method') ?? '';
 		unitPrice = parseFloat($page.url.searchParams.get('price') ?? '0');
+		customerName = decodeURIComponent($page.url.searchParams.get('customerName') ?? '');
+		priceList = $page.url.searchParams.get('priceList') ?? 'STANDARD';
 
 		// Get print policy from bridge
 		try {
 			const policyResult = await bridge.getPrintPolicy();
 			printPolicy = policyResult.policy as PrintPolicy;
-
-			if (printPolicy === 'ALWAYS') {
-				await handlePrint();
-			}
 		} catch {
 			printPolicy = 'ASK';
 		}
 	});
+
+	async function handleConfirm() {
+		if (!paymentMethod) return;
+		confirmed = true;
+
+		if (printPolicy === 'ALWAYS') {
+			await handlePrint();
+		}
+	}
 
 	async function handlePrint() {
 		printing = true;
@@ -69,7 +85,7 @@
 	}
 </script>
 
-<Header title="Venta Completada" showBack={false} />
+<Header title="Confirmar Venta" showBack={false} />
 
 <main class="flex-1 px-4 py-6 overflow-y-auto">
 	<div class="w-full max-w-sm mx-auto">
@@ -80,7 +96,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 				</svg>
 			</div>
-			<h2 class="text-xl font-bold text-gray-800">Venta Completada</h2>
+			<h2 class="text-xl font-bold text-gray-800">Despacho Completado</h2>
 			<p class="text-sm text-gray-500 mt-1">#{orderId}</p>
 		</div>
 
@@ -101,15 +117,23 @@
 					<span class="text-gray-500">Precio unitario</span>
 					<span class="font-medium">${unitPrice.toFixed(3)}</span>
 				</div>
-				<div class="flex justify-between text-sm">
-					<span class="text-gray-500">Forma de pago</span>
-					<span class="font-medium">{paymentMethod}</span>
-				</div>
+				{#if customerName}
+					<div class="flex justify-between text-sm">
+						<span class="text-gray-500">Cliente</span>
+						<span class="font-medium">{customerName}</span>
+					</div>
+				{/if}
+				{#if priceList !== 'STANDARD'}
+					<div class="flex justify-between text-sm">
+						<span class="text-gray-500">Lista</span>
+						<span class="font-medium text-purple-600">{priceList}</span>
+					</div>
+				{/if}
 
 				<hr class="border-gray-100" />
 
 				<div class="flex justify-between text-lg font-bold">
-					<span class="text-gray-700">Total</span>
+					<span class="text-gray-700">Total a cobrar</span>
 					<span class="text-primary">${finalAmount.toFixed(2)}</span>
 				</div>
 			</div>
@@ -128,27 +152,89 @@
 			</div>
 		{/if}
 
-		<!-- Print -->
-		{#if !printing}
-			<div class="mb-4">
-				<PrintPrompt
-					policy={printPolicy}
-					onPrint={handlePrint}
-					onSkip={handleNewSale}
-				/>
+		<!-- Payment method — after fueling -->
+		{#if !confirmed}
+			<div class="card p-4 mb-4">
+				<label class="block text-sm font-semibold text-gray-700 mb-3">
+					Forma de pago
+				</label>
+				<div class="grid grid-cols-2 gap-2">
+					{#each paymentMethods as method}
+						<button
+							class="touch-btn py-3 rounded-xl border-2 text-sm font-medium transition-colors
+								{paymentMethod === method.code
+									? 'border-primary bg-primary/5 text-primary'
+									: 'border-gray-200 text-gray-600 hover:border-gray-300'}"
+							on:click={() => { paymentMethod = method.code; referenceCode = ''; }}
+						>
+							{method.name}
+						</button>
+					{/each}
+				</div>
+
+				{#if needsReference}
+					<div class="mt-3">
+						<label for="ref-code" class="block text-sm font-semibold text-gray-700 mb-1">
+							Código de transacción ({selectedMethod?.name})
+						</label>
+						<input
+							id="ref-code"
+							type="text"
+							bind:value={referenceCode}
+							placeholder="Nro. de transacción / voucher"
+							class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm
+								focus:border-primary focus:outline-none"
+						/>
+					</div>
+				{/if}
+
+				<button
+					class="touch-btn w-full bg-green-500 hover:bg-green-600 text-white rounded-xl py-4
+						text-lg font-bold mt-4 disabled:opacity-50"
+					on:click={handleConfirm}
+					disabled={!canConfirm}
+				>
+					Confirmar — Cobrar ${finalAmount.toFixed(2)}
+				</button>
 			</div>
 		{:else}
-			<div class="mb-4 text-center text-sm text-blue-600 animate-pulse">
-				Imprimiendo ticket...
+			<!-- Confirmed — show payment method -->
+			<div class="card p-4 mb-4 bg-green-50 border-green-200">
+				<div class="flex justify-between items-center">
+					<span class="text-sm text-green-700">Cobrado con</span>
+					<span class="text-lg font-bold text-green-700">{selectedMethod?.name}</span>
+				</div>
+				{#if referenceCode}
+					<div class="text-xs text-green-600 mt-1">
+						Transacción: {referenceCode}
+					</div>
+				{/if}
 			</div>
-		{/if}
 
-		<!-- New sale -->
-		<button
-			class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold"
-			on:click={handleNewSale}
-		>
-			Nueva Venta
-		</button>
+			<!-- Print -->
+			{#if !printing}
+				<div class="mb-4">
+					<PrintPrompt
+						policy={printPolicy}
+						onPrint={handlePrint}
+						onSkip={handleNewSale}
+					/>
+				</div>
+			{:else}
+				<div class="mb-4 text-center text-sm text-blue-600 animate-pulse">
+					Imprimiendo ticket...
+				</div>
+			{/if}
+
+			<!-- New sale -->
+			{#if printPolicy === 'NEVER' || !printing}
+				<button
+					class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold"
+					on:click={handleNewSale}
+				>
+					Nueva Venta
+				</button>
+			{/if}
+		{/if}
 	</div>
 </main>

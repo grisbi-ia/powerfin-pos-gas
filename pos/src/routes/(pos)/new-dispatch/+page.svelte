@@ -15,12 +15,9 @@
 
 	let selectedCustomer: Customer | null = null;
 	let amount = '';
-	let paymentMethod = 'EFECTIVO';
 	let loading = false;
 	let error = '';
 	let unitPrice = 1.500;
-
-	const paymentMethods = ['EFECTIVO', 'TARJETA', 'QR', 'CREDITO'];
 
 	$: hoseId = dispenserId * 2 - 1; // Simple mapping: dispenser 1 → hose 1, dispenser 2 → hose 3
 
@@ -53,7 +50,7 @@
 				hose_id: hoseId,
 				preset_type: 'MONEY',
 				preset_value: amount,
-				payment_method: paymentMethod,
+				payment_method: 'EFECTIVO',
 				customer_id: selectedCustomer?.customer_id,
 				plate: selectedCustomer?.plates[0]
 			});
@@ -65,14 +62,14 @@
 				dispenser_id: dispenserId,
 				preset_type: 'MONEY',
 				preset_value: amount,
-				payment_method: paymentMethod,
+				payment_method: 'EFECTIVO',
 				customer_id: selectedCustomer?.customer_id,
 				plate: selectedCustomer?.plates[0],
 				unit_price: unitPrice,
 				price_list: selectedCustomer?.price_list
 			});
 
-			goto(`/fueling?order=${orderId}&dispenser=${dispenserId}&amount=${amount}&method=${paymentMethod}&price=${unitPrice}`);
+			goto(`/fueling?order=${orderId}&dispenser=${dispenserId}&amount=${amount}&price=${unitPrice}&customerName=${encodeURIComponent(selectedCustomer?.name ?? '')}&priceList=${selectedCustomer?.price_list ?? 'STANDARD'}`);
 		} catch (e) {
 			error = 'Error al autorizar el despacho';
 		} finally {
@@ -106,27 +103,6 @@
 	<!-- Amount -->
 	<div class="card p-4 mb-4">
 		<AmountInput onAmount={(a) => amount = a} disabled={loading} />
-	</div>
-
-	<!-- Payment method -->
-	<div class="card p-4 mb-4">
-		<label class="block text-sm font-semibold text-gray-700 mb-2">
-			Forma de pago
-		</label>
-		<div class="grid grid-cols-2 gap-2">
-			{#each paymentMethods as method}
-				<button
-					class="touch-btn py-3 rounded-xl border-2 text-sm font-medium transition-colors
-						{paymentMethod === method
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-gray-300'}"
-					on:click={() => paymentMethod = method}
-					disabled={loading}
-				>
-					{method}
-				</button>
-			{/each}
-		</div>
 	</div>
 
 	<!-- Summary -->

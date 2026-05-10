@@ -55,6 +55,7 @@ declare module '$env/static/private' {
 	export const npm_config_noproxy: string;
 	export const HOME: string;
 	export const CHROME_DESKTOP: string;
+	export const OLDPWD: string;
 	export const DESKTOP_SESSION: string;
 	export const NO_PROXY: string;
 	export const NVM_BIN: string;
@@ -136,7 +137,6 @@ declare module '$env/static/private' {
 	export const SPARK_HOME: string;
 	export const INIT_CWD: string;
 	export const EDITOR: string;
-	export const NODE_ENV: string;
 }
 
 /**
@@ -240,6 +240,7 @@ declare module '$env/dynamic/private' {
 		npm_config_noproxy: string;
 		HOME: string;
 		CHROME_DESKTOP: string;
+		OLDPWD: string;
 		DESKTOP_SESSION: string;
 		NO_PROXY: string;
 		NVM_BIN: string;
@@ -321,7 +322,6 @@ declare module '$env/dynamic/private' {
 		SPARK_HOME: string;
 		INIT_CWD: string;
 		EDITOR: string;
-		NODE_ENV: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;
 	}
