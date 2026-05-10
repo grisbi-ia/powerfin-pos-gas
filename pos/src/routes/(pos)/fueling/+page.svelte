@@ -13,6 +13,7 @@
 	let unitPrice = 0;
 	let customerName = '';
 	let priceList = 'STANDARD';
+	let plate = '';
 
 	let currentVolume = 0;
 	let currentAmount = 0;
@@ -30,6 +31,7 @@
 		unitPrice = parseFloat($page.url.searchParams.get('price') ?? '0');
 		customerName = decodeURIComponent($page.url.searchParams.get('customerName') ?? '');
 		priceList = $page.url.searchParams.get('priceList') ?? 'STANDARD';
+		plate = decodeURIComponent($page.url.searchParams.get('plate') ?? '');
 
 		// Connect SSE to track progress
 		eventSource = connectToEvents(
@@ -83,6 +85,9 @@
 				 'Completando...'}
 			</h2>
 			<p class="text-sm text-gray-500 mt-1">Surtidor {dispenserId}</p>
+			{#if customerName || plate}
+				<p class="text-sm text-gray-400 mt-2">{customerName}{plate ? ` · ${plate}` : ''}</p>
+			{/if}
 		</div>
 
 		<!-- Progress bar -->
