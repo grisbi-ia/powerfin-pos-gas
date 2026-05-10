@@ -12,19 +12,19 @@
 	let name = '';
 	let email = '';
 
+	$: isValid = (() => {
+		if (mode === 'incomplete') {
+			return email.length > 0;
+		}
+		return idNumber.length > 0 && name.length > 0;
+	})();
+
 	function handleSubmit() {
 		if (mode === 'incomplete') {
 			onSubmit({ id_type: 'CED', id_number: '', name: '', email, plate });
 		} else {
 			onSubmit({ id_type: idType, id_number: idNumber, name, email, plate });
 		}
-	}
-
-	function isValid(): boolean {
-		if (mode === 'incomplete') {
-			return email.length > 0;
-		}
-		return idNumber.length > 0 && name.length > 0;
 	}
 </script>
 
@@ -117,7 +117,7 @@
 			<button
 				type="submit"
 				class="touch-btn flex-1 bg-primary hover:bg-primary/90 text-white rounded-xl py-3 font-bold disabled:opacity-50"
-				disabled={loading || !isValid()}
+				disabled={loading || !isValid}
 			>
 				{loading ? 'Guardando...' : 'Continuar'}
 			</button>

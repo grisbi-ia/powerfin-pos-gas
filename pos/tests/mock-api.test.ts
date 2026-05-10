@@ -77,9 +77,9 @@ describe('PowerFin Mock API', () => {
 
 	it('lookupVehicle finds existing plate with complete data', async () => {
 		const { lookupVehicle } = await import('$lib/api/powerfin.mock');
-		const result = await lookupVehicle('token', 'ABC-1234');
+		const result = await lookupVehicle('token', 'ABC1234');
 		expect(result.vehicle_found).toBe(true);
-		expect(result.plate).toBe('ABC-1234');
+		expect(result.plate).toBe('ABC1234');
 		expect(result.owner?.name).toContain('Pérez');
 		expect(result.incomplete_fields).toHaveLength(0);
 		expect(result.price_list).toBe('VIP');
@@ -87,7 +87,7 @@ describe('PowerFin Mock API', () => {
 
 	it('lookupVehicle returns incomplete fields when email missing', async () => {
 		const { lookupVehicle } = await import('$lib/api/powerfin.mock');
-		const result = await lookupVehicle('token', 'XYZ-5678');
+		const result = await lookupVehicle('token', 'XYZ5678');
 		expect(result.vehicle_found).toBe(true);
 		expect(result.owner?.email).toBeNull();
 		expect(result.incomplete_fields).toContain('email');
@@ -127,12 +127,12 @@ describe('PowerFin Mock API', () => {
 			id_number: '0102030405',
 			name: 'Test User',
 			email: 'test@example.com',
-			plate: 'TEST-001'
+			plate: 'TEST001'
 		});
 		expect(result.customer_id).toBe('0102030405');
 		expect(result.price_list).toBe('STANDARD');
 
-		const vehicle = await lookupVehicle('token', 'TEST-001');
+		const vehicle = await lookupVehicle('token', 'TEST001');
 		expect(vehicle.vehicle_found).toBe(true);
 		expect(vehicle.owner?.name).toBe('Test User');
 	});

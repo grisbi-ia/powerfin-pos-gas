@@ -101,8 +101,8 @@ const MOCK_CUSTOMERS: Customer[] = [
 ];
 
 const MOCK_VEHICLES: Record<string, VehicleResult> = {
-	'ABC-1234': {
-		plate: 'ABC-1234',
+	'ABC1234': {
+		plate: 'ABC1234',
 		vehicle_found: true,
 		incomplete_fields: [],
 		owner: {
@@ -116,8 +116,8 @@ const MOCK_VEHICLES: Record<string, VehicleResult> = {
 		price_list: 'VIP',
 		price_list_name: 'Cliente VIP'
 	},
-	'XYZ-5678': {
-		plate: 'XYZ-5678',
+	'XYZ5678': {
+		plate: 'XYZ5678',
 		vehicle_found: true,
 		incomplete_fields: ['email'],
 		owner: {
