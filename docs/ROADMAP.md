@@ -39,47 +39,47 @@ FusionBridge conectado al Wayne Synergy. Estado de surtidores visible vía REST 
 **Día 1-2: Setup del proyecto**
 
 ```
-☐ Crear proyecto Quarkus 3.x (Java 21)
-☐ pom.xml con dependencias (Vert.x, REST, Scheduler, Health, escpos-coffee)
-☐ application.properties con todas las variables de entorno
-☐ Estructura de paquetes (fusion, dispenser, dispatch, print, sse, powerfin, health)
-☐ Compilar sin errores: ./mvnw compile
+[x] Crear proyecto Quarkus 3.x (Java 21)
+[x] pom.xml con dependencias (Vert.x, REST, Scheduler, Health, escpos-coffee)
+[x] application.properties con todas las variables de entorno
+[x] Estructura de paquetes (fusion, dispenser, dispatch, print, sse, powerfin, health)
+[x] Compilar sin errores: ./mvnw compile
 ```
 
 **Día 3-4: FusionTcpClient**
 
 ```
-☐ FusionMessage.java — parser con tests
-☐ FusionMessageBuilder.java — constructor con tests (calcular len correctamente)
-☐ FusionTcpClient.java
-    ☐ Conexión TCP a 192.168.1.20:3011
-    ☐ Buffer de lectura (mensajes terminados en ^)
-    ☐ ECHO keep-alive cada 120 segundos
-    ☐ Reconexión automática con backoff exponencial
-    ☐ sendSubscriptions() al conectar
-☐ FusionEventHandler.java
-    ☐ handleStatusChange() → actualiza cache
-    ☐ handleNewTransaction() → dispara completePayment()
-    ☐ handleDeliveryProgress() → empuja SSE
-☐ DispenserStatusCache.java — Map en memoria
+[x] FusionMessage.java — parser con tests (35 tests, datos reales GASOLINERA)
+[x] FusionMessageBuilder.java — constructor con tests (len correctamente calculado)
+[x] FusionTcpClient.java
+    [x] Conexión TCP a 192.168.1.20:3011 (Vert.x NetClient)
+    [x] Buffer de lectura (mensajes terminados en ^)
+    [x] ECHO keep-alive cada 120 segundos (@Scheduled)
+    [x] Reconexión automática con backoff exponencial
+    [x] sendSubscriptions() al conectar
+[x] FusionEventHandler.java
+    [x] handleStatusChange() → actualiza cache
+    [x] handleNewTransaction() → empuja SSE
+    [x] handleDeliveryProgress() → empuja SSE
+[x] DispenserStatusCache.java — ConcurrentHashMap en memoria
 ```
 
 **Día 5: SSE y REST básico**
 
 ```
-☐ StationEventBus.java — broadcast a clientes SSE conectados
-☐ DispenserResource.java — GET /api/dispensers
-☐ BridgeHealthResource.java — GET /health
-☐ GET /api/events — SSE stream
+[x] StationEventBus.java — broadcast a clientes SSE (BroadcastProcessor)
+[x] DispenserResource.java — GET /api/dispensers
+[x] BridgeHealthResource.java — GET /health
+[x] SseEventResource.java — GET /api/events (SSE stream)
 ☐ Test manual: abrir browser, ver stream SSE actualizarse
 ```
 
 **Día 6-7: Tests y validación**
 
 ```
-☐ FusionMessageTest.java — parsear mensajes reales capturados de la GASOLINERA
-☐ FusionMessageBuilderTest.java — verificar len correcto
-☐ Compilar y ejecutar: ./mvnw test (todos deben pasar)
+[x] FusionMessageTest.java — parsear mensajes reales capturados de la GASOLINERA
+[x] FusionMessageBuilderTest.java — verificar len correcto (19 tests)
+[x] Compilar y ejecutar: ./mvnw test (35 tests, 100% pasan)
 ☐ Instalar como servicio systemd en servidor de pruebas
 ☐ Validar: echo ECHO | nc 192.168.1.20 3011 → responde
 ☐ Validar: GET /api/dispensers → retorna estado actual
@@ -89,12 +89,12 @@ FusionBridge conectado al Wayne Synergy. Estado de surtidores visible vía REST 
 ### Criterio de completitud
 
 ```
-✅ ./mvnw test pasa sin errores
-✅ FusionBridge conecta a 192.168.1.20:3011
-✅ ECHO keep-alive responde correctamente
-✅ GET /api/dispensers retorna estado real del surtidor
-✅ Cambiar estado en consola Wayne → SSE lo refleja en < 1 segundo
-✅ Servicio systemd arranca y se recupera automáticamente
+✅ ./mvnw test pasa sin errores (35 tests)
+☐ FusionBridge conecta a 192.168.1.20:3011 (pendiente hardware)
+☐ ECHO keep-alive responde correctamente (pendiente hardware)
+☐ GET /api/dispensers retorna estado real del surtidor (pendiente hardware)
+☐ Cambiar estado en consola Wayne → SSE lo refleja en < 1 segundo (pendiente hardware)
+☐ Servicio systemd arranca y se recupera automáticamente (pendiente deploy)
 ✅ git tag v0.1.0 -m "Fase 1: FusionBridge TCP connection"
 ```
 

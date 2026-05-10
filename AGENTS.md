@@ -110,7 +110,7 @@ powerfin_pos_gas/
 
 ## Current state
 
-**Phase 1 — Foundation.** No code written yet. Directories exist but are empty. The docs/ directory contains the complete design. Everything in `docs/FUSION_BRIDGE.md` and `docs/POWERFIN_POS.md` is reference architecture, not implemented code.
+**Phase 1 — Foundation (in progress).** FusionBridge project created and compiles. All core classes implemented: FusionMessage parser, FusionMessageBuilder, FusionTcpClient (TCP + ECHO + reconnection), FusionEventHandler, DispenserStatusCache, StationEventBus (SSE), REST endpoints (dispensers, health, events). 35 unit tests passing with real GASOLINERA message data. Hardware validation pending (no Synergy available).
 
 ## When building
 
