@@ -65,13 +65,42 @@ export interface Customer {
 	id_type: string;
 	id_number: string;
 	name: string;
-	email: string;
-	phone: string;
+	email: string | null;
+	phone: string | null;
 	price_list: string;
 	price_list_name: string;
 	credit_active: boolean;
 	credit_balance: number;
 	plates: string[];
+}
+
+export interface VehicleResult {
+	plate: string;
+	vehicle_found: boolean;
+	incomplete_fields: string[];
+	owner: {
+		customer_id: string;
+		id_type: string;
+		id_number: string;
+		name: string;
+		email: string | null;
+		phone: string | null;
+	} | null;
+	price_list: string;
+	price_list_name: string;
+}
+
+export interface CustomerFormData {
+	id_type: 'CED' | 'RUC';
+	id_number: string;
+	name: string;
+	email: string;
+	plate: string;
+}
+
+export interface RegisterCustomerResponse {
+	customer_id: string;
+	price_list: string;
 }
 
 export interface PriceInfo {

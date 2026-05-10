@@ -1,6 +1,7 @@
 import type {
 	User, LoginRequest, LoginResponse, AppConfig, Customer,
-	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse
+	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
+	VehicleResult, CustomerFormData, RegisterCustomerResponse
 } from './types';
 
 // ── Mock data ────────────────────────────────────────────────
@@ -83,8 +84,54 @@ const MOCK_CUSTOMERS: Customer[] = [
 		credit_active: true,
 		credit_balance: 500,
 		plates: ['XYZ-5678', 'XYZ-5679']
+	},
+	{
+		customer_id: '1001234567001',
+		id_type: 'RUC',
+		id_number: '1001234567001',
+		name: 'María Fernanda López',
+		email: 'mflopez@email.com',
+		phone: '0987654321',
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal',
+		credit_active: false,
+		credit_balance: 0,
+		plates: []
 	}
 ];
+
+const MOCK_VEHICLES: Record<string, VehicleResult> = {
+	'ABC-1234': {
+		plate: 'ABC-1234',
+		vehicle_found: true,
+		incomplete_fields: [],
+		owner: {
+			customer_id: '0912345678',
+			id_type: 'CED',
+			id_number: '0912345678',
+			name: 'Juan Carlos Pérez',
+			email: 'jperez@email.com',
+			phone: '0991234567'
+		},
+		price_list: 'VIP',
+		price_list_name: 'Cliente VIP'
+	},
+	'XYZ-5678': {
+		plate: 'XYZ-5678',
+		vehicle_found: true,
+		incomplete_fields: ['email'],
+		owner: {
+			customer_id: '1790012345001',
+			id_type: 'RUC',
+			id_number: '1790012345001',
+			name: 'Transportes Andinos S.A.',
+			email: null,
+			phone: '022345678'
+		},
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
+	}
+};
 
 // ── Mock delay ───────────────────────────────────────────────
 
@@ -212,4 +259,68 @@ export async function cancelDispatchApi(
 	_token: string, _orderId: string
 ): Promise<void> {
 	await delay(200);
+}
+
+export async function lookupVehicle(_token: string, plate: string): Promise<VehicleResult> {
+	await delay(300);
+	const normalized = plate.toUpperCase().replace(/\s+/g, '');
+	const result = MOCK_VEHICLES[normalized];
+	if (result) {
+		return result;
+	}
+	return {
+		plate: normalized,
+		vehicle_found: false,
+		incomplete_fields: [],
+		owner: null,
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
+	};
+}
+
+export async function getCustomerById(
+	_token: string,
+	idType: 'CED' | 'RUC',
+	idNumber: string,
+	_updateBilling = false
+): Promise<Customer | null> {
+	await delay(300);
+	return MOCK_CUSTOMERS.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
+}
+
+export async function registerCustomer(
+	_token: string,
+	data: CustomerFormData
+): Promise<RegisterCustomerResponse> {
+	await delay(400);
+	const newCustomer: Customer = {
+		customer_id: data.id_number,
+		id_type: data.id_type,
+		id_number: data.id_number,
+		name: data.name,
+		email: data.email || null,
+		phone: null,
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal',
+		credit_active: false,
+		credit_balance: 0,
+		plates: [data.plate]
+	};
+	MOCK_CUSTOMERS.push(newCustomer);
+	MOCK_VEHICLES[data.plate.toUpperCase().replace(/\s+/g, '')] = {
+		plate: data.plate.toUpperCase().replace(/\s+/g, ''),
+		vehicle_found: true,
+		incomplete_fields: [],
+		owner: {
+			customer_id: newCustomer.customer_id,
+			id_type: newCustomer.id_type,
+			id_number: newCustomer.id_number,
+			name: newCustomer.name,
+			email: newCustomer.email,
+			phone: newCustomer.phone
+		},
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
+	};
+	return { customer_id: data.id_number, price_list: 'STANDARD' };
 }

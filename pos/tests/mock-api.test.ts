@@ -74,6 +74,68 @@ describe('PowerFin Mock API', () => {
 		expect(result.total_sales).toBeGreaterThan(0);
 		expect(result.difference).toBe(0);
 	});
+
+	it('lookupVehicle finds existing plate with complete data', async () => {
+		const { lookupVehicle } = await import('$lib/api/powerfin.mock');
+		const result = await lookupVehicle('token', 'ABC-1234');
+		expect(result.vehicle_found).toBe(true);
+		expect(result.plate).toBe('ABC-1234');
+		expect(result.owner?.name).toContain('Pérez');
+		expect(result.incomplete_fields).toHaveLength(0);
+		expect(result.price_list).toBe('VIP');
+	});
+
+	it('lookupVehicle returns incomplete fields when email missing', async () => {
+		const { lookupVehicle } = await import('$lib/api/powerfin.mock');
+		const result = await lookupVehicle('token', 'XYZ-5678');
+		expect(result.vehicle_found).toBe(true);
+		expect(result.owner?.email).toBeNull();
+		expect(result.incomplete_fields).toContain('email');
+	});
+
+	it('lookupVehicle returns not found for unknown plate', async () => {
+		const { lookupVehicle } = await import('$lib/api/powerfin.mock');
+		const result = await lookupVehicle('token', 'ZZZ-9999');
+		expect(result.vehicle_found).toBe(false);
+		expect(result.owner).toBeNull();
+	});
+
+	it('getCustomerById finds by CED', async () => {
+		const { getCustomerById } = await import('$lib/api/powerfin.mock');
+		const customer = await getCustomerById('token', 'CED', '0912345678');
+		expect(customer).not.toBeNull();
+		expect(customer?.name).toContain('Pérez');
+	});
+
+	it('getCustomerById finds by RUC', async () => {
+		const { getCustomerById } = await import('$lib/api/powerfin.mock');
+		const customer = await getCustomerById('token', 'RUC', '1790012345001');
+		expect(customer).not.toBeNull();
+		expect(customer?.name).toBe('Transportes Andinos S.A.');
+	});
+
+	it('getCustomerById returns null for unknown', async () => {
+		const { getCustomerById } = await import('$lib/api/powerfin.mock');
+		const customer = await getCustomerById('token', 'CED', '0000000000');
+		expect(customer).toBeNull();
+	});
+
+	it('registerCustomer creates new customer and vehicle', async () => {
+		const { registerCustomer, lookupVehicle } = await import('$lib/api/powerfin.mock');
+		const result = await registerCustomer('token', {
+			id_type: 'CED',
+			id_number: '0102030405',
+			name: 'Test User',
+			email: 'test@example.com',
+			plate: 'TEST-001'
+		});
+		expect(result.customer_id).toBe('0102030405');
+		expect(result.price_list).toBe('STANDARD');
+
+		const vehicle = await lookupVehicle('token', 'TEST-001');
+		expect(vehicle.vehicle_found).toBe(true);
+		expect(vehicle.owner?.name).toBe('Test User');
+	});
 });
 
 describe('Bridge Mock API', () => {

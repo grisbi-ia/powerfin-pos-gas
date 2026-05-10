@@ -94,6 +94,85 @@ Configuración inicial al arrancar la app.
 
 ---
 
+### GET /api/pos/vehicles?plate={plate}
+
+Búsqueda por placa del vehículo. Devuelve datos del vehículo + propietario para facturación.
+
+```json
+// Request: GET /api/pos/vehicles?plate=ABC-1234
+
+// Response 200 — vehículo y dueño encontrados
+{
+  "plate": "ABC-1234",
+  "vehicle_found": true,
+  "incomplete_fields": [],
+  "owner": {
+    "customer_id": "0912345678",
+    "id_type": "CED",
+    "id_number": "0912345678",
+    "name": "Juan Carlos Pérez",
+    "email": "jperez@email.com",
+    "phone": "0991234567"
+  },
+  "price_list": "VIP",
+  "price_list_name": "Cliente VIP"
+}
+
+// Response 200 — datos incompletos (falta email)
+{
+  "plate": "ABC-1234",
+  "vehicle_found": true,
+  "incomplete_fields": ["email"],
+  "owner": {
+    "customer_id": "0912345678",
+    "id_type": "CED",
+    "id_number": "0912345678",
+    "name": "Juan Carlos Pérez",
+    "email": null,
+    "phone": "0991234567"
+  },
+  "price_list": "VIP",
+  "price_list_name": "Cliente VIP"
+}
+
+// Response 200 — vehículo no encontrado (usar POST /customers como fallback)
+{
+  "plate": "ZZZ-9999",
+  "vehicle_found": false,
+  "incomplete_fields": [],
+  "owner": null,
+  "price_list": "STANDARD",
+  "price_list_name": "Precio Normal"
+}
+```
+
+---
+
+### GET /api/pos/customers/by-id?id_type={CED|RUC}&id_number={id}&update_billing=true
+
+Busca datos de un cliente por identificación. Si `update_billing=true`, PowerFin actualiza permanentemente los datos de facturación para la placa en contexto.
+
+```json
+// Request: GET /api/pos/customers/by-id?id_type=CED&id_number=0912345678&update_billing=true
+
+// Response 200
+{
+  "customer_id": "0912345678",
+  "id_type": "CED",
+  "id_number": "0912345678",
+  "name": "Juan Carlos Pérez",
+  "email": "jperez@email.com",
+  "phone": "0991234567",
+  "price_list": "VIP",
+  "price_list_name": "Cliente VIP"
+}
+
+// Response 404 → no encontrado
+{ "error": "CUSTOMER_NOT_FOUND" }
+```
+
+---
+
 ### GET /api/pos/customers?q={query}
 
 Búsqueda por placa, cédula, RUC o nombre.
@@ -119,6 +198,8 @@ Búsqueda por placa, cédula, RUC o nombre.
 ---
 
 ### POST /api/pos/customers
+
+Fallback cuando `GET /api/pos/vehicles` devuelve `vehicle_found: false`. Registra cliente y vehículo.
 
 ```json
 // Request
