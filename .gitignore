@@ -21,6 +21,7 @@ build/
 *.local
 .svelte-kit/output/
 .svelte-kit/generated/
+pos/build/
 
 # ── Environment ────────────────────────────────────────
 .env

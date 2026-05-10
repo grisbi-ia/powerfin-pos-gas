@@ -1,0 +1,1 @@
+import{d as l,w as s}from"./tTEra87F.js";function i(){const t=typeof localStorage<"u"?localStorage.getItem("shift"):null,r=t?JSON.parse(t):null,{subscribe:a,set:e,update:c}=s(r);return{subscribe:a,set(o){localStorage.setItem("shift",JSON.stringify(o)),e(o)},clear(){localStorage.removeItem("shift"),e(null)}}}const n=i();l(n,t=>(t==null?void 0:t.status)==="OPEN");export{n as s};

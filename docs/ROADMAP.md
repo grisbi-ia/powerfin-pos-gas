@@ -218,24 +218,25 @@ App funcional con login, apertura de turno y visualización de surtidores.
 Flujo end-to-end: desde buscar cliente hasta recibir factura SRI.
 
 ```
-☐ /new-dispatch → NewDispatchPage
-    ☐ CustomerSearch.svelte con debounce
-    ☐ Mostrar precio según lista del cliente
-    ☐ AmountInput.svelte con botones de monto rápido ($5/$10/$20/$50/$100)
-    ☐ Selector de forma de pago
-    ☐ AUTORIZAR → POST dispatches + POST authorize
-☐ /fueling → FuelingPage
-    ☐ Estado en tiempo real via SSE
-    ☐ Barra de progreso (volumen/monto)
-    ☐ Redirigir automáticamente al recibir SALE_COMPLETED
-☐ /confirmation → ConfirmationPage
-    ☐ Resumen de la venta con factura
-    ☐ Cálculo de vuelto si preset > monto real
-    ☐ Manejo de política de impresión (ALWAYS/ASK/NEVER)
-    ☐ Botón "Nueva venta"
-☐ FusionBridge: DispatchService.completePayment() + notifyPowerFin()
-☐ FusionBridge: PendingSalesQueue (cola + retries + persistencia en disco)
-☐ Test: apagar PowerFin → hacer venta → encender → verificar sincronización
+[x] /new-dispatch → NewDispatchPage
+    [x] CustomerSearch.svelte con debounce
+    [x] Mostrar precio según lista del cliente (VIP $1.100, STANDARD $1.500)
+    [x] AmountInput.svelte con botones de monto rápido ($5/$10/$20/$50/$100)
+    [x] Selector de forma de pago (EFECTIVO, TARJETA, QR, CREDITO)
+    [x] AUTORIZAR → POST dispatches + POST authorize
+[x] /fueling → FuelingPage
+    [x] Estado en tiempo real via SSE (mock bridge)
+    [x] Barra de progreso (volumen/monto)
+    [x] Redirigir automáticamente al recibir IDLE (simula SALE_COMPLETED)
+[x] /confirmation → ConfirmationPage
+    [x] Resumen de la venta
+    [x] Cálculo de vuelto si preset > monto real
+    [x] Manejo de política de impresión (ALWAYS/ASK/NEVER) con PrintPrompt
+    [x] Botón "Nueva venta"
+[x] Vitest: 16 tests de flujo de venta (31 total)
+☐ FusionBridge: DispatchService.completePayment() + notifyPowerFin() (pendiente Fase 7)
+☐ FusionBridge: PendingSalesQueue (cola + retries + persistencia en disco) (pendiente Fase 7)
+☐ Test con hardware real
 ```
 
 ### Criterio de completitud
