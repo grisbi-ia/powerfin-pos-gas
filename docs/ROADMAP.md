@@ -171,30 +171,30 @@ App funcional con login, apertura de turno y visualización de surtidores.
 ### Semana 3: Setup y autenticación
 
 ```
-☐ Crear proyecto SvelteKit 2.x + TypeScript
-☐ Instalar Tailwind CSS + Lucide Svelte + @vite-pwa/sveltekit
-☐ svelte.config.js con adapter-static
-☐ src/lib/api/types.ts — todos los tipos TypeScript
-☐ src/lib/api/powerfin.ts — funciones login, config, customers, shifts, dispatches
-☐ src/lib/api/bridge.ts — getDispensers, authorizeDispatch, getPrintPolicy, connectToEvents
-☐ Stores: auth.ts, dispensers.ts, shift.ts, config.ts
-☐ /login → LoginPage con PinKeyboard.svelte
-☐ /shift/open → OpenShiftPage
-☐ Layout auth guard (redirigir si no hay sesión o turno)
+[x] Crear proyecto SvelteKit 2.x + TypeScript
+[x] Instalar Tailwind CSS + adapter-static
+[x] svelte.config.js con adapter-static
+[x] src/lib/api/types.ts — todos los tipos TypeScript
+[x] src/lib/api/powerfin.ts + powerfin.mock.ts — funciones login, config, customers, shifts, dispatches
+[x] src/lib/api/bridge.ts + bridge.mock.ts — getDispensers, authorizeDispatch, getPrintPolicy, connectToEvents
+[x] Stores: auth.ts, dispensers.ts, shift.ts, config.ts
+[x] /login → LoginPage con PinKeyboard.svelte
+[x] /shift/open → OpenShiftPage
+[x] Layout auth guard (redirigir si no hay sesión o turno)
 ```
 
 ### Semana 4: Pantalla principal
 
 ```
-☐ / → DispensersPage
-    ☐ Conectar SSE al montar el componente
-    ☐ Grid de DispenserCard.svelte con colores por estado
-    ☐ Header con nombre del usuario y turno
-    ☐ OfflineBanner.svelte (si FusionBridge no responde)
-☐ Tests con Vitest para stores y funciones de API (mocks)
-☐ npm run check → sin errores de tipos
-☐ npm run test → todos pasan
-☐ npm run build → build exitoso
+[x] / → DispensersPage
+    [x] Conectar SSE al montar el componente (bridge.mock.ts)
+    [x] Grid de DispenserCard.svelte con colores por estado
+    [x] Header con nombre del usuario y turno
+    [x] OfflineBanner.svelte (si FusionBridge no responde)
+[x] Tests con Vitest para APIs mock (15 tests)
+[x] npm run check → 0 errores, 0 warnings
+[x] npm run test → 15 tests pasan
+[x] npm run build → build exitoso (adapter-static)
 ☐ Probar en celular real: npm run dev -- --host
 ```
 

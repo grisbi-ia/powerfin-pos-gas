@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	* {
+		-webkit-tap-highlight-color: transparent;
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	html, body {
+		@apply h-full bg-gray-50 text-gray-900 antialiased;
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	}
+
+	input, textarea {
+		-webkit-user-select: text;
+		user-select: text;
+	}
+}
+
+@layer components {
+	.touch-btn {
+		@apply active:scale-95 transition-transform duration-75;
+	}
+
+	.card {
+		@apply bg-white rounded-2xl shadow-sm border border-gray-100;
+	}
+}
