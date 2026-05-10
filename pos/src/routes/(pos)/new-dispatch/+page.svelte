@@ -35,7 +35,9 @@
 		plate = result.plate;
 
 		if (!result.vehicle_found) {
-			currentStep = 'form';
+			currentStep = 'idLookup';
+			idLookupError = '';
+			idNumber = '';
 		} else if (result.incomplete_fields.length > 0) {
 			currentStep = 'form';
 		} else {
@@ -67,7 +69,7 @@
 				billingCustomer = customer;
 				currentStep = 'billing';
 			} else {
-				idLookupError = 'No se encontró persona con esa identificación';
+				currentStep = 'form';
 			}
 		} catch {
 			idLookupError = 'Error al buscar';
@@ -187,8 +189,14 @@
 	{:else if currentStep === 'idLookup'}
 		<div class="card p-4">
 			<div class="text-center mb-4">
-				<div class="text-sm font-medium text-gray-700">Datos de facturación diferentes</div>
-				<div class="text-xs text-gray-400 mt-1">Ingrese la identificación de la persona para la factura</div>
+				<div class="text-sm font-medium text-gray-700">
+					{!vehicleResult?.vehicle_found ? 'Vehículo no encontrado' : 'Datos de facturación diferentes'}
+				</div>
+				<div class="text-xs text-gray-400 mt-1">
+					{!vehicleResult?.vehicle_found
+						? 'Ingrese la identificación para buscar en PowerFin'
+						: 'Ingrese la identificación de la persona para la factura'}
+				</div>
 			</div>
 
 			<div class="bg-gray-50 rounded-xl p-3 mb-4 text-center">
@@ -238,7 +246,11 @@
 			<div class="flex gap-3">
 				<button
 					class="touch-btn flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-3 font-medium"
-					on:click={() => currentStep = 'billing'}
+					on:click={() => {
+						currentStep = 'plate';
+						vehicleResult = null;
+						plate = '';
+					}}
 				>
 					Volver
 				</button>
