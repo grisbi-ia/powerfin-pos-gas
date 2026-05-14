@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { DispenserState } from '$lib/api/types';
+import type { DispenserState, HoseState } from '$lib/api/types';
 
 interface DispensersState {
 	dispensers: Map<number, DispenserState>;
@@ -15,18 +15,28 @@ function createDispensersStore() {
 	return {
 		subscribe,
 
-		updateDispenser(d: Partial<DispenserState> & { dispenserId: number }) {
+		/** Replace full dispenser state (e.g. from polling or SSE init) */
+		updateDispenser(d: DispenserState) {
 			update(state => {
-				const existing = state.dispensers.get(d.dispenserId) ?? {
-					dispenserId: d.dispenserId,
-					status: 'UNKNOWN',
-					subStatus: '',
-					presetAmount: 0,
-					hoseCount: 0,
-					connected: false,
-					online: false
+				state.dispensers.set(d.dispenserId, d);
+				return { ...state, dispensers: new Map(state.dispensers) };
+			});
+		},
+
+		/** Update a single hose's state within a dispenser */
+		updateHose(dispenserId: number, side: 'A' | 'B', hoseId: number, updates: Partial<HoseState>) {
+			update(state => {
+				const dispenser = state.dispensers.get(dispenserId);
+				if (!dispenser) return state;
+				const sideHoses = [...dispenser.sides[side]];
+				const idx = sideHoses.findIndex(h => h.hoseId === hoseId);
+				if (idx < 0) return state;
+				sideHoses[idx] = { ...sideHoses[idx], ...updates };
+				const updated: DispenserState = {
+					...dispenser,
+					sides: { ...dispenser.sides, [side]: sideHoses }
 				};
-				state.dispensers.set(d.dispenserId, { ...existing, ...d });
+				state.dispensers.set(dispenserId, updated);
 				return { ...state, dispensers: new Map(state.dispensers) };
 			});
 		},

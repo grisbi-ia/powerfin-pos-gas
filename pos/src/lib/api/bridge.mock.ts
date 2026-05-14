@@ -1,43 +1,66 @@
-import type { AuthorizeData, DispenserState } from './types';
+import type { AuthorizeData, DispenserState, HoseState, HoseStatusEvent } from './types';
 
-// ── Mock dispenser states ────────────────────────────────────
+// ── Helper: build initial hose state ─────────────────────────
+
+function buildHose(
+	hoseId: number,
+	dispenserId: number,
+	side: 'A' | 'B',
+	fusionHoseId: number,
+	gradeId: string,
+	gradeName: string
+): HoseState {
+	return {
+		hoseId,
+		dispenserId,
+		side,
+		fusionHoseId,
+		gradeId,
+		gradeName,
+		status: 'IDLE',
+		subStatus: '',
+		presetAmount: 0,
+		attendantName: null,
+		shiftId: null
+	};
+}
+
+// ── Mock dispenser states (hose-level granularity) ───────────
 
 const MOCK_DISPENSERS: Map<number, DispenserState> = new Map([
 	[1, {
 		dispenserId: 1,
-		status: 'IDLE',
-		subStatus: '',
-		presetAmount: 0,
-		hoseCount: 2,
+		fusionPumpId: 1,
+		name: 'Surtidor 1',
 		connected: true,
-		online: true
+		online: true,
+		sides: {
+			A: [
+				buildHose(1, 1, 'A', 1, 'SUPER', 'Gasolina Super'),
+				buildHose(2, 1, 'A', 2, 'EXTRA', 'Gasolina Extra')
+			],
+			B: [
+				buildHose(3, 1, 'B', 3, 'DIESEL', 'Diesel'),
+				buildHose(4, 1, 'B', 4, 'SUPER', 'Gasolina Super')
+			]
+		}
 	}],
 	[2, {
 		dispenserId: 2,
-		status: 'IDLE',
-		subStatus: '',
-		presetAmount: 0,
-		hoseCount: 2,
+		fusionPumpId: 2,
+		name: 'Surtidor 2',
 		connected: true,
-		online: true
-	}],
-	[3, {
-		dispenserId: 3,
-		status: 'CLOSED',
-		subStatus: '',
-		presetAmount: 0,
-		hoseCount: 2,
-		connected: false,
-		online: false
-	}],
-	[4, {
-		dispenserId: 4,
-		status: 'CLOSED',
-		subStatus: '',
-		presetAmount: 0,
-		hoseCount: 2,
-		connected: false,
-		online: false
+		online: true,
+		sides: {
+			A: [
+				buildHose(5, 2, 'A', 1, 'SUPER', 'Gasolina Super'),
+				buildHose(6, 2, 'A', 2, 'EXTRA', 'Gasolina Extra')
+			],
+			B: [
+				buildHose(7, 2, 'B', 3, 'DIESEL', 'Diesel'),
+				buildHose(8, 2, 'B', 4, 'SUPER', 'Gasolina Super')
+			]
+		}
 	}]
 ]);
 
@@ -48,6 +71,35 @@ function broadcastToAll(event: string, data: Record<string, unknown>) {
 	for (const es of activeEventSources) {
 		es.emit(event, data);
 	}
+}
+
+// ── Helper: find a specific hose in the mock data ────────────
+
+function findHose(dispenserId: number, hoseId: number): { dispenser: DispenserState; hose: HoseState } | null {
+	const dispenser = MOCK_DISPENSERS.get(dispenserId);
+	if (!dispenser) return null;
+	for (const side of ['A', 'B'] as const) {
+		const hose = dispenser.sides[side].find(h => h.hoseId === hoseId);
+		if (hose) return { dispenser, hose };
+	}
+	return null;
+}
+
+function updateHose(dispenserId: number, hoseId: number, updates: Partial<HoseState>): boolean {
+	const found = findHose(dispenserId, hoseId);
+	if (!found) return false;
+	const { dispenser } = found;
+	const sideKey = updates.side ?? found.hose.side;
+	const sideHoses = dispenser.sides[sideKey];
+	const idx = sideHoses.findIndex(h => h.hoseId === hoseId);
+	if (idx < 0) return false;
+	const updated = [...sideHoses];
+	updated[idx] = { ...updated[idx], ...updates };
+	MOCK_DISPENSERS.set(dispenserId, {
+		...dispenser,
+		sides: { ...dispenser.sides, [sideKey]: updated }
+	});
+	return true;
 }
 
 // ── Mock delay ───────────────────────────────────────────────
@@ -70,95 +122,119 @@ export async function getDispenser(id: number): Promise<DispenserState> {
 	await delay(100);
 	const d = MOCK_DISPENSERS.get(id);
 	if (!d) throw new Error(`Dispenser ${id} not found`);
-	return { ...d };
+	return JSON.parse(JSON.stringify(d));
 }
 
 export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: string }> {
 	await delay(400);
-	const dispenser = MOCK_DISPENSERS.get(data.dispenser_id);
-	if (dispenser) {
-		MOCK_DISPENSERS.set(data.dispenser_id, {
-			...dispenser,
-			status: 'AUTHORIZED',
-			subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
-			presetAmount: parseFloat(data.preset_value) || 0
-		});
 
-		// Simulate fueling events — broadcast to ALL connected clients
-		setTimeout(() => broadcastToAll('PUMP_STATUS_CHANGE', {
-			dispenserId: data.dispenser_id,
-			status: 'AUTHORIZED',
-			subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
-			presetAmount: parseFloat(data.preset_value) || 0
-		}), 1000);
+	const updated = updateHose(data.dispenser_id, data.hose_id, {
+		status: 'AUTHORIZED',
+		subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
+		presetAmount: parseFloat(data.preset_value) || 0,
+		attendantName: 'Carlos',
+		shiftId: 47
+	});
 
-		setTimeout(() => {
-			const d = MOCK_DISPENSERS.get(data.dispenser_id);
-			if (d) {
-				MOCK_DISPENSERS.set(data.dispenser_id, { ...d, status: 'FUELLING', subStatus: 'MONEY_PRESET' });
-				broadcastToAll('PUMP_STATUS_CHANGE', {
-					dispenserId: data.dispenser_id,
-					status: 'FUELLING',
-					subStatus: 'MONEY_PRESET',
-					presetAmount: parseFloat(data.preset_value) || 0
-				});
-			}
-
-			// Simulate delivery progress
-			broadcastToAll('DELIVERY_PROGRESS', {
-				dispenserId: data.dispenser_id,
-				volume: '1.500',
-				amount: '15.00'
-			});
-		}, 3000);
-
-		setTimeout(() => {
-			const d = MOCK_DISPENSERS.get(data.dispenser_id);
-			if (d) {
-				MOCK_DISPENSERS.set(data.dispenser_id, { ...d, status: 'FUELLING', subStatus: 'MONEY_PRESET' });
-				broadcastToAll('DELIVERY_PROGRESS', {
-					dispenserId: data.dispenser_id,
-					volume: '3.200',
-					amount: '32.00'
-				});
-			}
-		}, 4500);
-
-		setTimeout(() => {
-			const d = MOCK_DISPENSERS.get(data.dispenser_id);
-			if (d) {
-				const finalAmount = parseFloat(data.preset_value) * 0.85;
-				const finalVolume = finalAmount / (data.unit_price ?? 1.500);
-				MOCK_DISPENSERS.set(data.dispenser_id, {
-					...d,
-					status: 'IDLE',
-					subStatus: '',
-					presetAmount: 0
-				});
-				broadcastToAll('PUMP_STATUS_CHANGE', {
-					dispenserId: data.dispenser_id,
-					status: 'IDLE',
-					subStatus: '',
-					presetAmount: 0
-				});
-			}
-		}, 6000);
+	if (!updated) {
+		throw new Error(`Hose ${data.hose_id} not found on dispenser ${data.dispenser_id}`);
 	}
+
+	const hose = findHose(data.dispenser_id, data.hose_id)?.hose;
+	if (!hose) throw new Error('Hose disappeared');
+
+	// Simulate fueling sequence via broadcast
+	setTimeout(() => {
+		broadcastToAll('HOSE_STATUS', {
+			type: 'HOSE_STATUS',
+			dispenserId: data.dispenser_id,
+			hoseId: data.hose_id,
+			side: data.side,
+			fusionHoseId: hose.fusionHoseId,
+			status: 'AUTHORIZED',
+			subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
+			attendantName: 'Carlos',
+			presetAmount: parseFloat(data.preset_value) || 0
+		} satisfies HoseStatusEvent);
+	}, 1000);
+
+	setTimeout(() => {
+		updateHose(data.dispenser_id, data.hose_id, { status: 'FUELLING' });
+		broadcastToAll('HOSE_STATUS', {
+			type: 'HOSE_STATUS',
+			dispenserId: data.dispenser_id,
+			hoseId: data.hose_id,
+			side: data.side,
+			fusionHoseId: hose.fusionHoseId,
+			status: 'FUELLING',
+			subStatus: '',
+			attendantName: 'Carlos'
+		} satisfies HoseStatusEvent);
+
+		broadcastToAll('FUELING_PROGRESS', {
+			type: 'FUELING_PROGRESS',
+			dispenserId: data.dispenser_id,
+			hoseId: data.hose_id,
+			side: data.side,
+			volume: '1.500',
+			amount: '15.00'
+		});
+	}, 3000);
+
+	setTimeout(() => {
+		broadcastToAll('FUELING_PROGRESS', {
+			type: 'FUELING_PROGRESS',
+			dispenserId: data.dispenser_id,
+			hoseId: data.hose_id,
+			side: data.side,
+			volume: '3.200',
+			amount: '32.00'
+		});
+	}, 4500);
+
+	setTimeout(() => {
+		updateHose(data.dispenser_id, data.hose_id, {
+			status: 'IDLE',
+			subStatus: '',
+			presetAmount: 0,
+			attendantName: null,
+			shiftId: null
+		});
+		broadcastToAll('HOSE_STATUS', {
+			type: 'HOSE_STATUS',
+			dispenserId: data.dispenser_id,
+			hoseId: data.hose_id,
+			side: data.side,
+			fusionHoseId: hose.fusionHoseId,
+			status: 'IDLE',
+			subStatus: '',
+			attendantName: undefined,
+			presetAmount: 0
+		} satisfies HoseStatusEvent);
+
+		broadcastToAll('SALE_COMPLETED', {
+			type: 'SALE_COMPLETED',
+			dispenserId: data.dispenser_id,
+			hoseId: data.hose_id,
+			side: data.side,
+			orderId: data.order_id,
+			volume: '38.000',
+			amount: data.preset_value
+		});
+	}, 6000);
+
 	return { status: 'AUTHORIZED' };
 }
 
-export async function cancelDispenser(dispenserId: number): Promise<boolean> {
+export async function cancelDispenser(dispenserId: number, hoseId: number): Promise<boolean> {
 	await delay(200);
-	const dispenser = MOCK_DISPENSERS.get(dispenserId);
-	if (dispenser) {
-		MOCK_DISPENSERS.set(dispenserId, {
-			...dispenser,
-			status: 'IDLE',
-			subStatus: '',
-			presetAmount: 0
-		});
-	}
-	return true;
+	return updateHose(dispenserId, hoseId, {
+		status: 'IDLE',
+		subStatus: '',
+		presetAmount: 0,
+		attendantName: null,
+		shiftId: null
+	});
 }
 
 export async function getPrintPolicy(): Promise<{ policy: string }> {
@@ -175,24 +251,31 @@ export async function printReceipt(_data: unknown): Promise<{ status: string }> 
 
 export class MockEventSource {
 	private listeners: Map<string, Array<(data: Record<string, unknown>) => void>> = new Map();
-	private errorHandler: ((e: unknown) => void) | null = null;
 	private closed = false;
 
 	constructor() {
 		activeEventSources.add(this);
 
-		// Send INIT event after connection
+		// Send INIT after connection, then current hose states
 		setTimeout(() => {
 			this.send('INIT', { fusionConnected: mockFusionConnected });
 
-			// Send initial dispenser states
 			for (const d of MOCK_DISPENSERS.values()) {
-				this.send('PUMP_STATUS_CHANGE', {
-					dispenserId: d.dispenserId,
-					status: d.status,
-					subStatus: d.subStatus,
-					presetAmount: d.presetAmount
-				});
+				for (const side of ['A', 'B'] as const) {
+					for (const hose of d.sides[side]) {
+						this.send('HOSE_STATUS', {
+							type: 'HOSE_STATUS',
+							dispenserId: d.dispenserId,
+							hoseId: hose.hoseId,
+							side: hose.side,
+							fusionHoseId: hose.fusionHoseId,
+							status: hose.status,
+							subStatus: hose.subStatus,
+							attendantName: hose.attendantName ?? undefined,
+							presetAmount: hose.presetAmount
+						} satisfies HoseStatusEvent);
+					}
+				}
 			}
 		}, 500);
 	}
@@ -218,9 +301,7 @@ export class MockEventSource {
 		}
 	}
 
-	set onerror(handler: (e: unknown) => void) {
-		this.errorHandler = handler;
-	}
+	onerror: ((e: unknown) => void) | null = null;
 
 	close(): void {
 		this.closed = true;
@@ -239,8 +320,8 @@ export function connectToEvents(
 	const es = new MockEventSource();
 
 	const eventTypes = [
-		'INIT', 'PUMP_STATUS_CHANGE', 'NEW_TRANSACTION',
-		'DELIVERY_PROGRESS', 'TRANSACTION_LOCK', 'SALE_CLEARED',
+		'INIT', 'HOSE_STATUS', 'NEW_TRANSACTION',
+		'FUELING_PROGRESS', 'SALE_COMPLETED', 'TRANSACTION_LOCK', 'SALE_CLEARED',
 		'PRICE_CHANGE', 'CONFIG_CHANGE', 'FUSION_STATUS'
 	];
 

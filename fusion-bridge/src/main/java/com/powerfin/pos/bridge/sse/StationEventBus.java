@@ -6,7 +6,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class StationEventBus {
 
     private final BroadcastProcessor<String> processor = BroadcastProcessor.create();

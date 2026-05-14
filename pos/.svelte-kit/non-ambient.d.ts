@@ -29,7 +29,7 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/(pos)" | "/" | "/(pos)/confirmation" | "/(pos)/fueling" | "/(pos)/history" | "/login" | "/(pos)/new-dispatch" | "/shift" | "/shift/close" | "/shift/open";
+		RouteId(): "/(pos)" | "/" | "/(pos)/confirmation" | "/(pos)/fueling" | "/(pos)/history" | "/login" | "/(pos)/new-dispatch" | "/(pos)/sale" | "/shift" | "/shift/close" | "/shift/open";
 		RouteParams(): {
 			
 		};
@@ -41,11 +41,12 @@ declare module "$app/types" {
 			"/(pos)/history": Record<string, never>;
 			"/login": Record<string, never>;
 			"/(pos)/new-dispatch": Record<string, never>;
+			"/(pos)/sale": Record<string, never>;
 			"/shift": Record<string, never>;
 			"/shift/close": Record<string, never>;
 			"/shift/open": Record<string, never>
 		};
-		Pathname(): "/" | "/confirmation" | "/fueling" | "/history" | "/login" | "/new-dispatch" | "/shift/close" | "/shift/open";
+		Pathname(): "/" | "/confirmation" | "/fueling" | "/history" | "/login" | "/new-dispatch" | "/sale" | "/shift/close" | "/shift/open";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): string & {};
 	}

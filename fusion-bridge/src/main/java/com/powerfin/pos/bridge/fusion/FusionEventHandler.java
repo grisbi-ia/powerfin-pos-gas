@@ -4,7 +4,9 @@ import com.powerfin.pos.bridge.dispenser.DispenserStatusCache;
 import com.powerfin.pos.bridge.sse.StationEventBus;
 
 import io.quarkus.logging.Log;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class FusionEventHandler {
 
     private final DispenserStatusCache statusCache;

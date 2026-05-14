@@ -98,6 +98,14 @@ public class FusionTcpClient {
         return true;
     }
 
+    /** Send a pre-built raw Fusion protocol message directly. */
+    public boolean sendRaw(String rawMessage) {
+        if (!connected || socket == null) return false;
+        socket.write(Buffer.buffer(rawMessage));
+        Log.debug(String.format("→ Fusion: %s", rawMessage));
+        return true;
+    }
+
     private void sendSubscriptions() {
         for (String event : MANDATORY_SUBSCRIPTIONS) {
             String msg = FusionMessageBuilder.buildSubscribe(event);

@@ -2,170 +2,103 @@
 
 ## Dónde nos quedamos
 
-**Último tag:** `v0.4.0` — Phase 5: plate-centric sales flow con vehicle lookup, billing confirmation, y fallback registration.
-
 **Branch:** `develop`
 
-## Lo avanzado en esta sesión
+**Último avance:** Escenario 1 funcional end-to-end con simulador Fusion + FusionBridge real + POS.
 
-### Nuevo flujo centrado en PLACA (requisito Ecuador)
-
-El POS ya no busca clientes por nombre/cédula. El despachador **teclea la placa** del vehículo como clave primaria.
-
-#### Endpoints agregados al contrato API (docs/API_CONTRACT.md)
-
-- `GET /api/pos/vehicles?plate={plate}` — devuelve datos del vehículo + propietario
-  - `vehicle_found: true` → datos completos o parciales (con `incomplete_fields[]`)
-  - `vehicle_found: false` → no encontrado
-- `GET /api/pos/customers/by-id?id_type=&id_number=&update_billing=true` — busqueda por ID
-  - `update_billing=true` → indica a PowerFin que actualice permanentemente los datos de facturación
-
-#### Nuevos componentes Svelte
-
-| Componente | Propósito |
-|------------|-----------|
-| `PlateInput.svelte` | Input de placa con botón "Buscar" explícito (sin debounce) |
-| `BillingConfirmation.svelte` | Muestra dueño del vehículo, pregunta "¿Correcto?" o "Cambiar" |
-| `CustomerForm.svelte` | Formulario para completar email faltante o registrar nuevo cliente |
-
-#### Tipos nuevos (types.ts)
-
-- `VehicleResult` — con `incomplete_fields[]` para detectar datos faltantes
-- `CustomerFormData` — datos del formulario de registro
-- `RegisterCustomerResponse` — respuesta al registrar
-
-### Lógica de negocios implementada
-
-**Escenario 1 — Datos completos:**
-```
-PlateInput → lookupVehicle → BillingConfirmation → "Correcto" → AmountInput → Autorizar
-```
-
-**Escenario 2 — Datos incompletos (falta email):**
-```
-PlateInput → lookupVehicle → CustomerForm (mode: incomplete) → AmountInput → Autorizar
-```
-
-**Escenario 3 — Cambiar facturador:**
-```
-BillingConfirmation → "Cambiar" → idLookup → getCustomerById → BillingConfirmation → AmountInput → Autorizar
-```
-
-**Escenario 4 — Placa no encontrada:**
-```
-PlateInput → lookupVehicle (vehicle_found: false)
-  → idLookup → getCustomerById
-    ├── Encontrado → BillingConfirmation → AmountInput → Autorizar
-    └── No encontrado → CustomerForm (mode: registration) → BillingConfirmation → AmountInput → Autorizar
-```
-
-**Escenario 5 — Registro de nuevo cliente:**
-Luego del formulario de registro, se muestra BillingConfirmation para que el despachador confirme antes de continuar al monto.
-
-## Qué testear en la siguiente sesión
-
-### Flujos completos a validar uno por uno
-
-1. **Flujo normal con datos completos**
-   - Placa: `ABC1234` → debe mostrar "Juan Carlos Pérez" (VIP)
-   - Confirmar → ingresar monto → autorizar → debe llegar a fueling con nombre y placa visibles
-
-2. **Flujo con datos incompletos (sin email)**
-   - Placa: `XYZ5678` → debe mostrar formulario "Datos incompletos" pidiendo email
-   - Ingresar email → "Continuar" → debe mostrar BillingConfirmation con Transportes Andinos
-
-3. **Flujo con placa no encontrada**
-   - Placa: `ZZZ9999` → "Vehículo no encontrado" → pide identificación
-   - Ingresar datos de identificación → buscar → si no encuentra → formulario de registro
-   - Llenar formulario completo → "Continuar" → debe mostrar BillingConfirmation
-
-4. **Flujo cambio de facturador**
-   - Placa: `ABC1234` → BillingConfirmation muestra Juan Pérez
-   - Presionar "Cambiar" → debe aparecer búsqueda por ID
-   - Ingresar RUC `1790012345001` → debe encontrar Transportes Andinos
-   - Confirmar → debe usar Transportes Andinos para facturación
-
-5. **Flujo ID no encontrado (fallback a registro)**
-   - Placa no encontrada → idLookup → ingresar ID que no existe
-   - Debe mostrar CustomerForm (registration mode) en vez de error
-
-6. **Validaciones del CustomerForm**
-   - Botón "Continuar" debe habilitarse solo cuando campos obligatorios están llenos
-   - En modo incomplete: email requerido
-   - En modo registration: ID + nombre + email requeridos
-
-7. **Validación de placa sin guión**
-   - Escribir `ABC-1234` o `ABC1234` → ambos deben funcionar igual
-   - Botón "Buscar" debe estar deshabilitado si placa tiene menos de 3 caracteres
-
-### Archivos que no deben tocarse (sin romper)
-
-- `BillingConfirmation.svelte` — recibe `vehicle: VehicleResult` y emite `onConfirm`/`onChangeBilling`
-- `PlateInput.svelte` — recibe `onResult` y prop `disabled`
-- `CustomerForm.svelte` — recibe `mode`, `plate`, `onSubmit`, `onCancel`, `loading`
-
-### Estado de la UI en cada paso
-
-- En `idLookup`, el título debe cambiar si viene de "vehículo no encontrado" vs "cambiar facturador"
-- En `fueling`, debe verse el nombre del cliente y la placa debajo del surtidor
-- El precio debe actualizarse según price_list (VIP = $1.100, STANDARD = $1.500)
-
-## Estado de tests
-
-- FusionBridge: 35 tests (./mvnw test)
-- Powerfin POS: 38 tests (npm run test)
-- **Total: 73 tests pasando**
-
-Nota: Tests requieren Node 20+. Usar:
-```bash
-export PATH=$HOME/.n/bin:$PATH
-```
-
-## Datos de prueba (mock)
-
-| Placa | Dueño | Price List | Estado |
-|-------|-------|------------|--------|
-| `ABC1234` | Juan Carlos Pérez (CED: 0912345678) | VIP | ✅ Completo |
-| `XYZ5678` | Transportes Andinos S.A. (RUC: 1790012345001) | STANDARD | ⚠️ Sin email |
-| `ZZZ9999` | — | — | ❌ No encontrado |
-| `GHI9999` | — | — | ❌ No encontrado |
-
-**Personas adicionales (para cambio de facturador):**
-- María Fernanda López (RUC: 1001234567001) — STANDARD
-
-**Login:** `carlos` / PIN `1234`
-
-## Para iniciar la sesión
+## Cómo retomar mañana
 
 ```bash
 cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 git checkout develop
 git status
-git log --oneline -5
-
-# POS dev server
-cd pos
-export PATH=$HOME/.n/bin:$PATH
-npm run dev
-
-# Typecheck
-npm run check
-
-# Tests
-npm run test
 ```
 
-## Pendientes futuros (NO en esta sesión)
+### 3 terminales (en orden):
 
-- Validación de formato de placa ecuatoriana (AAA-#### o AAA-###)
-- Integración real con PowerFin (quitar mocks)
-- Manejo de errores de red (offline, timeout)
-- Precios dinámicos por grado de combustible
-- Impresión de tickets (Fase 5 del roadmap)
+```bash
+# Terminal 1 — Simulador Fusion
+python3 tools/fusion_simulator.py --port 3012 --pumps 2
 
-## No olvidar
+# Terminal 2 — FusionBridge
+cd fusion-bridge
+FUSION_IP=127.0.0.1 FUSION_PORT=3012 ./mvnw quarkus:dev
 
-- Documentación en español, código en inglés
-- Commits en inglés: feat(pos): / fix(pos): / test(pos):
-- Versionar solo después de que todos los tests pasen
-- Trabajar en `develop`, nunca en `main`
+# Terminal 3 — Powerfin POS
+cd pos
+export PATH=$HOME/.n/bin:$PATH
+npm run dev -- --host
+```
+
+### Navegador: http://localhost:5173
+Login: `carlos` / PIN `1234`
+
+## Lo logrado hoy
+
+### Arquitectura
+- **Sin asignación de dispensadores al turno** — cualquier usuario vende en cualquier surtidor
+- **Granularidad por (dispenser, side, hose)** — dos lados independientes por surtidor
+- **Layout desde PowerFin** — `sides: { A: [...], B: [...] }` en config
+- **El que cobra es el dueño de la venta** — `shift_id` se actualiza al momento del cobro
+
+### Simulador Fusion (`tools/fusion_simulator.py`)
+- Emula protocolo Fusion completo por TCP
+- Soporta REQ_PUMP_PRESET, ECHO, STATUS, LOCK/CLEAR/UNLOCK
+- Simula ciclo de despacho con progreso (20s)
+- 2 surtidores × 4 mangueras c/u
+
+### FusionBridge (arreglos)
+- `@ApplicationScoped` agregado a: `StationEventBus`, `FusionEventHandler`, `DispenserStatusCache`
+- `DispatchResource.java` creado: endpoints `POST /api/dispatch/authorize` y `/cancel`
+- `FusionTcpClient.sendRaw()` agregado
+- CORS configurado para desarrollo local
+
+### POS — SaleWizard
+- Componente único `SaleWizard.svelte` con todos los pasos en una vista
+- Modo `sale`: pistola → placa → cliente → tipo preset → monto → autorizar
+- Modo `collect`: resumen → forma pago → imprimir → nueva venta
+- Selector de Monto vs Galones vs Tanque Lleno
+- Muestra número de pistola en selector de combustible
+
+### POS — Dashboard
+- Polling configurable desde PowerFin (2000ms en mock)
+- `autoCompleteOrders()` detecta mangueras IDLE con órdenes FUELLING
+- DispenserCard muestra estado "Cobrar $XX.XX" cuando hay orden completada
+- Conectado a FusionBridge real (no mocks)
+- Conversión de formato viejo a nuevo en `bridge-client.ts`
+
+### Documentación creada
+- `docs/SISTEMA_PRUEBAS.md` — guía completa de pruebas
+- `docs/FLUJOS_VENTA_ESCENARIOS.md` — 23 escenarios de venta
+- `tools/README.md` — documentación del simulador
+
+## Pendientes para la siguiente sesión
+
+1. **Escenarios restantes** (2 al 23 de FLUJOS_VENTA_ESCENARIOS.md)
+2. **Persistir pendingOrders** en localStorage (se pierden al refrescar)
+3. **PowerFin como fuente de verdad** de órdenes pendientes (para multi-navegador)
+4. **FusionBridge per-hose tracking** (ahora es pump-level, convertimos en POS)
+5. **API real de PowerFin** (quitar mocks, conectar a PowerFin ERP)
+6. **Cierre de turno** con cuadre de caja
+7. **Depósitos a caja fuerte**
+8. **Impresión de tickets** (Fase 5)
+
+## Lecciones aprendidas (Svelte)
+
+- `$store` solo funciona en top-level de `<script>` o `$:`, NO dentro de funciones regulares
+- Map como prop no es reactivo. Leer el store directo con `$store` en el componente
+- `{@const}` debe ser hijo directo de `{#if}`/`{#each}`, no dentro de `<div>`
+- `as` type assertion no funciona en templates de Svelte
+
+## Tests
+
+```bash
+# FusionBridge: 35 tests
+cd fusion-bridge && ./mvnw test
+
+# Powerfin POS: 41 tests
+cd pos && npm run test
+
+# Typecheck
+cd pos && npm run check
+```

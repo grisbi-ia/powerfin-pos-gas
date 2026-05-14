@@ -6,6 +6,7 @@
 	"/(pos)/history": [],
 	"/login": [],
 	"/(pos)/new-dispatch": [],
+	"/(pos)/sale": [],
 	"/shift/close": [],
 	"/shift/open": []
 }

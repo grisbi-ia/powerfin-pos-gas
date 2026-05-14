@@ -6,18 +6,22 @@
 	import PrintPrompt from '$lib/components/PrintPrompt.svelte';
 	import type { PrintPolicy } from '$lib/api/types';
 	import { config } from '$lib/stores/config';
+	import { pendingOrders } from '$lib/stores/pendingOrders';
 
 	// Mock imports
 	import * as bridge from '$lib/api/bridge.mock';
 
 	let orderId = '';
 	let dispenserId = 0;
+	let hoseId = 0;
+	let side: 'A' | 'B' = 'A';
 	let finalAmount = 0;
 	let finalVolume = '';
 	let presetAmount = 0;
 	let unitPrice = 0;
 	let customerName = '';
 	let priceList = '';
+	let plate = '';
 	let printPolicy: PrintPolicy = 'ASK';
 	let printing = false;
 	let paymentMethod = '';
@@ -34,12 +38,33 @@
 	onMount(async () => {
 		orderId = $page.url.searchParams.get('order') ?? '';
 		dispenserId = Number($page.url.searchParams.get('dispenser') ?? '0');
+		hoseId = Number($page.url.searchParams.get('hose') ?? '0');
+		side = ($page.url.searchParams.get('side') ?? 'A') as 'A' | 'B';
 		finalAmount = parseFloat($page.url.searchParams.get('amount') ?? '0');
 		finalVolume = $page.url.searchParams.get('volume') ?? '0.00';
 		presetAmount = parseFloat($page.url.searchParams.get('preset') ?? '0');
 		unitPrice = parseFloat($page.url.searchParams.get('price') ?? '0');
 		customerName = decodeURIComponent($page.url.searchParams.get('customerName') ?? '');
 		priceList = $page.url.searchParams.get('priceList') ?? 'STANDARD';
+		plate = decodeURIComponent($page.url.searchParams.get('plate') ?? '');
+
+		// Fallback: if no URL data, load from pending orders store
+		if (finalAmount === 0 && orderId) {
+			const foundOrder = $pendingOrders.get(orderId);
+			if (foundOrder) {
+				dispenserId = foundOrder.dispenserId;
+				hoseId = foundOrder.hoseId;
+				side = foundOrder.side;
+				// Mock: 85% of preset
+				finalAmount = foundOrder.finalAmount || (foundOrder.presetAmount * 0.85);
+				finalVolume = foundOrder.finalVolume || ((foundOrder.presetAmount * 0.85) / (foundOrder.unitPrice || 1.5)).toFixed(3);
+				presetAmount = foundOrder.presetAmount;
+				unitPrice = foundOrder.unitPrice;
+				customerName = foundOrder.customerName;
+				priceList = foundOrder.priceList;
+				plate = foundOrder.plate;
+			}
+		}
 
 		// Get print policy from bridge
 		try {
@@ -81,6 +106,7 @@
 	}
 
 	function handleNewSale() {
+		pendingOrders.removeOrder(orderId);
 		goto('/');
 	}
 </script>
@@ -107,8 +133,14 @@
 			<div class="space-y-2">
 				<div class="flex justify-between text-sm">
 					<span class="text-gray-500">Surtidor</span>
-					<span class="font-medium">{dispenserId}</span>
+					<span class="font-medium">{dispenserId} — Lado {side}</span>
 				</div>
+				{#if plate}
+					<div class="flex justify-between text-sm">
+						<span class="text-gray-500">Placa</span>
+						<span class="font-medium font-mono">{plate}</span>
+					</div>
+				{/if}
 				<div class="flex justify-between text-sm">
 					<span class="text-gray-500">Volumen</span>
 					<span class="font-medium">{finalVolume} L</span>

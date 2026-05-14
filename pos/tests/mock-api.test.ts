@@ -16,11 +16,12 @@ describe('PowerFin Mock API', () => {
 		await expect(login({ username: 'carlos', pin: '0000' })).rejects.toThrow('Credenciales inválidas');
 	});
 
-	it('fetchConfig returns dispenser configuration', async () => {
+	it('fetchConfig returns dispenser configuration with sides', async () => {
 		const { fetchConfig } = await import('$lib/api/powerfin.mock');
 		const config = await fetchConfig('mock-token');
 		expect(config.dispensers).toHaveLength(2);
-		expect(config.dispensers[0].hoses[0].grade_id).toBe('SUPER');
+		expect(config.dispensers[0].sides.A[0].grade_id).toBe('SUPER');
+		expect(config.dispensers[0].sides.B[0].grade_id).toBe('DIESEL');
 	});
 
 	it('searchCustomers finds by name', async () => {
@@ -57,15 +58,16 @@ describe('PowerFin Mock API', () => {
 		expect(price.price_list).toBe('STANDARD');
 	});
 
-	it('openShift returns a valid shift', async () => {
+	it('openShift returns a valid shift without dispenser_ids', async () => {
 		const { openShift } = await import('$lib/api/powerfin.mock');
 		const shift = await openShift('token', {
-			dispenser_ids: [1, 2],
-			opening_cash: 0,
-			notes: ''
+			opening_cash: 50.00,
+			notes: 'turno mañana'
 		});
 		expect(shift.status).toBe('OPEN');
-		expect(shift.dispenser_ids).toContain(1);
+		expect(shift.opening_cash).toBe(50.00);
+		expect(shift.shift_id).toBeGreaterThan(0);
+		// dispenser_ids no longer exists — any user can sell on any dispenser
 	});
 
 	it('closeShift returns summary', async () => {
@@ -139,40 +141,59 @@ describe('PowerFin Mock API', () => {
 });
 
 describe('Bridge Mock API', () => {
-	it('getDispensers returns all dispensers', async () => {
+	it('getDispensers returns 2 dispensers with sides', async () => {
 		const { getDispensers } = await import('$lib/api/bridge.mock');
 		const result = await getDispensers();
 		expect(result.fusionConnected).toBe(true);
-		expect(result.dispensers).toHaveLength(4);
+		expect(result.dispensers).toHaveLength(2);
+		// Check side/hose structure
+		const d1 = result.dispensers[0];
+		expect(d1.sides.A).toHaveLength(2);
+		expect(d1.sides.B).toHaveLength(2);
+		expect(d1.sides.A[0].gradeId).toBe('SUPER');
+		expect(d1.sides.B[0].gradeId).toBe('DIESEL');
 	});
 
-	it('getDispenser returns single dispenser', async () => {
+	it('getDispenser returns single dispenser with hose states', async () => {
 		const { getDispenser } = await import('$lib/api/bridge.mock');
 		const d = await getDispenser(1);
 		expect(d.dispenserId).toBe(1);
-		expect(d.status).toBe('IDLE');
+		expect(d.sides.A[0].status).toBe('IDLE');
+		expect(d.sides.B[0].status).toBe('IDLE');
 	});
 
-	it('authorizeDispatch changes status to AUTHORIZED', async () => {
-		const { authorizeDispatch } = await import('$lib/api/bridge.mock');
+	it('authorizeDispatch changes hose status to AUTHORIZED', async () => {
+		const { authorizeDispatch, getDispenser } = await import('$lib/api/bridge.mock');
 		const result = await authorizeDispatch({
 			order_id: 'OV-001',
 			dispenser_id: 1,
+			hose_id: 1,
+			side: 'A',
 			preset_type: 'MONEY',
 			preset_value: '50.00',
 			payment_method: 'EFECTIVO',
 			unit_price: 1.500
 		});
 		expect(result.status).toBe('AUTHORIZED');
+
+		// Verify hose state changed
+		const d = await getDispenser(1);
+		expect(d.sides.A[0].status).toBe('AUTHORIZED');
+		expect(d.sides.A[0].presetAmount).toBe(50.00);
+		// Other hoses should remain IDLE
+		expect(d.sides.B[0].status).toBe('IDLE');
 	});
 
-	it('cancelDispenser returns true', async () => {
-		const { cancelDispenser } = await import('$lib/api/bridge.mock');
-		const result = await cancelDispenser(1);
+	it('cancelDispenser resets hose to IDLE', async () => {
+		const { cancelDispenser, getDispenser } = await import('$lib/api/bridge.mock');
+		const result = await cancelDispenser(1, 1);
 		expect(result).toBe(true);
+
+		const d = await getDispenser(1);
+		expect(d.sides.A[0].status).toBe('IDLE');
 	});
 
-	it('MockEventSource sends INIT event', async () => {
+	it('MockEventSource sends INIT and HOSE_STATUS events', async () => {
 		const { MockEventSource } = await import('$lib/api/bridge.mock');
 		const events: Array<{ event: string; data: Record<string, unknown> }> = [];
 
@@ -180,22 +201,27 @@ describe('Bridge Mock API', () => {
 			const es = new MockEventSource();
 			es.addEventListener('INIT', (data) => {
 				events.push({ event: 'INIT', data });
-				if (events.length >= 2) {
+			});
+			es.addEventListener('HOSE_STATUS', (data) => {
+				events.push({ event: 'HOSE_STATUS', data });
+				// We expect many HOSE_STATUS events; resolve after first few
+				if (events.length >= 5) {
 					es.close();
 					resolve();
 				}
 			});
-			es.addEventListener('PUMP_STATUS_CHANGE', (data) => {
-				events.push({ event: 'PUMP_STATUS_CHANGE', data });
-				if (events.length >= 2) {
-					es.close();
-					resolve();
-				}
-			});
+			// Timeout safety
+			setTimeout(() => { es.close(); resolve(); }, 2000);
 		});
 
 		const initEvent = events.find(e => e.event === 'INIT');
 		expect(initEvent).toBeDefined();
 		expect(initEvent?.data.fusionConnected).toBe(true);
+
+		const hoseEvents = events.filter(e => e.event === 'HOSE_STATUS');
+		expect(hoseEvents.length).toBeGreaterThan(0);
+		// First hose event should have dispenserId and hoseId
+		expect(hoseEvents[0].data.dispenserId).toBeDefined();
+		expect(hoseEvents[0].data.hoseId).toBeDefined();
 	});
 });

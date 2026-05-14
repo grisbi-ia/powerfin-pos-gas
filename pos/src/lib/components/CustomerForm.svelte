@@ -6,9 +6,11 @@
 	export let onSubmit: (data: CustomerFormData) => void;
 	export let onCancel: () => void;
 	export let loading = false;
+	export let initialIdType: 'CED' | 'RUC' = 'CED';
+	export let initialIdNumber = '';
 
-	let idType: 'CED' | 'RUC' = 'CED';
-	let idNumber = '';
+	let idType: 'CED' | 'RUC' = initialIdType;
+	let idNumber = initialIdNumber;
 	let name = '';
 	let email = '';
 

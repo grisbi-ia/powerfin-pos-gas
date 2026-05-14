@@ -27,6 +27,10 @@ export interface AppConfig {
 	grades: GradeConfig[];
 	price_lists: PriceListConfig[];
 	payment_methods: PaymentMethodConfig[];
+	polling?: {
+		interval_ms: number;
+		enabled: boolean;
+	};
 }
 
 export interface PaymentMethodConfig {
@@ -39,7 +43,10 @@ export interface DispenserConfig {
 	dispenser_id: number;
 	fusion_pump_id: number;
 	name: string;
-	hoses: HoseConfig[];
+	sides: {
+		A: HoseConfig[];
+		B: HoseConfig[];
+	};
 }
 
 export interface HoseConfig {
@@ -119,11 +126,9 @@ export interface Shift {
 	accounting_date: string;
 	status: 'OPEN' | 'CLOSED';
 	opening_cash: number;
-	dispenser_ids: number[];
 }
 
 export interface OpenShiftRequest {
-	dispenser_ids: number[];
 	opening_cash: number;
 	notes: string;
 }
@@ -164,6 +169,7 @@ export interface DispatchOrder {
 export interface CreateDispatchRequest {
 	dispenser_id: number;
 	hose_id: number;
+	side: 'A' | 'B';
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
 	payment_method: string;
@@ -186,9 +192,31 @@ export interface SaleCompletedData {
 	completed_at: string;
 }
 
+export type PresetType = 'MONEY' | 'VOLUME' | 'FULL';
+
+export interface CollectDispatchRequest {
+	collected_by_shift_id: number;
+	payment_method: string;
+	collected_amount: number;
+	change_amount: number;
+	reference_code?: string;
+}
+
+export interface CollectDispatchResponse {
+	order_id: string;
+	status: 'COLLECTED';
+	collected_by_shift_id: number;
+	collected_by_name: string;
+	payment_method: string;
+	collected_amount: number;
+	change_amount: number;
+}
+
 export interface AuthorizeData {
 	order_id: string;
 	dispenser_id: number;
+	hose_id: number;
+	side: 'A' | 'B';
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
 	payment_method: string;
@@ -198,15 +226,32 @@ export interface AuthorizeData {
 	price_list?: string;
 }
 
-export interface DispenserState {
+/** Estado en tiempo real de una manguera individual */
+export interface HoseState {
+	hoseId: number;
 	dispenserId: number;
-	status: string;
+	side: 'A' | 'B';
+	fusionHoseId: number;
+	gradeId: string;
+	gradeName: string;
+	status: string;        // IDLE | CALLING | AUTHORIZED | STARTING | FUELLING | PAUSED | STOPPED | ERROR | CLOSED
 	subStatus: string;
 	presetAmount: number;
-	grade?: string;
-	hoseCount: number;
+	attendantName: string | null;
+	shiftId: number | null;
+}
+
+/** Estado completo de un surtidor con sus dos lados */
+export interface DispenserState {
+	dispenserId: number;
+	fusionPumpId: number;
+	name: string;
 	connected: boolean;
 	online: boolean;
+	sides: {
+		A: HoseState[];
+		B: HoseState[];
+	};
 }
 
 export type PrintPolicy = 'ALWAYS' | 'ASK' | 'NEVER';
@@ -214,6 +259,56 @@ export type PrintPolicy = 'ALWAYS' | 'ASK' | 'NEVER';
 export interface SseEvent {
 	event: string;
 	data: Record<string, unknown>;
+}
+
+/** Evento SSE: cambio de estado de una manguera */
+export interface HoseStatusEvent {
+	type: 'HOSE_STATUS';
+	dispenserId: number;
+	hoseId: number;
+	side: 'A' | 'B';
+	fusionHoseId: number;
+	status: string;
+	subStatus: string;
+	attendantName?: string;
+	presetAmount?: number;
+}
+
+/** Evento SSE: progreso de despacho en una manguera */
+export interface FuelingProgressEvent {
+	type: 'FUELING_PROGRESS';
+	dispenserId: number;
+	hoseId: number;
+	side: 'A' | 'B';
+	volume: string;
+	amount: string;
+}
+
+/** Evento SSE: venta completada en una manguera */
+export interface SaleCompletedEvent {
+	type: 'SALE_COMPLETED';
+	dispenserId: number;
+	hoseId: number;
+	side: 'A' | 'B';
+	orderId: string;
+	volume: string;
+	amount: string;
+}
+
+/** Depósito a caja fuerte cuando el efectivo excede el umbral */
+export interface SafeDrop {
+	drop_id: number;
+	shift_id: number;
+	amount: number;
+	reason: string;
+	created_at: string;
+	shift_cash_after_drop: number;
+}
+
+export interface CreateSafeDropRequest {
+	shift_id: number;
+	amount: number;
+	reason: string;
 }
 
 export interface AuthStore {

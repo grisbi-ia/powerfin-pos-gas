@@ -62,6 +62,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const result = await createDispatch(mockToken, {
 				dispenser_id: 1,
 				hose_id: 1,
+				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
 				payment_method: 'EFECTIVO'
@@ -74,7 +75,8 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const { createDispatch } = await import('$lib/api/powerfin.mock');
 			const result = await createDispatch(mockToken, {
 				dispenser_id: 1,
-				hose_id: 1,
+				hose_id: 3,
+				side: 'B',
 				preset_type: 'MONEY',
 				preset_value: '20.00',
 				payment_method: 'QR',
@@ -86,12 +88,14 @@ describe('Phase 4 — Complete Sales Flow', () => {
 	});
 
 	describe('Authorization flow', () => {
-		it('authorizes dispatch and transitions dispenser state', async () => {
+		it('authorizes dispatch and transitions hose state', async () => {
 			const { authorizeDispatch, getDispenser } = await import('$lib/api/bridge.mock');
 
 			const result = await authorizeDispatch({
 				order_id: 'OV-TEST-001',
 				dispenser_id: 1,
+				hose_id: 1,
+				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
 				payment_method: 'EFECTIVO',
@@ -99,12 +103,55 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			});
 
 			expect(result.status).toBe('AUTHORIZED');
+
+			// Verify only the specific hose is affected
+			const d = await getDispenser(1);
+			expect(d.sides.A[0].status).toBe('AUTHORIZED');
+			// Side B should remain IDLE (two simultaneous operations possible)
+			expect(d.sides.B[0].status).toBe('IDLE');
 		});
 
-		it('cancels an active preset', async () => {
-			const { cancelDispenser } = await import('$lib/api/bridge.mock');
-			const result = await cancelDispenser(1);
+		it('can authorize a different hose on the same dispenser simultaneously', async () => {
+			const { authorizeDispatch, getDispenser } = await import('$lib/api/bridge.mock');
+
+			// Authorize Side A, Hose 1
+			await authorizeDispatch({
+				order_id: 'OV-A-001',
+				dispenser_id: 1,
+				hose_id: 1,
+				side: 'A',
+				preset_type: 'MONEY',
+				preset_value: '30.00',
+				payment_method: 'EFECTIVO',
+				unit_price: 1.500
+			});
+
+			// Authorize Side B, Hose 3 (different hose, same dispenser)
+			const resultB = await authorizeDispatch({
+				order_id: 'OV-B-001',
+				dispenser_id: 1,
+				hose_id: 3,
+				side: 'B',
+				preset_type: 'MONEY',
+				preset_value: '20.00',
+				payment_method: 'EFECTIVO',
+				unit_price: 1.500
+			});
+
+			expect(resultB.status).toBe('AUTHORIZED');
+
+			const d = await getDispenser(1);
+			expect(d.sides.A[0].status).toBe('AUTHORIZED');
+			expect(d.sides.B[0].status).toBe('AUTHORIZED');
+		});
+
+		it('cancels an active hose preset', async () => {
+			const { cancelDispenser, getDispenser } = await import('$lib/api/bridge.mock');
+			const result = await cancelDispenser(1, 1);
 			expect(result).toBe(true);
+
+			const d = await getDispenser(1);
+			expect(d.sides.A[0].status).toBe('IDLE');
 		});
 	});
 
@@ -164,10 +211,9 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const auth = await login({ username: 'carlos', pin: '1234' });
 			expect(auth.access_token).toBeTruthy();
 
-			// 2. Open shift
+			// 2. Open shift (no dispenser_ids — any dispenser allowed)
 			const { openShift } = await import('$lib/api/powerfin.mock');
 			const shift = await openShift(auth.access_token, {
-				dispenser_ids: [1],
 				opening_cash: 0,
 				notes: ''
 			});
@@ -180,11 +226,12 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const price = await getCustomerPrice(auth.access_token, customers[0].customer_id, 'SUPER');
 			expect(price.unit_price).toBe(1.100);
 
-			// 4. Create dispatch
+			// 4. Create dispatch (with side and hose)
 			const { createDispatch } = await import('$lib/api/powerfin.mock');
 			const dispatch = await createDispatch(auth.access_token, {
 				dispenser_id: 1,
 				hose_id: 1,
+				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
 				payment_method: 'EFECTIVO',
@@ -192,17 +239,49 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			});
 			expect(dispatch.order_id).toMatch(/^OV-/);
 
-			// 5. Authorize
+			// 5. Authorize with side and hose
 			const { authorizeDispatch } = await import('$lib/api/bridge.mock');
 			const authResult = await authorizeDispatch({
 				order_id: dispatch.order_id,
 				dispenser_id: 1,
+				hose_id: 1,
+				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
 				payment_method: 'EFECTIVO',
 				unit_price: price.unit_price
 			});
 			expect(authResult.status).toBe('AUTHORIZED');
+		});
+	});
+
+	describe('Dispenser sides and hoses', () => {
+		it('each dispenser has two sides with independent hoses', async () => {
+			const { getDispensers } = await import('$lib/api/bridge.mock');
+			const result = await getDispensers();
+
+			for (const d of result.dispensers) {
+				expect(d.sides.A).toBeDefined();
+				expect(d.sides.B).toBeDefined();
+				expect(d.sides.A.length).toBeGreaterThan(0);
+				expect(d.sides.B.length).toBeGreaterThan(0);
+			}
+		});
+
+		it('hoses within a side can have different grades', async () => {
+			const { fetchConfig } = await import('$lib/api/powerfin.mock');
+			const config = await fetchConfig(mockToken);
+			const d1 = config.dispensers[0];
+
+			// Side A has SUPER and EXTRA
+			const gradesA = d1.sides.A.map(h => h.grade_id);
+			expect(gradesA).toContain('SUPER');
+			expect(gradesA).toContain('EXTRA');
+
+			// Side B has DIESEL and SUPER
+			const gradesB = d1.sides.B.map(h => h.grade_id);
+			expect(gradesB).toContain('DIESEL');
+			expect(gradesB).toContain('SUPER');
 		});
 	});
 });

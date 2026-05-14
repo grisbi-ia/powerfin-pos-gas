@@ -12,6 +12,11 @@
 		<div class="text-sm text-gray-400 mt-1">Para facturación</div>
 	</div>
 
+	<div class="bg-blue-50 rounded-xl p-3 mb-4 text-center">
+		<div class="text-xs text-blue-500">Placa</div>
+		<div class="text-lg font-mono font-bold text-blue-700">{vehicle.plate}</div>
+	</div>
+
 	<div class="bg-gray-50 rounded-xl p-4 mb-4">
 		<div class="text-sm font-medium text-gray-800">{vehicle.owner?.name ?? 'N/A'}</div>
 		<div class="text-xs text-gray-500 mt-1">

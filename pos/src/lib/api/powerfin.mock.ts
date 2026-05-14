@@ -1,7 +1,8 @@
 import type {
 	User, LoginRequest, LoginResponse, AppConfig, Customer,
 	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
-	VehicleResult, CustomerFormData, RegisterCustomerResponse
+	VehicleResult, CustomerFormData, RegisterCustomerResponse,
+	CollectDispatchRequest, CollectDispatchResponse
 } from './types';
 
 // ── Mock data ────────────────────────────────────────────────
@@ -25,23 +26,37 @@ const MOCK_CONFIG: AppConfig = {
 			dispenser_id: 1,
 			fusion_pump_id: 1,
 			name: 'Surtidor 1',
-			hoses: [
-				{ hose_id: 1, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-				{ hose_id: 2, fusion_hose_id: 2, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
-			]
+			sides: {
+				A: [
+					{ hose_id: 1, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 2, fusion_hose_id: 2, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' }
+				],
+				B: [
+					{ hose_id: 3, fusion_hose_id: 3, grade_id: 'DIESEL', grade_name: 'Diesel' },
+					{ hose_id: 4, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				]
+			}
 		},
 		{
 			dispenser_id: 2,
 			fusion_pump_id: 2,
 			name: 'Surtidor 2',
-			hoses: [
-				{ hose_id: 3, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-				{ hose_id: 4, fusion_hose_id: 2, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
-			]
+			sides: {
+				A: [
+					{ hose_id: 5, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 6, fusion_hose_id: 2, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' }
+				],
+				B: [
+					{ hose_id: 7, fusion_hose_id: 3, grade_id: 'DIESEL', grade_name: 'Diesel' },
+					{ hose_id: 8, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				]
+			}
 		}
 	],
 	grades: [
-		{ grade_id: 'SUPER', name: 'Gasolina Super', unit: 'litros' }
+		{ grade_id: 'SUPER', name: 'Gasolina Super', unit: 'litros' },
+		{ grade_id: 'EXTRA', name: 'Gasolina Extra', unit: 'litros' },
+		{ grade_id: 'DIESEL', name: 'Diesel', unit: 'litros' }
 	],
 	price_lists: [
 		{ code: 'STANDARD', name: 'Precio Normal' },
@@ -55,7 +70,11 @@ const MOCK_CONFIG: AppConfig = {
 		{ code: 'DEUNA', name: 'DeUna', requires_reference: true },
 		{ code: 'JEPFAST', name: 'JepFast', requires_reference: true },
 		{ code: 'SIPY', name: 'Sipy', requires_reference: true }
-	]
+	],
+	polling: {
+		interval_ms: 2000,
+		enabled: true
+	}
 };
 
 const MOCK_CUSTOMERS: Customer[] = [
@@ -197,8 +216,7 @@ export async function openShift(_token: string, data: OpenShiftRequest): Promise
 		opened_at: new Date().toISOString(),
 		accounting_date: new Date().toISOString().split('T')[0],
 		status: 'OPEN',
-		opening_cash: data.opening_cash,
-		dispenser_ids: data.dispenser_ids
+		opening_cash: data.opening_cash
 	};
 	if (typeof localStorage !== 'undefined') {
 		localStorage.setItem('shift', JSON.stringify(mockShift));
@@ -259,6 +277,21 @@ export async function cancelDispatchApi(
 	_token: string, _orderId: string
 ): Promise<void> {
 	await delay(200);
+}
+
+export async function collectDispatch(
+	_token: string, orderId: string, _data: CollectDispatchRequest
+): Promise<CollectDispatchResponse> {
+	await delay(300);
+	return {
+		order_id: orderId,
+		status: 'COLLECTED',
+		collected_by_shift_id: _data.collected_by_shift_id,
+		collected_by_name: MOCK_USER.name,
+		payment_method: _data.payment_method,
+		collected_amount: _data.collected_amount,
+		change_amount: _data.change_amount
+	};
 }
 
 export async function lookupVehicle(_token: string, plate: string): Promise<VehicleResult> {

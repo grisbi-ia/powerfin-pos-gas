@@ -1,20 +1,33 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { config } from '$lib/stores/config';
 	import Header from '$lib/components/Header.svelte';
 	import PlateInput from '$lib/components/PlateInput.svelte';
 	import BillingConfirmation from '$lib/components/BillingConfirmation.svelte';
 	import CustomerForm from '$lib/components/CustomerForm.svelte';
 	import AmountInput from '$lib/components/AmountInput.svelte';
-	import type { VehicleResult, CustomerFormData, Customer } from '$lib/api/types';
+	import type { VehicleResult, CustomerFormData, Customer, HoseConfig } from '$lib/api/types';
 	import * as powerfin from '$lib/api/powerfin.mock';
 	import * as bridge from '$lib/api/bridge.mock';
+	import { pendingOrders } from '$lib/stores/pendingOrders';
 
 	let dispenserId = 0;
-	$: dispenserId = Number($page.url.searchParams.get('dispenser') ?? '0');
+	let side: 'A' | 'B' = 'A';
+	let selectedHoseId = 0;
+	let selectedFusionHoseId = 0;
+	let selectedGradeId = '';
+	let selectedGradeName = '';
 
-	type Step = 'plate' | 'billing' | 'idLookup' | 'form';
-	let currentStep: Step = 'plate';
+	$: dispenserId = Number($page.url.searchParams.get('dispenser') ?? '0');
+	$: side = ($page.url.searchParams.get('side') ?? 'A') as 'A' | 'B';
+
+	// Get hoses for the current side from config
+	$: dispenserConfig = $config?.dispensers?.find(d => d.dispenser_id === dispenserId);
+	$: sideHoses = (dispenserConfig?.sides?.[side] ?? []) as HoseConfig[];
+
+	type Step = 'hose' | 'plate' | 'billing' | 'idLookup' | 'form';
+	let currentStep: Step = 'hose';
 	let showAmountSection = false;
 	let vehicleResult: VehicleResult | null = null;
 	let confirmedOwner: VehicleResult['owner'] = null;
@@ -28,11 +41,20 @@
 	let idType: 'CED' | 'RUC' = 'CED';
 	let idNumber = '';
 
-	$: hoseId = dispenserId * 2 - 1;
+	function selectHose(hose: HoseConfig) {
+		selectedHoseId = hose.hose_id;
+		selectedFusionHoseId = hose.fusion_hose_id;
+		selectedGradeId = hose.grade_id;
+		selectedGradeName = hose.grade_name;
+		currentStep = 'plate';
+	}
 
 	function handleVehicleResult(result: VehicleResult) {
 		vehicleResult = result;
 		plate = result.plate;
+
+		// Set price based on vehicle result
+		unitPrice = result.price_list === 'VIP' ? 1.100 : 1.500;
 
 		if (!result.vehicle_found) {
 			currentStep = 'idLookup';
@@ -67,8 +89,17 @@
 			const customer = await powerfin.getCustomerById('mock-token', idType, idNumber, true);
 			if (customer) {
 				billingCustomer = customer;
+				unitPrice = customer.price_list === 'VIP' ? 1.100 : 1.500;
 				currentStep = 'billing';
 			} else {
+				vehicleResult = {
+					plate: plate,
+					vehicle_found: false,
+					incomplete_fields: [],
+					owner: null,
+					price_list: 'STANDARD',
+					price_list_name: 'Precio Normal'
+				};
 				currentStep = 'form';
 			}
 		} catch {
@@ -128,7 +159,8 @@
 
 			const orderResult = await powerfin.createDispatch('mock-token', {
 				dispenser_id: dispenserId,
-				hose_id: hoseId,
+				hose_id: selectedHoseId,
+				side: side,
 				preset_type: 'MONEY',
 				preset_value: amount,
 				payment_method: 'EFECTIVO',
@@ -141,6 +173,8 @@
 			await bridge.authorizeDispatch({
 				order_id: orderId,
 				dispenser_id: dispenserId,
+				hose_id: selectedHoseId,
+				side: side,
 				preset_type: 'MONEY',
 				preset_value: amount,
 				payment_method: 'EFECTIVO',
@@ -150,7 +184,23 @@
 				price_list: vehicleResult?.price_list ?? 'STANDARD'
 			});
 
-			goto(`/fueling?order=${orderId}&dispenser=${dispenserId}&amount=${amount}&price=${unitPrice}&customerName=${encodeURIComponent(dispatchOwner?.name ?? '')}&priceList=${vehicleResult?.price_list ?? 'STANDARD'}&plate=${encodeURIComponent(plate)}`);
+			pendingOrders.addOrder({
+				orderId,
+				dispenserId,
+				hoseId: selectedHoseId,
+				side: side,
+				customerName: dispatchOwner?.name ?? '',
+				plate,
+				presetAmount: parseFloat(amount),
+				finalAmount: 0,
+				finalVolume: '0.00',
+				unitPrice,
+				priceList: vehicleResult?.price_list ?? 'STANDARD',
+				status: 'FUELLING',
+				createdAt: new Date().toISOString()
+			});
+
+			goto(`/fueling?order=${orderId}&dispenser=${dispenserId}&hose=${selectedHoseId}&side=${side}&amount=${amount}&price=${unitPrice}&customerName=${encodeURIComponent(dispatchOwner?.name ?? '')}&priceList=${vehicleResult?.price_list ?? 'STANDARD'}&plate=${encodeURIComponent(plate)}`);
 		} catch {
 			error = 'Error al autorizar el despacho';
 		} finally {
@@ -162,21 +212,59 @@
 <Header title="Nueva Venta" showBack={true} onBack={() => goto('/')} />
 
 <main class="flex-1 px-4 py-4 overflow-y-auto">
+	<!-- Dispenser + Side info -->
 	<div class="card p-4 mb-4">
 		<div class="flex items-center justify-between">
 			<div>
-				<div class="text-xs text-gray-400">Surtidor</div>
-				<div class="text-lg font-bold text-gray-800">{dispenserId}</div>
+				<div class="text-xs text-gray-400">Surtidor {dispenserId} — Lado {side}</div>
+				{#if selectedHoseId > 0}
+					<div class="text-lg font-bold text-gray-800">{selectedGradeName}</div>
+				{/if}
 			</div>
-			{#if unitPrice}
-				<div class="text-right">
-					<div class="text-xs text-gray-400">Precio actual</div>
-					<div class="text-lg font-bold text-primary">${unitPrice.toFixed(3)}/L</div>
-				</div>
-			{/if}
+			<div class="text-right">
+				<div class="text-xs text-gray-400">Precio</div>
+				<div class="text-lg font-bold text-primary">${unitPrice.toFixed(3)}/L</div>
+			</div>
 		</div>
 	</div>
 
+	<!-- Step 1: Hose/grade selection -->
+	{#if currentStep === 'hose'}
+		<div class="card p-4 mb-4">
+			<h3 class="text-sm font-semibold text-gray-700 mb-3">
+				Seleccione el combustible:
+			</h3>
+			{#if sideHoses.length === 0}
+				<div class="text-center py-4 text-gray-400 text-sm">
+					No hay mangueras configuradas para este lado
+				</div>
+			{:else if sideHoses.length === 1}
+				<!-- Single hose: auto-select -->
+				{@const hose = sideHoses[0]}
+				<button
+					class="touch-btn w-full p-4 rounded-xl bg-primary text-white font-semibold text-lg"
+					on:click={() => selectHose(hose)}
+				>
+					{hose.grade_name}
+				</button>
+			{:else}
+				<!-- Multiple hoses: let user pick -->
+				<div class="grid gap-2">
+					{#each sideHoses as hose (hose.hose_id)}
+						<button
+							class="touch-btn w-full p-4 rounded-xl border-2 border-gray-200 hover:border-primary
+								text-left transition-colors"
+							on:click={() => selectHose(hose)}
+						>
+							<div class="font-semibold text-gray-800">{hose.grade_name}</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	<!-- Step 2: Plate input -->
 	{#if currentStep === 'plate'}
 		<div class="card p-4 mb-4">
 			<PlateInput onResult={handleVehicleResult} />
@@ -268,13 +356,23 @@
 		<CustomerForm
 			mode={vehicleResult?.vehicle_found ? 'incomplete' : 'registration'}
 			{plate}
+			initialIdType={idType}
+			initialIdNumber={idNumber}
 			onSubmit={handleFormSubmit}
 			onCancel={handleFormCancel}
 			{loading}
 		/>
 	{/if}
 
+	<!-- Amount + Authorize (shown after billing confirmed or for unidentified plates) -->
 	{#if showAmountSection || currentStep === 'plate'}
+		{#if plate}
+			<div class="card p-3 mb-4 bg-blue-50 border-blue-100 text-center">
+				<div class="text-xs text-blue-500">Placa</div>
+				<div class="text-lg font-mono font-bold text-blue-700">{plate}</div>
+			</div>
+		{/if}
+
 		<div class="card p-4 mb-4">
 			<AmountInput onAmount={(a) => amount = a} disabled={loading} />
 		</div>
@@ -288,6 +386,10 @@
 				<div class="flex justify-between text-sm mt-1">
 					<span class="text-gray-600">Precio unitario:</span>
 					<span class="font-semibold">${unitPrice.toFixed(3)}</span>
+				</div>
+				<div class="flex justify-between text-sm mt-1">
+					<span class="text-gray-600">Combustible:</span>
+					<span class="font-semibold">{selectedGradeName}</span>
 				</div>
 				{#if vehicleResult}
 					<div class="flex justify-between text-sm mt-1">

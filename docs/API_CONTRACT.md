@@ -51,7 +51,8 @@ Todos los endpoints requieren: `Authorization: Bearer {jwt_token}`
 
 ### GET /api/pos/config
 
-Configuración inicial al arrancar la app.
+Configuración inicial al arrancar la app. Incluye el layout físico de cada surtidor
+(lados y mangueras) según la instalación real de la gasolinera.
 
 ```json
 // Response 200
@@ -66,24 +67,42 @@ Configuración inicial al arrancar la app.
       "dispenser_id": 1,
       "fusion_pump_id": 1,
       "name": "Surtidor 1",
-      "hoses": [
-        {
-          "hose_id": 1,
-          "fusion_hose_id": 1,
-          "grade_id": "SUPER",
-          "grade_name": "Gasolina Super"
-        },
-        {
-          "hose_id": 2,
-          "fusion_hose_id": 2,
-          "grade_id": "SUPER",
-          "grade_name": "Gasolina Super"
-        }
-      ]
+      "sides": {
+        "A": [
+          {
+            "hose_id": 1,
+            "fusion_hose_id": 1,
+            "grade_id": "SUPER",
+            "grade_name": "Gasolina Super"
+          },
+          {
+            "hose_id": 2,
+            "fusion_hose_id": 2,
+            "grade_id": "EXTRA",
+            "grade_name": "Gasolina Extra"
+          }
+        ],
+        "B": [
+          {
+            "hose_id": 3,
+            "fusion_hose_id": 3,
+            "grade_id": "DIESEL",
+            "grade_name": "Diesel"
+          },
+          {
+            "hose_id": 4,
+            "fusion_hose_id": 4,
+            "grade_id": "SUPER",
+            "grade_name": "Gasolina Super"
+          }
+        ]
+      }
     }
   ],
   "grades": [
-    { "grade_id": "SUPER", "name": "Gasolina Super", "unit": "litros" }
+    { "grade_id": "SUPER", "name": "Gasolina Super", "unit": "litros" },
+    { "grade_id": "EXTRA", "name": "Gasolina Extra", "unit": "litros" },
+    { "grade_id": "DIESEL", "name": "Diesel", "unit": "litros" }
   ],
   "price_lists": [
     { "code": "STANDARD", "name": "Precio Normal" },
@@ -91,6 +110,9 @@ Configuración inicial al arrancar la app.
   ]
 }
 ```
+
+**Nota:** El mapeo `fusion_hose_id` → `hose_id` → `side` → `grade_id` viene de PowerFin.
+Cada gasolinera tiene su propio layout físico. El POS no asume nada, recibe todo de esta respuesta.
 
 ---
 
@@ -234,10 +256,13 @@ Fallback cuando `GET /api/pos/vehicles` devuelve `vehicle_found: false`. Registr
 
 ### POST /api/pos/shifts/open
 
+Cada usuario abre su turno con su caja independiente. **No se asignan dispensadores:**
+cualquier despachador puede vender en cualquier surtidor. La venta se registra bajo
+el `shift_id` de quien la autoriza, sin importar en qué surtidor ocurrió.
+
 ```json
 // Request
 {
-    "dispenser_ids": [1, 2],
     "opening_cash":  0.00,
     "notes":         ""
 }
@@ -249,8 +274,7 @@ Fallback cuando `GET /api/pos/vehicles` devuelve `vehicle_found: false`. Registr
     "opened_at":       "2024-04-21T06:03:00",
     "accounting_date": "2024-04-21",
     "status":          "OPEN",
-    "opening_cash":    0.00,
-    "dispenser_ids":   [1, 2]
+    "opening_cash":    0.00
 }
 ```
 
@@ -305,8 +329,9 @@ El hardware se activa en el paso siguiente con FusionBridge.
 {
     "shift_id":       45,
     "dispenser_id":   1,
-    "hose_id":        1,
-    "grade_id":       "SUPER",
+    "hose_id":        3,
+    "side":           "B",
+    "grade_id":       "DIESEL",
     "customer_id":    "0912345678",
     "plate":          "ABC-1234",
     "price_list":     "VIP",
@@ -402,12 +427,17 @@ Historial del turno.
 
 ### POST /api/dispatch/authorize
 
+Envía el comando `REQ_PUMP_PRESET` al Fusion especificando `pump_id` y `fusion_hose_id`.
+La unidad de lock en el Fusion es `(pump_id, hose_id)`. Dos mangueras del mismo surtidor
+pueden operar simultáneamente (lados opuestos).
+
 ```json
 // Request
 {
     "order_id":        "OV-20240421-143022-001",
     "dispenser_id":    1,
-    "hose_id":         1,
+    "hose_id":         3,
+    "side":            "B",
     "preset_type":     "MONEY",
     "preset_value":    "50.00",
     "unit_price":      1.100,
@@ -421,7 +451,7 @@ Historial del turno.
     "status":   "PRESET_SENT",
     "order_id": "OV-20240421-143022-001"
 }
-// Response 409 → surtidor no disponible
+// Response 409 → manguera ocupada (otro despachador ya la está usando)
 // Response 503 → sin conexión al Synergy
 ```
 
@@ -439,6 +469,9 @@ Historial del turno.
 
 ### GET /api/dispensers
 
+Retorna el estado de todos los surtidores con granularidad por manguera.
+Cada manguera (`hose`) tiene su propio estado independiente.
+
 ```json
 // Response 200
 {
@@ -447,9 +480,58 @@ Historial del turno.
     {
       "dispenser_id": 1,
       "fusion_pump_id": 1,
-      "status": "IDLE",
-      "sub_status": "",
-      "hose": null,
+      "name": "Surtidor 1",
+      "online": true,
+      "sides": {
+        "A": [
+          {
+            "hose_id": 1,
+            "fusion_hose_id": 1,
+            "grade_id": "SUPER",
+            "grade_name": "Gasolina Super",
+            "status": "FUELLING",
+            "sub_status": "",
+            "preset_amount": 50.00,
+            "attendant_name": "Carlos",
+            "shift_id": 45
+          },
+          {
+            "hose_id": 2,
+            "fusion_hose_id": 2,
+            "grade_id": "EXTRA",
+            "grade_name": "Gasolina Extra",
+            "status": "IDLE",
+            "sub_status": "",
+            "preset_amount": 0,
+            "attendant_name": null,
+            "shift_id": null
+          }
+        ],
+        "B": [
+          {
+            "hose_id": 3,
+            "fusion_hose_id": 3,
+            "grade_id": "DIESEL",
+            "grade_name": "Diesel",
+            "status": "IDLE",
+            "sub_status": "",
+            "preset_amount": 0,
+            "attendant_name": null,
+            "shift_id": null
+          },
+          {
+            "hose_id": 4,
+            "fusion_hose_id": 4,
+            "grade_id": "SUPER",
+            "grade_name": "Gasolina Super",
+            "status": "AUTHORIZED",
+            "sub_status": "MONEY_PRESET",
+            "preset_amount": 30.00,
+            "attendant_name": "María",
+            "shift_id": 46
+          }
+        ]
+      },
       "last_updated": "2024-04-21T14:30:00Z"
     }
   ]
@@ -514,10 +596,10 @@ Solicitud de impresión de ticket.
 GET /api/events
 Accept: text/event-stream
 
-// Tipos de eventos emitidos:
-data: {"type":"DISPENSER_STATUS","dispenserId":1,"status":"AUTHORIZED","subStatus":"MONEY_PRESET"}
-data: {"type":"FUELING_PROGRESS","dispenserId":1,"volume":"23.150","amount":"25.47"}
-data: {"type":"SALE_COMPLETED","dispenserId":1,"orderId":"OV-001","volume":"45.455","amount":"50.00"}
+// Tipos de eventos emitidos (granularidad por manguera):
+data: {"type":"HOSE_STATUS","dispenserId":1,"hoseId":1,"side":"A","fusionHoseId":1,"status":"AUTHORIZED","subStatus":"MONEY_PRESET","attendantName":"Carlos","presetAmount":50.00}
+data: {"type":"FUELING_PROGRESS","dispenserId":1,"hoseId":1,"side":"A","volume":"23.150","amount":"25.47"}
+data: {"type":"SALE_COMPLETED","dispenserId":1,"hoseId":1,"side":"A","orderId":"OV-001","volume":"45.455","amount":"50.00"}
 data: {"type":"FUSION_DISCONNECTED","connected":false}
 data: {"type":"FUSION_CONNECTED","connected":true}
 ```

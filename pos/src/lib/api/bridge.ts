@@ -4,13 +4,13 @@ const BRIDGE_URL = 'http://localhost:8090';
 
 // ── REST ─────────────────────────────────────────────────────
 
-export async function getDispensers(): Promise<{ dispensers: DispenserState[]; fusionConnected: boolean }> {
+export async function getDispensersRaw(): Promise<{ dispensers: Array<{ dispenserId: number; status: string; subStatus: string; hoseCount: number; presetAmount: number; grade?: string; connected: boolean }>; fusionConnected: boolean }> {
 	const res = await fetch(`${BRIDGE_URL}/api/dispensers`);
 	if (!res.ok) throw new Error('Error fetching dispensers');
 	return res.json();
 }
 
-export async function getDispenser(id: number): Promise<DispenserState> {
+export async function getDispenserRaw(id: number): Promise<{ dispenserId: number; status: string; subStatus: string; hoseCount: number; presetAmount: number; grade?: string; connected: boolean }> {
 	const res = await fetch(`${BRIDGE_URL}/api/dispensers/${id}`);
 	if (!res.ok) throw new Error(`Dispenser ${id} not found`);
 	return res.json();

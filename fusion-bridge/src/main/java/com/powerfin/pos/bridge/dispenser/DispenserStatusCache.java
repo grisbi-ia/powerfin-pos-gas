@@ -3,6 +3,9 @@ package com.powerfin.pos.bridge.dispenser;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
 
 public class DispenserStatusCache {
 
