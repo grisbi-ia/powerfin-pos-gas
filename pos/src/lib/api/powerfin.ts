@@ -131,3 +131,60 @@ export async function getShiftDispatches(
 	if (!res.ok) throw new Error('Error obteniendo despachos del turno');
 	return res.json();
 }
+
+// ── Vehicles ────────────────────────────────────────────────
+
+export async function lookupVehicle(
+	token: string, plate: string
+): Promise<import('./types').VehicleResult> {
+	const res = await fetch(powerfinUrl('/api/pos/vehicles/lookup'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify({ plate })
+	});
+	if (!res.ok) throw new Error('Error buscando vehículo');
+	return res.json();
+}
+
+// ── Customer by ID ──────────────────────────────────────────
+
+export async function getCustomerById(
+	token: string,
+	idType: 'CED' | 'RUC',
+	idNumber: string,
+	_updateBilling = false
+): Promise<import('./types').Customer | null> {
+	const results = await searchCustomers(token, idNumber);
+	return results.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
+}
+
+// ── Register customer ───────────────────────────────────────
+
+export async function registerCustomer(
+	token: string,
+	data: import('./types').CustomerFormData
+): Promise<import('./types').RegisterCustomerResponse> {
+	const res = await fetch(powerfinUrl('/api/pos/customers'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error registrando cliente');
+	return res.json();
+}
+
+// ── Collect dispatch ────────────────────────────────────────
+
+export async function collectDispatch(
+	token: string,
+	orderId: string,
+	data: import('./types').CollectDispatchRequest
+): Promise<import('./types').CollectDispatchResponse> {
+	const res = await fetch(powerfinUrl(`/api/pos/dispatches/${orderId}/collect`), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error cobrando despacho');
+	return res.json();
+}

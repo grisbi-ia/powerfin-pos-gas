@@ -9,7 +9,7 @@
 	import { onMount } from 'svelte';
 
 	// Mock imports — swap to real imports when backends are available
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge.mock';
 
 	$: currentPath = browser ? $page.url.pathname : '';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { VehicleResult } from '$lib/api/types';
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 
 	export let onResult: (result: VehicleResult) => void;
 	export let disabled = false;

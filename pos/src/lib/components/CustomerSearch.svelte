@@ -12,7 +12,7 @@
 	let debounceTimer: ReturnType<typeof setTimeout>;
 
 	// Mock imports
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 
 	async function handleInput() {
 		clearTimeout(debounceTimer);

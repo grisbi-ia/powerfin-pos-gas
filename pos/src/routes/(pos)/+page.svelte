@@ -12,7 +12,7 @@
 	import type { HoseState } from '$lib/api/types';
 
 	// Real bridge for end-to-end testing
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 	import * as realBridge from '$lib/api/bridge';
 	import { convertToDispenserState } from '$lib/api/bridge-client';
 
@@ -103,17 +103,23 @@
 		try {
 			const result = await realBridge.getDispensersRaw();
 			const converted = convertToDispenserState(result, $config);
+			const orders = $orderByHose;
 			for (const d of converted.dispensers) {
-				// Route pump status to the hose that has a pending order,
-				// not always Side A. If no pending order, Side A gets it.
-				const anyOrder = [...$orderByHose.values()].find(
-					o => o.dispenserId === d.dispenserId && o.status === 'FUELLING'
+				// Find any pending order (FUELLING or just created) for this dispenser
+				const anyOrder = [...orders.values()].find(
+					o => o.dispenserId === d.dispenserId &&
+						(o.status === 'FUELLING' || o.status === 'COMPLETED')
 				);
-				if (anyOrder) {
+
+				if (anyOrder && d.sides.A.length > 0) {
 					const targetSide = anyOrder.side;
 					const targetHoseId = anyOrder.hoseId;
-					// Copy pump status from side A[0] to the correct hose
 					const srcHose = d.sides.A[0];
+					console.log(
+						`[poll] Surtidor ${d.dispenserId}: status=${srcHose.status}, ` +
+						`routing to Lado ${targetSide} hose ${targetHoseId} ` +
+						`(order ${anyOrder.orderId})`
+					);
 					for (const sideKey of ['A', 'B'] as const) {
 						for (const hose of d.sides[sideKey]) {
 							if (sideKey === targetSide && hose.hoseId === targetHoseId) {
@@ -127,6 +133,12 @@
 							}
 						}
 					}
+				} else if (!anyOrder && d.sides.A.length > 0) {
+					// No pending order — status stays on Side A as reported by Fusion
+					console.log(
+						`[poll] Surtidor ${d.dispenserId}: status=${d.sides.A[0].status}, ` +
+						`no pending order, keeping on Side A`
+					);
 				}
 				dispensers.updateDispenser(d);
 			}

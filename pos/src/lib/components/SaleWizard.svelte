@@ -5,7 +5,7 @@
 	import { pendingOrders } from '$lib/stores/pendingOrders';
 	import type { HoseConfig, VehicleResult, CustomerFormData, Customer, PresetType } from '$lib/api/types';
 	import type { PendingOrder } from '$lib/stores/pendingOrders';
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge';
 
 	const dispatch = createEventDispatcher();

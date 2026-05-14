@@ -5,7 +5,7 @@
 	import { shift } from '$lib/stores/shift';
 
 	// Mock imports
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 
 	let closingCash = 0;
 	let notes = '';

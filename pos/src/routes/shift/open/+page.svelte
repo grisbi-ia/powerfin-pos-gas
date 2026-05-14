@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 
 	// Mock imports
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 
 	let openingCash = 0;
 	let notes = '';

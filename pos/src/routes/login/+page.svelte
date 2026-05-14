@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 
 	// Mock imports — swap to real imports when PowerFin ERP is available
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 
 	let username = 'carlos';
 	let pin = '';

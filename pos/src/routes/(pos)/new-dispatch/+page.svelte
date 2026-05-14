@@ -8,7 +8,7 @@
 	import CustomerForm from '$lib/components/CustomerForm.svelte';
 	import AmountInput from '$lib/components/AmountInput.svelte';
 	import type { VehicleResult, CustomerFormData, Customer, HoseConfig } from '$lib/api/types';
-	import * as powerfin from '$lib/api/powerfin.mock';
+	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge.mock';
 	import { pendingOrders } from '$lib/stores/pendingOrders';
 
