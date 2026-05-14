@@ -8,7 +8,12 @@
 import type { AuthorizeData, DispenserState, HoseState, AppConfig } from './types';
 import * as realBridge from './bridge';
 
-const BRIDGE_URL = 'http://localhost:8090';
+// Derive bridge URL from page hostname so tablets connect to the server, not localhost
+function getBridgeUrl(): string {
+	if (typeof window !== 'undefined') return `http://${window.location.hostname}:8090`;
+	return 'http://localhost:8090';
+}
+const BRIDGE_URL = getBridgeUrl();
 
 // ── Format conversion ───────────────────────────────────────
 

@@ -1,23 +1,35 @@
 import type { AuthorizeData, DispenserState } from './types';
 
-const BRIDGE_URL = 'http://localhost:8090';
+// Derive bridge URL from page hostname so tablets connect to the server, not localhost
+function getBridgeUrl(): string {
+	if (typeof window !== 'undefined') {
+		return `http://${window.location.hostname}:8090`;
+	}
+	return 'http://localhost:8090'; // SSR fallback
+}
+
+let BRIDGE_URL = '';
+function bridgeUrl(path: string): string {
+	if (!BRIDGE_URL) BRIDGE_URL = getBridgeUrl();
+	return `${BRIDGE_URL}${path}`;
+}
 
 // ── REST ─────────────────────────────────────────────────────
 
 export async function getDispensersRaw(): Promise<{ dispensers: Array<{ dispenserId: number; status: string; subStatus: string; hoseCount: number; presetAmount: number; grade?: string; connected: boolean }>; fusionConnected: boolean }> {
-	const res = await fetch(`${BRIDGE_URL}/api/dispensers`);
+	const res = await fetch(bridgeUrl('/api/dispensers'));
 	if (!res.ok) throw new Error('Error fetching dispensers');
 	return res.json();
 }
 
 export async function getDispenserRaw(id: number): Promise<{ dispenserId: number; status: string; subStatus: string; hoseCount: number; presetAmount: number; grade?: string; connected: boolean }> {
-	const res = await fetch(`${BRIDGE_URL}/api/dispensers/${id}`);
+	const res = await fetch(bridgeUrl(`/api/dispensers/${id}`));
 	if (!res.ok) throw new Error(`Dispenser ${id} not found`);
 	return res.json();
 }
 
 export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: string }> {
-	const res = await fetch(`${BRIDGE_URL}/api/dispatch/authorize`, {
+	const res = await fetch(bridgeUrl('/api/dispatch/authorize'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(data)
@@ -27,7 +39,7 @@ export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: 
 }
 
 export async function cancelDispenser(dispenserId: number): Promise<boolean> {
-	const res = await fetch(`${BRIDGE_URL}/api/dispatch/cancel`, {
+	const res = await fetch(bridgeUrl('/api/dispatch/cancel'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ dispenser_id: dispenserId })
@@ -36,13 +48,13 @@ export async function cancelDispenser(dispenserId: number): Promise<boolean> {
 }
 
 export async function getPrintPolicy(): Promise<{ policy: string }> {
-	const res = await fetch(`${BRIDGE_URL}/api/print/policy`);
+	const res = await fetch(bridgeUrl('/api/print/policy'));
 	if (!res.ok) throw new Error('Error fetching print policy');
 	return res.json();
 }
 
 export async function printReceipt(data: unknown): Promise<{ status: string }> {
-	const res = await fetch(`${BRIDGE_URL}/api/print`, {
+	const res = await fetch(bridgeUrl('/api/print'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(data)
@@ -57,7 +69,7 @@ export function connectToEvents(
 	onEvent: (event: string, data: Record<string, unknown>) => void,
 	onError?: (error: Event) => void
 ): EventSource {
-	const eventSource = new EventSource(`${BRIDGE_URL}/api/events`);
+	const eventSource = new EventSource(bridgeUrl('/api/events'));
 
 	// Listen for all named events
 	const eventTypes = [
