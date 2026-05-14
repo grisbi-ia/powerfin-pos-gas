@@ -1,8 +1,60 @@
-# Fusion Simulator
+# Testing Tools
+
+## PowerFin Server Simulator
+
+Servidor HTTP REST que emula los endpoints `/api/pos/*` de PowerFin ERP.
+**Persiste en archivo JSON** — estado compartido entre todos los dispositivos.
+
+```bash
+python3 tools/powerfin_server.py --port 8080
+```
+
+| Opción | Default | Descripción |
+|--------|---------|-------------|
+| `--port` | 8080 | Puerto HTTP |
+| `--host` | 0.0.0.0 | Dirección de bind |
+
+### Usuarios de prueba
+
+| Usuario | PIN | Role |
+|---------|-----|------|
+| `carlos` | `1234` | DISPATCHER |
+| `maria` | `1234` | DISPATCHER |
+| `pedro` | `1234` | DISPATCHER |
+
+### Verificar
+
+```bash
+curl http://localhost:8080/api/pos/config
+curl -X POST http://localhost:8080/api/pos/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"carlos","pin":"1234"}'
+```
+
+### Endpoints
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/api/pos/auth/login` | Login con PIN |
+| GET | `/api/pos/config` | Layout, precios, métodos de pago |
+| GET | `/api/pos/customers?q=` | Búsqueda de clientes |
+| POST | `/api/pos/customers` | Registro de cliente nuevo |
+| POST | `/api/pos/vehicles/lookup` | Búsqueda por placa |
+| GET | `/api/pos/prices?customerId=&gradeId=` | Precio según lista |
+| POST | `/api/pos/shifts/open` | Abrir turno |
+| GET | `/api/pos/shifts/current` | Turno activo |
+| POST | `/api/pos/shifts/{id}/close` | Cerrar turno |
+| POST | `/api/pos/dispatches` | Crear orden de despacho |
+| GET | `/api/pos/shifts/{id}/dispatches` | Órdenes del turno (reconciliación) |
+| POST | `/api/pos/dispatches/{id}/complete` | Completar despacho |
+| POST | `/api/pos/dispatches/{id}/collect` | Cobrar |
+| POST | `/api/pos/dispatches/{id}/cancel` | Cancelar |
+
+---
+
+## Fusion Simulator
 
 TCP server que emula el protocolo Wayne Fusion/Synergy para testing sin hardware real.
-
-## Uso
 
 ```bash
 python3 tools/fusion_simulator.py --port 3012 --pumps 2

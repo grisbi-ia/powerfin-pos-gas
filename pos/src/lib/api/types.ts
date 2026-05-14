@@ -154,6 +154,7 @@ export interface DispatchOrder {
 	order_id: string;
 	dispenser_id: number;
 	hose_id: number;
+	side: 'A' | 'B';
 	grade: string;
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
@@ -162,8 +163,13 @@ export interface DispatchOrder {
 	customer_id?: string;
 	customer_name?: string;
 	plate?: string;
-	status: 'PENDING' | 'AUTHORIZED' | 'FUELLING' | 'COMPLETED' | 'CANCELLED';
+	status: 'PENDING' | 'AUTHORIZED' | 'FUELLING' | 'COMPLETED' | 'CANCELLED' | 'COLLECTED';
 	created_at: string;
+	shift_id: number;
+	authorized_by?: string;
+	final_amount?: number;
+	final_volume?: string;
+	invoice_number?: string;
 }
 
 export interface CreateDispatchRequest {

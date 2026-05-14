@@ -14,19 +14,21 @@ git checkout develop
 git status
 ```
 
-### 3 terminales (en orden):
+### 4 terminales (en orden):
 
 ```bash
 # Terminal 1 — Simulador Fusion
 python3 tools/fusion_simulator.py --port 3012 --pumps 2
 
-# Terminal 2 — FusionBridge
+# Terminal 2 — PowerFin Server (backend REST simulado)
+python3 tools/powerfin_server.py --port 8080
+
+# Terminal 3 — FusionBridge
 cd fusion-bridge
 FUSION_IP=127.0.0.1 FUSION_PORT=3012 ./mvnw quarkus:dev
 
-# Terminal 3 — Powerfin POS
-cd pos
-export PATH=$HOME/.n/bin:$PATH
+# Terminal 4 — Powerfin POS
+cd posexport PATH=$HOME/.n/bin:$PATH
 npm run dev -- --host
 ```
 
@@ -35,53 +37,43 @@ Login: `carlos` / PIN `1234`
 
 ## Lo logrado hoy
 
-### Arquitectura
-- **Sin asignación de dispensadores al turno** — cualquier usuario vende en cualquier surtidor
-- **Granularidad por (dispenser, side, hose)** — dos lados independientes por surtidor
-- **Layout desde PowerFin** — `sides: { A: [...], B: [...] }` en config
-- **El que cobra es el dueño de la venta** — `shift_id` se actualiza al momento del cobro
+### Persistencia y reconciliación de pendingOrders
+- **localStorage:** pendingOrders persiste en `localStorage` (clave `"pendingOrders"`)
+- **Escritura instantánea:** cada add/update/remove guarda a localStorage
+- **Reconciliación cada 30s:** compara local vs PowerFin vía `GET /api/pos/shifts/{id}/dispatches`
+- **Reglas de reconciliación:**
+  - Orden local que no está en servidor → se elimina (cobrada/cancelada en otro dispositivo)
+  - Orden del servidor que no está local → se agrega (otro despachador autorizó)
+  - Ambas → actualiza local con datos autoritativos del servidor
+- **Mock persistente:** `powerfin.mock.ts` ahora guarda `mockOrders` en `localStorage` (`mockServerOrders`)
+- **DispatchOrder** extendido con `side`, `final_amount`, `final_volume`, `invoice_number`, `shift_id`, `authorized_by`
+- **CustomerName:** "Consumidor Final" cuando no hay cliente identificado
 
-### Simulador Fusion (`tools/fusion_simulator.py`)
-- Emula protocolo Fusion completo por TCP
-- Soporta REQ_PUMP_PRESET, ECHO, STATUS, LOCK/CLEAR/UNLOCK
-- Simula ciclo de despacho con progreso (20s)
-- 2 surtidores × 4 mangueras c/u
+### PowerFin Server Simulator (`tools/powerfin_server.py`)
+- Servidor HTTP REST completo emulando PowerFin ERP
+- **Persistencia en archivo JSON** — estado compartido entre todos los dispositivos
+- 14 endpoints (`login`, `config`, `customers`, `vehicles/lookup`, `prices`, `shifts/*`, `dispatches/*`)
+- 3 usuarios: carlos, maria, pedro (todos PIN 1234)
+- CORS habilitado para acceso desde tablets
+- Arquitectura multi-dispositivo real:
+  ```
+  Tablet 1 ─┐
+  Tablet 2 ─┤── powerfin_server.py :8080 ── JSON file
+  Tablet 3 ─┘
+  ```
 
-### FusionBridge (arreglos)
-- `@ApplicationScoped` agregado a: `StationEventBus`, `FusionEventHandler`, `DispenserStatusCache`
-- `DispatchResource.java` creado: endpoints `POST /api/dispatch/authorize` y `/cancel`
-- `FusionTcpClient.sendRaw()` agregado
-- CORS configurado para desarrollo local
-
-### POS — SaleWizard
-- Componente único `SaleWizard.svelte` con todos los pasos en una vista
-- Modo `sale`: pistola → placa → cliente → tipo preset → monto → autorizar
-- Modo `collect`: resumen → forma pago → imprimir → nueva venta
-- Selector de Monto vs Galones vs Tanque Lleno
-- Muestra número de pistola en selector de combustible
-
-### POS — Dashboard
-- Polling configurable desde PowerFin (2000ms en mock)
-- `autoCompleteOrders()` detecta mangueras IDLE con órdenes FUELLING
-- DispenserCard muestra estado "Cobrar $XX.XX" cuando hay orden completada
-- Conectado a FusionBridge real (no mocks)
-- Conversión de formato viejo a nuevo en `bridge-client.ts`
-
-### Documentación creada
-- `docs/SISTEMA_PRUEBAS.md` — guía completa de pruebas
-- `docs/FLUJOS_VENTA_ESCENARIOS.md` — 23 escenarios de venta
-- `tools/README.md` — documentación del simulador
+### Documentación
+- `tools/README.md` actualizado con PowerFin Server Simulator
+- `PROMPT_NEXT_SESSION.md` actualizado a 4 terminales
 
 ## Pendientes para la siguiente sesión
 
 1. **Escenarios restantes** (2 al 23 de FLUJOS_VENTA_ESCENARIOS.md)
-2. **Persistir pendingOrders** en localStorage (se pierden al refrescar)
-3. **PowerFin como fuente de verdad** de órdenes pendientes (para multi-navegador)
-4. **FusionBridge per-hose tracking** (ahora es pump-level, convertimos en POS)
-5. **API real de PowerFin** (quitar mocks, conectar a PowerFin ERP)
-6. **Cierre de turno** con cuadre de caja
-7. **Depósitos a caja fuerte**
-8. **Impresión de tickets** (Fase 5)
+2. **Conectar POS al `powerfin_server.py`** (ahora usa `powerfin.mock.ts`)
+3. **FusionBridge per-hose tracking** (ahora es pump-level, convertimos en POS)
+4. **Cierre de turno** con cuadre de caja
+5. **Depósitos a caja fuerte**
+6. **Impresión de tickets** (Fase 5)
 
 ## Lecciones aprendidas (Svelte)
 

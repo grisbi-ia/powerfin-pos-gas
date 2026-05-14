@@ -17,9 +17,11 @@
 	import { convertToDispenserState } from '$lib/api/bridge-client';
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let reconcileTimer: ReturnType<typeof setInterval> | null = null;
 	let loading = true;
 	let error = '';
 	let pollIntervalMs = 2000;
+	const RECONCILE_INTERVAL_MS = 30_000;
 
 	// ── Auto-complete pending orders when hose goes IDLE ─────
 	function autoCompleteOrders() {
@@ -40,7 +42,24 @@
 		}
 	}
 
+	// ── Reconciliation with PowerFin (every 30s) ────────────
+	async function reconcileWithPowerFin() {
+		try {
+			if (!$shift || !$auth.token) return;
+			const serverOrders = await powerfin.getShiftDispatches($auth.token, $shift.shift_id);
+			const changes = pendingOrders.reconcile(serverOrders);
+			if (changes > 0) {
+				console.log(`[pendingOrders] Reconciled: ${changes} change(s) from PowerFin`);
+			}
+		} catch {
+			// PowerFin unreachable — keep local data, retry next interval
+		}
+	}
+
 	onMount(async () => {
+		// 1. Reload pendingOrders from localStorage (survives page refresh)
+		pendingOrders.reloadFromStorage();
+
 		if (!$configLoaded && $auth.token) {
 			try {
 				const appConfig = await powerfin.fetchConfig($auth.token);
@@ -59,13 +78,25 @@
 			}
 		}
 
+		// 2. Reconcile with PowerFin (authoritative source)
+		await reconcileWithPowerFin();
+
 		await pollDispensers();
 		autoCompleteOrders();
+
+		// 3. Fast polling for dispenser state (every 2s)
 		pollTimer = setInterval(() => { pollDispensers(); autoCompleteOrders(); }, pollIntervalMs);
+
+		// 4. Slow polling for PowerFin reconciliation (every 30s)
+		reconcileTimer = setInterval(reconcileWithPowerFin, RECONCILE_INTERVAL_MS);
+
 		loading = false;
 	});
 
-	onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
+	onDestroy(() => {
+		if (pollTimer) clearInterval(pollTimer);
+		if (reconcileTimer) clearInterval(reconcileTimer);
+	});
 
 	// ── Poll dispenser state and apply to correct side ──────
 	async function pollDispensers() {

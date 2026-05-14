@@ -147,7 +147,16 @@
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
 			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
 			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
-			pendingOrders.addOrder({ orderId: orderResult.order_id, dispenserId, hoseId: hose.hose_id, side, customerName: owner?.name ?? '', plate, presetAmount: presetType === 'MONEY' ? val : (val * unitPrice), finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl, status: 'FUELLING', createdAt: new Date().toISOString() });
+					const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
+			const authorizedBy = $shift?.user_name ?? '';
+			pendingOrders.addOrder({
+				orderId: orderResult.order_id, dispenserId, hoseId: hose.hose_id, side,
+				customerName, plate,
+				presetAmount: presetType === 'MONEY' ? val : (val * unitPrice),
+				finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl,
+				status: 'FUELLING', createdAt: new Date().toISOString(),
+				authorizedBy
+			});
 			step = 'done';
 		} catch { error = 'Error al autorizar'; step = 'presetValue'; }
 		finally { loading = false; }

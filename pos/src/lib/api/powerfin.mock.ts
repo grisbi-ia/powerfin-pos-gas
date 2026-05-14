@@ -2,7 +2,8 @@ import type {
 	User, LoginRequest, LoginResponse, AppConfig, Customer,
 	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
 	VehicleResult, CustomerFormData, RegisterCustomerResponse,
-	CollectDispatchRequest, CollectDispatchResponse
+	CollectDispatchRequest, CollectDispatchResponse,
+	DispatchOrder
 } from './types';
 
 // ── Mock data ────────────────────────────────────────────────
@@ -160,9 +161,38 @@ function delay(ms = 300): Promise<void> {
 
 // ── Mock implementation ──────────────────────────────────────
 
+const MOCK_SERVER_ORDERS_KEY = 'mockServerOrders';
+
 let mockToken = '';
 let mockShift: Shift | null = null;
 let shiftCounter = 45;
+let orderSeq = 0;
+
+// ── Mock server persistence (simula la base de datos de PowerFin) ──
+function loadMockOrders(): DispatchOrder[] {
+	try {
+		if (typeof localStorage === 'undefined') return [];
+		const stored = localStorage.getItem(MOCK_SERVER_ORDERS_KEY);
+		if (!stored) return [];
+		return JSON.parse(stored) as DispatchOrder[];
+	} catch {
+		return [];
+	}
+}
+
+function saveMockOrders() {
+	try {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem(MOCK_SERVER_ORDERS_KEY, JSON.stringify(mockOrders));
+	} catch { /* quota exceeded */ }
+}
+
+const mockOrders: DispatchOrder[] = loadMockOrders();
+
+// Restore sequence counter to avoid duplicate order IDs after refresh
+if (mockOrders.length > 0) {
+	orderSeq = mockOrders.length;
+}
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
 	await delay(500);
@@ -259,30 +289,71 @@ export async function createDispatch(
 	_token: string, _data: unknown
 ): Promise<{ order_id: string; status: string }> {
 	await delay(300);
-	const seq = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+	const data = _data as Record<string, unknown>;
+	orderSeq++;
+	const seq = String(orderSeq).padStart(3, '0');
 	const date = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-	return {
-		order_id: `OV-${date}-${seq}`,
-		status: 'PENDING'
+	const orderId = `OV-${date}-${seq}`;
+	const order: DispatchOrder = {
+		order_id: orderId,
+		dispenser_id: data.dispenser_id as number,
+		hose_id: data.hose_id as number,
+		side: (data.side as 'A' | 'B') ?? 'A',
+		grade: 'SUPER',
+		preset_type: (data.preset_type as 'MONEY' | 'VOLUME') ?? 'MONEY',
+		preset_value: data.preset_value as string,
+		unit_price: (data as Record<string, number>).unit_price ?? 1.500,
+		payment_method: (data.payment_method as string) ?? 'EFECTIVO',
+		customer_id: data.customer_id as string | undefined,
+		customer_name: data.customer_name as string | undefined,
+		plate: data.plate as string | undefined,
+		status: 'AUTHORIZED',
+		created_at: new Date().toISOString(),
+		shift_id: mockShift?.shift_id ?? 0,
+		authorized_by: mockShift?.user_name
 	};
+	mockOrders.push(order);
+	saveMockOrders();
+	return { order_id: orderId, status: 'PENDING' };
 }
 
 export async function completeDispatch(
 	_token: string, _orderId: string, _saleData: unknown
 ): Promise<void> {
 	await delay(200);
+	const sale = _saleData as Record<string, unknown>;
+	const order = mockOrders.find(o => o.order_id === _orderId);
+	if (order) {
+		order.status = 'COMPLETED';
+		order.final_amount = sale.amount as number;
+		order.final_volume = sale.volume as string;
+		order.invoice_number = sale.invoice_number as string | undefined;
+		saveMockOrders();
+	}
 }
 
 export async function cancelDispatchApi(
 	_token: string, _orderId: string
 ): Promise<void> {
 	await delay(200);
+	const order = mockOrders.find(o => o.order_id === _orderId);
+	if (order) {
+		order.status = 'CANCELLED';
+		saveMockOrders();
+	}
 }
 
 export async function collectDispatch(
 	_token: string, orderId: string, _data: CollectDispatchRequest
 ): Promise<CollectDispatchResponse> {
 	await delay(300);
+	// Mark order as collected in mock storage
+	const order = mockOrders.find(o => o.order_id === orderId);
+	if (order) {
+		order.status = 'COLLECTED';
+		order.shift_id = _data.collected_by_shift_id;
+		saveMockOrders();
+	}
 	return {
 		order_id: orderId,
 		status: 'COLLECTED',
@@ -319,6 +390,12 @@ export async function getCustomerById(
 ): Promise<Customer | null> {
 	await delay(300);
 	return MOCK_CUSTOMERS.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
+}
+
+export async function getShiftDispatches(_token: string, _shiftId: number): Promise<DispatchOrder[]> {
+	await delay(200);
+	// Return all mock orders created during this session (in-memory)
+	return [...mockOrders];
 }
 
 export async function registerCustomer(

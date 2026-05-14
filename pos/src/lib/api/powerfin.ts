@@ -117,3 +117,13 @@ export async function cancelDispatch(
 	});
 	if (!res.ok) throw new Error('Error cancelando despacho');
 }
+
+export async function getShiftDispatches(
+	token: string, shiftId: number
+): Promise<import('./types').DispatchOrder[]> {
+	const res = await fetch(`${BASE_URL}/api/pos/shifts/${shiftId}/dispatches`, {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error obteniendo despachos del turno');
+	return res.json();
+}
