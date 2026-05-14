@@ -227,7 +227,13 @@ class PowerFinHandler(BaseHTTPRequestHandler):
         if length == 0:
             return {}
         raw = self.rfile.read(length)
-        return json.loads(raw)
+        content_type = self.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return {}
+        return {}
 
     def _path_parts(self):
         parsed = urlparse(self.path)
