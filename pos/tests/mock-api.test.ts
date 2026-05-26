@@ -19,9 +19,9 @@ describe('PowerFin Mock API', () => {
 	it('fetchConfig returns dispenser configuration with sides', async () => {
 		const { fetchConfig } = await import('$lib/api/powerfin.mock');
 		const config = await fetchConfig('mock-token');
-		expect(config.dispensers).toHaveLength(2);
+		expect(config.dispensers).toHaveLength(4);
 		expect(config.dispensers[0].sides.A[0].grade_id).toBe('SUPER');
-		expect(config.dispensers[0].sides.B[0].grade_id).toBe('DIESEL');
+		expect(config.dispensers[0].sides.B[0].grade_id).toBe('SUPER');
 	});
 
 	it('searchCustomers finds by name', async () => {
@@ -141,17 +141,17 @@ describe('PowerFin Mock API', () => {
 });
 
 describe('Bridge Mock API', () => {
-	it('getDispensers returns 2 dispensers with sides', async () => {
+	it('getDispensers returns 4 dispensers with sides', async () => {
 		const { getDispensers } = await import('$lib/api/bridge.mock');
 		const result = await getDispensers();
 		expect(result.fusionConnected).toBe(true);
-		expect(result.dispensers).toHaveLength(2);
-		// Check side/hose structure
+		expect(result.dispensers).toHaveLength(4);
+		// Check side/hose structure — Surtidor 1 has 4 hoses per side
 		const d1 = result.dispensers[0];
-		expect(d1.sides.A).toHaveLength(2);
-		expect(d1.sides.B).toHaveLength(2);
+		expect(d1.sides.A).toHaveLength(4);
+		expect(d1.sides.B).toHaveLength(4);
 		expect(d1.sides.A[0].gradeId).toBe('SUPER');
-		expect(d1.sides.B[0].gradeId).toBe('DIESEL');
+		expect(d1.sides.B[0].gradeId).toBe('SUPER');
 	});
 
 	it('getDispenser returns single dispenser with hose states', async () => {

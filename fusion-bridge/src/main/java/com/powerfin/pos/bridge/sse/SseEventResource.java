@@ -2,11 +2,14 @@ package com.powerfin.pos.bridge.sse;
 
 import com.powerfin.pos.bridge.fusion.FusionTcpClient;
 
-import io.smallrye.mutiny.Multi;
+import io.quarkus.logging.Log;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.sse.Sse;
+import jakarta.ws.rs.sse.SseEventSink;
 
 @Path("/api/events")
 public class SseEventResource {
@@ -21,16 +24,29 @@ public class SseEventResource {
 
     @GET
     @Produces(MediaType.SERVER_SENT_EVENTS)
-    public Multi<String> stream() {
-        return Multi.createBy().merging()
-            .streams(
-                Multi.createFrom().item(buildInitialEvent()),
-                eventBus.getEventStream()
-            );
-    }
+    public void stream(@Context SseEventSink sink, @Context Sse sse) {
+        if (sink == null || sse == null) return;
 
-    private String buildInitialEvent() {
+        // Send initial connection status
         boolean connected = tcpClient.isConnected();
-        return "event:INIT\ndata:{\"fusionConnected\":" + connected + "}\n\n";
+        sink.send(sse.newEventBuilder()
+            .name("INIT")
+            .data("{\"fusionConnected\":" + connected + "}")
+            .build());
+
+        // Subscribe to event bus and bridge to SSE sink
+        eventBus.getEventStream().subscribe().with(
+            event -> {
+                if (!sink.isClosed()) {
+                    sink.send(sse.newEventBuilder()
+                        .name(event.eventType())
+                        .data(event.jsonData())
+                        .build());
+                }
+            },
+            failure -> {
+                Log.error("SSE stream error", failure);
+            }
+        );
     }
 }

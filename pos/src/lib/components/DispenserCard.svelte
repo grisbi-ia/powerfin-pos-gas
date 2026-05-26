@@ -104,7 +104,7 @@
 		label: string;
 	}
 
-	$: sides = (['A', 'B'] as const).map(s => {
+	$: sides = dispenser && (['A', 'B'] as const).map(s => {
 		const info = getSideInfo($orderByHose, s);
 		const color = getStatusColor(info.status, info.isPendingCollection);
 		const label = getStatusLabel(

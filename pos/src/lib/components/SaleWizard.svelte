@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { config } from '$lib/stores/config';
 	import { shift } from '$lib/stores/shift';
 	import { pendingOrders } from '$lib/stores/pendingOrders';
@@ -25,7 +25,7 @@
 
 	let step: Step = 'hose';
 	let selectedHose: HoseConfig | null = null;
-	let plate = '';
+	let plate = 'ABC1234';
 	let vehicleResult: VehicleResult | null = null;
 	let confirmedOwner: VehicleResult['owner'] = null;
 	let billingCustomer: Customer | null = null;
@@ -44,6 +44,11 @@
 	let confirmed = false;
 	let printing = false;
 	let printPolicy: 'ALWAYS' | 'ASK' | 'NEVER' = 'ASK';
+	let autoReturnTimer: ReturnType<typeof setTimeout> | null = null;
+
+	onDestroy(() => {
+		if (autoReturnTimer) clearTimeout(autoReturnTimer);
+	});
 
 	// Form fields
 	let incompleteEmail = '';
@@ -146,7 +151,7 @@
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
 			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
-			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
+			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: dispenserId, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 					const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
 			const authorizedBy = $shift?.user_name ?? '';
 			pendingOrders.addOrder({
@@ -158,6 +163,10 @@
 				authorizedBy
 			});
 			step = 'done';
+			// Auto-redirect to dashboard after 1.5s so user sees live state transitions
+			autoReturnTimer = setTimeout(() => {
+				dispatch('done');
+			}, 1500);
 		} catch { error = 'Error al autorizar'; step = 'presetValue'; }
 		finally { loading = false; }
 	}
@@ -389,8 +398,8 @@
 			{#if step === 'done'}
 				<div class="text-center py-8">
 					<div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><span class="text-3xl">✅</span></div>
-					<h3 class="text-lg font-semibold text-gray-800 mb-1">Despacho Autorizado</h3>
-					<p class="text-sm text-gray-500 mb-4">El cliente puede cargar combustible.<br />Puede volver al inicio y atender otros surtidores.</p>
+			<h3 class="text-lg font-semibold text-gray-800 mb-1">Despacho Autorizado</h3>
+					<p class="text-sm text-gray-500 mb-4">El cliente puede cargar combustible.<br />Redirigiendo al inicio en 1.5s...</p>
 					<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold" on:click={handleBackToDashboard}>Volver al Inicio</button>
 				</div>
 			{/if}

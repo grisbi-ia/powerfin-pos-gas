@@ -34,6 +34,7 @@ public class DispenserStatusCache {
         private int hoseCount;
         private double presetAmount;
         private String grade;
+        private int activeHose;
         private boolean payAlarm;
         private boolean connected;
 
@@ -66,6 +67,9 @@ public class DispenserStatusCache {
 
         public String getGrade() { return grade; }
         public void setGrade(String grade) { this.grade = grade; }
+
+        public int getActiveHose() { return activeHose; }
+        public void setActiveHose(int activeHose) { this.activeHose = activeHose; }
 
         public boolean isPayAlarm() { return payAlarm; }
         public void setPayAlarm(boolean payAlarm) { this.payAlarm = payAlarm; }

@@ -11,25 +11,23 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class StationEventBus {
 
-    private final BroadcastProcessor<String> processor = BroadcastProcessor.create();
+    /** Simple pair holding a named SSE event: eventType + JSON payload. */
+    public record SseEvent(String eventType, String jsonData) {}
+
+    private final BroadcastProcessor<SseEvent> processor = BroadcastProcessor.create();
     private final CopyOnWriteArrayList<Runnable> connectionListeners = new CopyOnWriteArrayList<>();
 
     public void broadcast(String eventType, Map<String, Object> data) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("event:").append(eventType).append("\n");
-        sb.append("data:");
-        appendJson(sb, data);
-        sb.append("\n\n");
-        String sseMessage = sb.toString();
-        Log.debug(String.format("SSE broadcast: %s", eventType));
-        processor.onNext(sseMessage);
+        String json = toJson(data);
+        Log.debug(String.format("SSE broadcast: %s → %s", eventType, json));
+        processor.onNext(new SseEvent(eventType, json));
     }
 
     public void broadcastConnected(boolean connected) {
         broadcast("FUSION_STATUS", Map.of("connected", connected));
     }
 
-    public Multi<String> getEventStream() {
+    public Multi<SseEvent> getEventStream() {
         return processor;
     }
 
@@ -37,7 +35,8 @@ public class StationEventBus {
         connectionListeners.add(listener);
     }
 
-    private void appendJson(StringBuilder sb, Map<String, Object> data) {
+    private String toJson(Map<String, Object> data) {
+        StringBuilder sb = new StringBuilder();
         sb.append("{");
         boolean first = true;
         for (Map.Entry<String, Object> entry : data.entrySet()) {
@@ -54,5 +53,6 @@ public class StationEventBus {
             }
         }
         sb.append("}");
+        return sb.toString();
     }
 }

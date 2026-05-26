@@ -56,6 +56,13 @@ public class FusionEventHandler {
         String hoseCount = msg.params.getOrDefault("HN", "0");
         String presetAmount = msg.params.getOrDefault("PR", "0.00");
         String grade = msg.params.getOrDefault("GR", "");
+        String activeHoseStr = msg.params.getOrDefault("HO", "");
+        // HO may be "3@1.150" — extract just the hose number
+        int activeHose = 0;
+        if (!activeHoseStr.isEmpty()) {
+            String[] parts = activeHoseStr.split("@");
+            activeHose = parseInt(parts[0], 0);
+        }
 
         DispenserStatusCache.DispenserStatus dispenser = new DispenserStatusCache.DispenserStatus();
         dispenser.setDispenserId(pumpNumber);
@@ -64,6 +71,7 @@ public class FusionEventHandler {
         dispenser.setHoseCount(parseInt(hoseCount, 0));
         dispenser.setPresetAmount(parseDouble(presetAmount, 0.0));
         dispenser.setGrade(grade);
+        dispenser.setActiveHose(activeHose);
         dispenser.setConnected(true);
 
         statusCache.update(dispenser);
@@ -72,11 +80,12 @@ public class FusionEventHandler {
             "dispenserId", pumpNumber,
             "status", status,
             "subStatus", subStatus,
-            "presetAmount", parseDouble(presetAmount, 0.0)
+            "presetAmount", parseDouble(presetAmount, 0.0),
+            "activeHose", activeHose
         ));
 
-        Log.info(String.format("Dispenser %d status: %s (sub: %s)",
-            pumpNumber, status, subStatus));
+        Log.info(String.format("Dispenser %d status: %s (sub: %s, hose: %d)",
+            pumpNumber, status, subStatus, activeHose));
     }
 
     private void handleNewTransaction(FusionMessage msg) {

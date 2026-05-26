@@ -3,19 +3,15 @@
  * Converts the pump-level format from FusionBridge to the new hose-level
  * DispenserState format using the dispenser config from PowerFin.
  *
- * To use mocks instead, import from '$lib/api/bridge.mock'.
+ * When VITE_USE_MOCKS=true, uses shared-state mock with per-hose granularity.
  */
+
+import { USE_MOCKS_BRIDGE } from './env';
 import type { AuthorizeData, DispenserState, HoseState, AppConfig } from './types';
 import * as realBridge from './bridge';
+import * as mockBridge from './bridge.mock';
 
-// Derive bridge URL from page hostname so tablets connect to the server, not localhost
-function getBridgeUrl(): string {
-	if (typeof window !== 'undefined') return `http://${window.location.hostname}:8090`;
-	return 'http://localhost:8090';
-}
-const BRIDGE_URL = getBridgeUrl();
-
-// ── Format conversion ───────────────────────────────────────
+// ── Format conversion (for real FusionBridge: pump-level → hose-level) ──
 
 interface FusionBridgeDispenser {
 	dispenserId: number;
@@ -24,6 +20,7 @@ interface FusionBridgeDispenser {
 	hoseCount: number;
 	presetAmount: number;
 	grade?: string;
+	activeHose?: number;
 	connected: boolean;
 }
 
@@ -34,8 +31,7 @@ interface FusionBridgeResponse {
 
 /**
  * Converts FusionBridge's pump-level format to the new DispenserState
- * with sides using the config layout. Falls back to mock config if
- * real config is not loaded.
+ * with sides using the config layout.
  */
 export function convertToDispenserState(
 	fbResponse: FusionBridgeResponse,
@@ -46,12 +42,12 @@ export function convertToDispenserState(
 	const dispensers: DispenserState[] = fbResponse.dispensers.map(fb => {
 		const cfg = configDispensers.find(c => c.dispenser_id === fb.dispenserId);
 		const name = cfg?.name ?? `Surtidor ${fb.dispenserId}`;
+		const activeFusionHose = fb.activeHose ?? 0;
 
-		// Build hose states from config sides.
-		// Apply pump status only to side A (FusionBridge doesn't track per-hose yet).
 		const buildSide = (sideKey: 'A' | 'B', hoses: Array<{ hose_id: number; fusion_hose_id: number; grade_id: string; grade_name: string }>): HoseState[] => {
-			return hoses.map((h, idx) => {
-				const isActive = sideKey === 'A' && idx === 0;
+			return hoses.map((h) => {
+				// Active only if this hose's fusion_hose_id matches the activeFusionHose reported by Fusion
+				const isActive = activeFusionHose > 0 && h.fusion_hose_id === activeFusionHose;
 				return {
 					hoseId: h.hose_id,
 					dispenserId: fb.dispenserId,
@@ -86,37 +82,43 @@ export function convertToDispenserState(
 	return { dispensers, fusionConnected: fbResponse.fusionConnected };
 }
 
-// ── Public API (same signatures as bridge.mock) ──────────────
+// ── Public API (mock-aware: preserves per-hose state when USE_MOCKS) ──
 
-export async function getDispensers(): Promise<{ dispensers: DispenserState[]; fusionConnected: boolean }> {
+export async function getDispensers(config?: AppConfig | null): Promise<{ dispensers: DispenserState[]; fusionConnected: boolean }> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.getDispensers();
+
 	const fbResponse = await realBridge.getDispensersRaw();
-	// The config is loaded by the dashboard; we pass null and the dashboard
-	// will call convertToDispenserState from the page when config is available
-	const converted = convertToDispenserState(fbResponse, null);
+	const converted = convertToDispenserState(fbResponse, config ?? null);
 	return converted;
 }
 
-export async function getDispenser(id: number): Promise<DispenserState> {
+export async function getDispenser(id: number, config?: AppConfig | null): Promise<DispenserState> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.getDispenser(id);
+
 	const fb = await realBridge.getDispenserRaw(id);
 	const converted = convertToDispenserState(
 		{ dispensers: [fb], fusionConnected: true },
-		null
+		config ?? null
 	);
 	return converted.dispensers[0];
 }
 
 export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: string }> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.authorizeDispatch(data);
 	return realBridge.authorizeDispatch(data);
 }
 
 export async function cancelDispenser(dispenserId: number, _hoseId: number): Promise<boolean> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.cancelDispenser(dispenserId, _hoseId);
 	return realBridge.cancelDispenser(dispenserId);
 }
 
 export async function getPrintPolicy(): Promise<{ policy: string }> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.getPrintPolicy();
 	return realBridge.getPrintPolicy();
 }
 
 export async function printReceipt(data: unknown): Promise<{ status: string }> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.printReceipt(data);
 	return realBridge.printReceipt(data);
 }

@@ -2,6 +2,7 @@ package com.powerfin.pos.bridge.dispatch;
 
 import java.util.Map;
 
+import com.powerfin.pos.bridge.dispenser.DispenserStatusCache;
 import com.powerfin.pos.bridge.fusion.FusionMessageBuilder;
 import com.powerfin.pos.bridge.fusion.FusionTcpClient;
 
@@ -21,6 +22,9 @@ public class DispatchResource {
 
     @Inject
     FusionTcpClient tcpClient;
+
+    @Inject
+    DispenserStatusCache statusCache;
 
     @POST
     @Path("/authorize")
@@ -51,6 +55,14 @@ public class DispatchResource {
 
             boolean sent = tcpClient.sendRaw(message);
             if (sent) {
+                // Track active hose immediately so the frontend knows which hose
+                // to paint the status on, even before the first status change arrives
+                DispenserStatusCache.DispenserStatus existing = statusCache.get(dispenserId);
+                if (existing != null) {
+                    existing.setActiveHose(hoseId);
+                    statusCache.update(existing);
+                }
+
                 Log.infof("Preset sent: pump=%d hose=%d order=%s value=%s",
                     dispenserId, hoseId, orderId, presetValue);
                 return Response.ok(Map.of(

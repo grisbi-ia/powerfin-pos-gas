@@ -69,11 +69,15 @@ MOCK_CONFIG = {
             "sides": {
                 "A": [
                     {"hose_id": 1, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 2, "fusion_hose_id": 2, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"}
-                ],
-                "B": [
+                    {"hose_id": 2, "fusion_hose_id": 2, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
                     {"hose_id": 3, "fusion_hose_id": 3, "grade_id": "DIESEL", "grade_name": "Diesel"},
                     {"hose_id": 4, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
+                ],
+                "B": [
+                    {"hose_id": 5, "fusion_hose_id": 5, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
+                    {"hose_id": 6, "fusion_hose_id": 6, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
+                    {"hose_id": 7, "fusion_hose_id": 7, "grade_id": "DIESEL", "grade_name": "Diesel"},
+                    {"hose_id": 8, "fusion_hose_id": 8, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
                 ]
             }
         },
@@ -83,12 +87,46 @@ MOCK_CONFIG = {
             "name": "Surtidor 2",
             "sides": {
                 "A": [
-                    {"hose_id": 5, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 6, "fusion_hose_id": 2, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"}
+                    {"hose_id": 9, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
+                    {"hose_id": 10, "fusion_hose_id": 2, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
+                    {"hose_id": 11, "fusion_hose_id": 3, "grade_id": "DIESEL", "grade_name": "Diesel"},
+                    {"hose_id": 12, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
                 ],
                 "B": [
-                    {"hose_id": 7, "fusion_hose_id": 3, "grade_id": "DIESEL", "grade_name": "Diesel"},
-                    {"hose_id": 8, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
+                    {"hose_id": 13, "fusion_hose_id": 5, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
+                    {"hose_id": 14, "fusion_hose_id": 6, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
+                    {"hose_id": 15, "fusion_hose_id": 7, "grade_id": "DIESEL", "grade_name": "Diesel"},
+                    {"hose_id": 16, "fusion_hose_id": 8, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
+                ]
+            }
+        },
+        {
+            "dispenser_id": 3,
+            "fusion_pump_id": 3,
+            "name": "Surtidor 3",
+            "sides": {
+                "A": [
+                    {"hose_id": 17, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
+                    {"hose_id": 18, "fusion_hose_id": 2, "grade_id": "DIESEL", "grade_name": "Diesel"}
+                ],
+                "B": [
+                    {"hose_id": 19, "fusion_hose_id": 3, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
+                    {"hose_id": 20, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
+                ]
+            }
+        },
+        {
+            "dispenser_id": 4,
+            "fusion_pump_id": 4,
+            "name": "Surtidor 4",
+            "sides": {
+                "A": [
+                    {"hose_id": 21, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
+                    {"hose_id": 22, "fusion_hose_id": 2, "grade_id": "DIESEL", "grade_name": "Diesel"}
+                ],
+                "B": [
+                    {"hose_id": 23, "fusion_hose_id": 3, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
+                    {"hose_id": 24, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
                 ]
             }
         }
@@ -251,6 +289,17 @@ class PowerFinHandler(BaseHTTPRequestHandler):
         # /api/pos/config
         if parts == ["", "api", "pos", "config"]:
             return self._json_reply(MOCK_CONFIG)
+
+        # /api/pos/vehicles?plate=ABC1234
+        if parts == ["", "api", "pos", "vehicles"]:
+            plate = qs.get("plate", [""])[0].upper().replace(" ", "").replace("-", "")
+            vehicle = MOCK_VEHICLES.get(plate)
+            if vehicle:
+                return self._json_reply(vehicle)
+            return self._json_reply({
+                "plate": plate, "vehicle_found": False, "incomplete_fields": [],
+                "owner": None, "price_list": "STANDARD", "price_list_name": "Precio Normal"
+            })
 
         # /api/pos/customers?q=...
         if parts == ["", "api", "pos", "customers"]:

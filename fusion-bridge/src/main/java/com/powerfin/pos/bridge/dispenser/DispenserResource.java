@@ -36,6 +36,7 @@ public class DispenserResource {
                 map.put("hoseCount", d.getHoseCount());
                 map.put("presetAmount", d.getPresetAmount());
                 map.put("grade", d.getGrade());
+                map.put("activeHose", d.getActiveHose());
                 map.put("connected", d.isConnected());
                 return map;
             })
@@ -63,6 +64,7 @@ public class DispenserResource {
             "hoseCount", d.getHoseCount(),
             "presetAmount", d.getPresetAmount(),
             "grade", d.getGrade(),
+            "activeHose", d.getActiveHose(),
             "connected", d.isConnected()
         )).build();
     }

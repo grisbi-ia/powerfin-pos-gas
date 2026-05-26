@@ -126,11 +126,11 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				unit_price: 1.500
 			});
 
-			// Authorize Side B, Hose 3 (different hose, same dispenser)
+			// Authorize Side B, Hose 5 (now Side B has hoses 5-8)
 			const resultB = await authorizeDispatch({
 				order_id: 'OV-B-001',
 				dispenser_id: 1,
-				hose_id: 3,
+				hose_id: 5,
 				side: 'B',
 				preset_type: 'MONEY',
 				preset_value: '20.00',

@@ -1,18 +1,21 @@
+import * as mock from './powerfin.mock';
+import { USE_MOCKS_POWERFIN } from './env';
 import type {
 	User, LoginRequest, LoginResponse, AppConfig, Customer,
 	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
 	CreateDispatchRequest, CreateDispatchResponse, SaleCompletedData
 } from './types';
 
-// Derive PowerFin URL from page hostname so tablets connect to the server, not localhost
+// Dev: Vite proxies /api/pos/* → localhost:8080
+// Prod: Nginx routes to PowerFin ERP at root (same domain, no CORS)
 function powerfinUrl(path: string): string {
-	const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-	return `http://${host}:8080${path}`;
+	return path;
 }
 
 // ── Auth ─────────────────────────────────────────────────────
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
+	if (USE_MOCKS_POWERFIN) return mock.login(data);
 	const res = await fetch(powerfinUrl('/api/pos/auth/login'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -25,6 +28,7 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 // ── Config ───────────────────────────────────────────────────
 
 export async function fetchConfig(token: string): Promise<AppConfig> {
+	if (USE_MOCKS_POWERFIN) return mock.fetchConfig(token);
 	const res = await fetch(powerfinUrl('/api/pos/config'), {
 		headers: { Authorization: `Bearer ${token}` }
 	});
@@ -35,6 +39,7 @@ export async function fetchConfig(token: string): Promise<AppConfig> {
 // ── Customers ────────────────────────────────────────────────
 
 export async function searchCustomers(token: string, query: string): Promise<Customer[]> {
+	if (USE_MOCKS_POWERFIN) return mock.searchCustomers(token, query);
 	const res = await fetch(powerfinUrl(`/api/pos/customers?q=${encodeURIComponent(query)}`), {
 		headers: { Authorization: `Bearer ${token}` }
 	});
@@ -46,6 +51,7 @@ export async function searchCustomers(token: string, query: string): Promise<Cus
 export async function getCustomerPrice(
 	token: string, customerId: string, gradeId: string
 ): Promise<PriceInfo> {
+	if (USE_MOCKS_POWERFIN) return mock.getCustomerPrice(token, customerId, gradeId);
 	const res = await fetch(
 		powerfinUrl(`/api/pos/prices?customerId=${customerId}&gradeId=${gradeId}`),
 		{ headers: { Authorization: `Bearer ${token}` } }
@@ -57,6 +63,7 @@ export async function getCustomerPrice(
 // ── Shifts ───────────────────────────────────────────────────
 
 export async function openShift(token: string, data: OpenShiftRequest): Promise<Shift> {
+	if (USE_MOCKS_POWERFIN) return mock.openShift(token, data);
 	const res = await fetch(powerfinUrl('/api/pos/shifts/open'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -67,6 +74,7 @@ export async function openShift(token: string, data: OpenShiftRequest): Promise<
 }
 
 export async function getCurrentShift(token: string): Promise<Shift | null> {
+	if (USE_MOCKS_POWERFIN) return mock.getCurrentShift(token);
 	const res = await fetch(powerfinUrl('/api/pos/shifts/current'), {
 		headers: { Authorization: `Bearer ${token}` }
 	});
@@ -78,6 +86,7 @@ export async function getCurrentShift(token: string): Promise<Shift | null> {
 export async function closeShift(
 	token: string, shiftId: number, data: { closing_cash: number; notes: string }
 ): Promise<CloseShiftResponse> {
+	if (USE_MOCKS_POWERFIN) return mock.closeShift(token, shiftId, data);
 	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/close`), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -92,6 +101,7 @@ export async function closeShift(
 export async function createDispatch(
 	token: string, data: CreateDispatchRequest
 ): Promise<CreateDispatchResponse> {
+	if (USE_MOCKS_POWERFIN) return mock.createDispatch(token, data);
 	const res = await fetch(powerfinUrl('/api/pos/dispatches'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -104,6 +114,7 @@ export async function createDispatch(
 export async function completeDispatch(
 	token: string, orderId: string, saleData: SaleCompletedData
 ): Promise<void> {
+	if (USE_MOCKS_POWERFIN) return mock.completeDispatch(token, orderId, saleData);
 	const res = await fetch(powerfinUrl(`/api/pos/dispatches/${orderId}/complete`), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -115,6 +126,7 @@ export async function completeDispatch(
 export async function cancelDispatch(
 	token: string, orderId: string
 ): Promise<void> {
+	if (USE_MOCKS_POWERFIN) return mock.cancelDispatchApi(token, orderId);
 	const res = await fetch(powerfinUrl(`/api/pos/dispatches/${orderId}/cancel`), {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${token}` }
@@ -125,6 +137,7 @@ export async function cancelDispatch(
 export async function getShiftDispatches(
 	token: string, shiftId: number
 ): Promise<import('./types').DispatchOrder[]> {
+	if (USE_MOCKS_POWERFIN) return mock.getShiftDispatches(token, shiftId);
 	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/dispatches`), {
 		headers: { Authorization: `Bearer ${token}` }
 	});
@@ -137,10 +150,9 @@ export async function getShiftDispatches(
 export async function lookupVehicle(
 	token: string, plate: string
 ): Promise<import('./types').VehicleResult> {
-	const res = await fetch(powerfinUrl('/api/pos/vehicles/lookup'), {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-		body: JSON.stringify({ plate })
+	if (USE_MOCKS_POWERFIN) return mock.lookupVehicle(token, plate);
+	const res = await fetch(powerfinUrl(`/api/pos/vehicles?plate=${encodeURIComponent(plate)}`), {
+		headers: { Authorization: `Bearer ${token}` }
 	});
 	if (!res.ok) throw new Error('Error buscando vehículo');
 	return res.json();
@@ -154,6 +166,7 @@ export async function getCustomerById(
 	idNumber: string,
 	_updateBilling = false
 ): Promise<import('./types').Customer | null> {
+	if (USE_MOCKS_POWERFIN) return mock.getCustomerById(token, idType, idNumber, _updateBilling);
 	const results = await searchCustomers(token, idNumber);
 	return results.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
 }
@@ -164,6 +177,7 @@ export async function registerCustomer(
 	token: string,
 	data: import('./types').CustomerFormData
 ): Promise<import('./types').RegisterCustomerResponse> {
+	if (USE_MOCKS_POWERFIN) return mock.registerCustomer(token, data);
 	const res = await fetch(powerfinUrl('/api/pos/customers'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -180,6 +194,7 @@ export async function collectDispatch(
 	orderId: string,
 	data: import('./types').CollectDispatchRequest
 ): Promise<import('./types').CollectDispatchResponse> {
+	if (USE_MOCKS_POWERFIN) return mock.collectDispatch(token, orderId, data);
 	const res = await fetch(powerfinUrl(`/api/pos/dispatches/${orderId}/collect`), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

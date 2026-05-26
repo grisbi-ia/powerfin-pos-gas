@@ -14,14 +14,25 @@
 	// Real bridge for end-to-end testing
 	import * as powerfin from '$lib/api/powerfin';
 	import * as realBridge from '$lib/api/bridge';
-	import { convertToDispenserState } from '$lib/api/bridge-client';
+	import { getDispensers as getDispensersState } from '$lib/api/bridge-client';
+
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let reconcileTimer: ReturnType<typeof setInterval> | null = null;
+	let sseConnection: ReturnType<typeof realBridge.connectToEvents> | null = null;
+	let ssePollDebounce: ReturnType<typeof setTimeout> | null = null;
 	let loading = true;
 	let error = '';
 	let pollIntervalMs = 2000;
 	const RECONCILE_INTERVAL_MS = 30_000;
+
+	// Debounced poll trigger for real-time SSE events (avoids polling flood)
+	function triggerSsePoll() {
+		if (ssePollDebounce) clearTimeout(ssePollDebounce);
+		ssePollDebounce = setTimeout(() => {
+			pollDispensers();
+		}, 150);
+	}
 
 	// ── Auto-complete pending orders when hose goes IDLE ─────
 	function autoCompleteOrders() {
@@ -82,13 +93,41 @@
 		await reconcileWithPowerFin();
 
 		await pollDispensers();
-		autoCompleteOrders();
 
 		// 3. Fast polling for dispenser state (every 2s)
-		pollTimer = setInterval(() => { pollDispensers(); autoCompleteOrders(); }, pollIntervalMs);
+		pollTimer = setInterval(() => { pollDispensers(); }, pollIntervalMs);
 
 		// 4. Slow polling for PowerFin reconciliation (every 30s)
 		reconcileTimer = setInterval(reconcileWithPowerFin, RECONCILE_INTERVAL_MS);
+
+		// 5. Real-time SSE events for instant state updates
+		// FusionBridge sends: PUMP_STATUS_CHANGE, DELIVERY_PROGRESS, NEW_TRANSACTION,
+		// TRANSACTION_LOCK, SALE_CLEARED, FUSION_STATUS
+		console.log('[SSE] Connecting to FusionBridge events...');
+		sseConnection = realBridge.connectToEvents(
+			(eventType, data) => {
+				switch (eventType) {
+					case 'PUMP_STATUS_CHANGE':
+					case 'DELIVERY_PROGRESS':
+						// Pump-level state changed → trigger debounced poll
+						triggerSsePoll();
+						break;
+					case 'NEW_TRANSACTION':
+						// Sale completed → refresh state and auto-complete orders
+						triggerSsePoll();
+						break;
+					case 'TRANSACTION_LOCK':
+					case 'SALE_CLEARED':
+						// Payment events → refresh state
+						triggerSsePoll();
+						break;
+					case 'FUSION_STATUS':
+						dispensers.setFusionConnected((data as Record<string,unknown>).connected === true);
+						break;
+				}
+			},
+			(e) => { console.error('[SSE] Connection error:', e); }
+		);
 
 		loading = false;
 	});
@@ -96,54 +135,23 @@
 	onDestroy(() => {
 		if (pollTimer) clearInterval(pollTimer);
 		if (reconcileTimer) clearInterval(reconcileTimer);
+		if (ssePollDebounce) clearTimeout(ssePollDebounce);
+		if (sseConnection && 'close' in sseConnection) {
+			(sseConnection as { close(): void }).close();
+		}
 	});
 
-	// ── Poll dispenser state and apply to correct side ──────
+	// ── Poll dispenser state (hose-level from mock or FusionBridge) ──
 	async function pollDispensers() {
 		try {
-			const result = await realBridge.getDispensersRaw();
-			const converted = convertToDispenserState(result, $config);
-			const orders = $orderByHose;
-			for (const d of converted.dispensers) {
-				// Find any pending order (FUELLING or just created) for this dispenser
-				const anyOrder = [...orders.values()].find(
-					o => o.dispenserId === d.dispenserId &&
-						(o.status === 'FUELLING' || o.status === 'COMPLETED')
-				);
-
-				if (anyOrder && d.sides.A.length > 0) {
-					const targetSide = anyOrder.side;
-					const targetHoseId = anyOrder.hoseId;
-					const srcHose = d.sides.A[0];
-					console.log(
-						`[poll] Surtidor ${d.dispenserId}: status=${srcHose.status}, ` +
-						`routing to Lado ${targetSide} hose ${targetHoseId} ` +
-						`(order ${anyOrder.orderId})`
-					);
-					for (const sideKey of ['A', 'B'] as const) {
-						for (const hose of d.sides[sideKey]) {
-							if (sideKey === targetSide && hose.hoseId === targetHoseId) {
-								hose.status = srcHose.status;
-								hose.subStatus = srcHose.subStatus;
-								hose.presetAmount = srcHose.presetAmount;
-							} else {
-								hose.status = 'IDLE';
-								hose.subStatus = '';
-								hose.presetAmount = 0;
-							}
-						}
-					}
-				} else if (!anyOrder && d.sides.A.length > 0) {
-					// No pending order — status stays on Side A as reported by Fusion
-					console.log(
-						`[poll] Surtidor ${d.dispenserId}: status=${d.sides.A[0].status}, ` +
-						`no pending order, keeping on Side A`
-					);
-				}
+			const result = await getDispensersState($config);
+			for (const d of result.dispensers) {
 				dispensers.updateDispenser(d);
 			}
-			dispensers.setFusionConnected(converted.fusionConnected);
+			dispensers.setFusionConnected(result.fusionConnected);
 			error = '';
+			// Auto-complete orders with fresh poll data
+			autoCompleteOrders();
 		} catch {
 			if (loading) error = 'FusionBridge no disponible';
 			dispensers.setFusionConnected(false);

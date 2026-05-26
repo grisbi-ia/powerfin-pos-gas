@@ -1,240 +1,175 @@
+/**
+ * FusionBridge mock — local browser state (single terminal).
+ *
+ * Simulates dispenser lifecycle:
+ *   IDLE → AUTHORIZED → STARTING → FUELLING → IDLE (+ SALE_COMPLETED)
+ */
+
 import type { AuthorizeData, DispenserState, HoseState, HoseStatusEvent } from './types';
 
-// ── Helper: build initial hose state ─────────────────────────
+// ── Local state (Map in memory) ──────────────────────────────
 
-function buildHose(
-	hoseId: number,
-	dispenserId: number,
-	side: 'A' | 'B',
-	fusionHoseId: number,
-	gradeId: string,
-	gradeName: string
-): HoseState {
-	return {
-		hoseId,
-		dispenserId,
-		side,
-		fusionHoseId,
-		gradeId,
-		gradeName,
-		status: 'IDLE',
-		subStatus: '',
-		presetAmount: 0,
-		attendantName: null,
-		shiftId: null
-	};
+function buildHose(hoseId: number, dispenserId: number, side: 'A' | 'B',
+	fusionHoseId: number, gradeId: string, gradeName: string): HoseState {
+	return { hoseId, dispenserId, side, fusionHoseId, gradeId, gradeName,
+		status: 'IDLE', subStatus: '', presetAmount: 0, attendantName: null, shiftId: null };
 }
 
-// ── Mock dispenser states (hose-level granularity) ───────────
-
-const MOCK_DISPENSERS: Map<number, DispenserState> = new Map([
-	[1, {
-		dispenserId: 1,
-		fusionPumpId: 1,
-		name: 'Surtidor 1',
-		connected: true,
-		online: true,
+const DEFAULT_DISPENSERS: DispenserState[] = [
+	{
+		dispenserId: 1, fusionPumpId: 1, name: 'Surtidor 1', connected: true, online: true,
 		sides: {
-			A: [
-				buildHose(1, 1, 'A', 1, 'SUPER', 'Gasolina Super'),
-				buildHose(2, 1, 'A', 2, 'EXTRA', 'Gasolina Extra')
-			],
-			B: [
-				buildHose(3, 1, 'B', 3, 'DIESEL', 'Diesel'),
-				buildHose(4, 1, 'B', 4, 'SUPER', 'Gasolina Super')
-			]
+			A: [buildHose(1,1,'A',1,'SUPER','Gasolina Super'), buildHose(2,1,'A',2,'EXTRA','Gasolina Extra'), buildHose(3,1,'A',3,'DIESEL','Diesel'), buildHose(4,1,'A',4,'SUPER','Gasolina Super')],
+			B: [buildHose(5,1,'B',5,'SUPER','Gasolina Super'), buildHose(6,1,'B',6,'EXTRA','Gasolina Extra'), buildHose(7,1,'B',7,'DIESEL','Diesel'), buildHose(8,1,'B',8,'SUPER','Gasolina Super')]
 		}
-	}],
-	[2, {
-		dispenserId: 2,
-		fusionPumpId: 2,
-		name: 'Surtidor 2',
-		connected: true,
-		online: true,
+	},
+	{
+		dispenserId: 2, fusionPumpId: 2, name: 'Surtidor 2', connected: true, online: true,
 		sides: {
-			A: [
-				buildHose(5, 2, 'A', 1, 'SUPER', 'Gasolina Super'),
-				buildHose(6, 2, 'A', 2, 'EXTRA', 'Gasolina Extra')
-			],
-			B: [
-				buildHose(7, 2, 'B', 3, 'DIESEL', 'Diesel'),
-				buildHose(8, 2, 'B', 4, 'SUPER', 'Gasolina Super')
-			]
+			A: [buildHose(9,2,'A',1,'SUPER','Gasolina Super'), buildHose(10,2,'A',2,'EXTRA','Gasolina Extra'), buildHose(11,2,'A',3,'DIESEL','Diesel'), buildHose(12,2,'A',4,'SUPER','Gasolina Super')],
+			B: [buildHose(13,2,'B',5,'SUPER','Gasolina Super'), buildHose(14,2,'B',6,'EXTRA','Gasolina Extra'), buildHose(15,2,'B',7,'DIESEL','Diesel'), buildHose(16,2,'B',8,'SUPER','Gasolina Super')]
 		}
-	}]
-]);
-
-let mockFusionConnected = true;
-const activeEventSources = new Set<MockEventSource>();
-
-function broadcastToAll(event: string, data: Record<string, unknown>) {
-	for (const es of activeEventSources) {
-		es.emit(event, data);
+	},
+	{
+		dispenserId: 3, fusionPumpId: 3, name: 'Surtidor 3', connected: true, online: true,
+		sides: {
+			A: [buildHose(17,3,'A',1,'SUPER','Gasolina Super'), buildHose(18,3,'A',2,'DIESEL','Diesel')],
+			B: [buildHose(19,3,'B',3,'EXTRA','Gasolina Extra'), buildHose(20,3,'B',4,'SUPER','Gasolina Super')]
+		}
+	},
+	{
+		dispenserId: 4, fusionPumpId: 4, name: 'Surtidor 4', connected: true, online: true,
+		sides: {
+			A: [buildHose(21,4,'A',1,'SUPER','Gasolina Super'), buildHose(22,4,'A',2,'DIESEL','Diesel')],
+			B: [buildHose(23,4,'B',3,'EXTRA','Gasolina Extra'), buildHose(24,4,'B',4,'SUPER','Gasolina Super')]
+		}
 	}
-}
+];
 
-// ── Helper: find a specific hose in the mock data ────────────
+let dispensers: DispenserState[] = JSON.parse(JSON.stringify(DEFAULT_DISPENSERS));
+let listeners: Array<(event: string, data: Record<string, unknown>) => void> = [];
 
-function findHose(dispenserId: number, hoseId: number): { dispenser: DispenserState; hose: HoseState } | null {
-	const dispenser = MOCK_DISPENSERS.get(dispenserId);
-	if (!dispenser) return null;
-	for (const side of ['A', 'B'] as const) {
-		const hose = dispenser.sides[side].find(h => h.hoseId === hoseId);
-		if (hose) return { dispenser, hose };
+function findHose(dispenserId: number, fusionHoseId: number) {
+	const d = dispensers.find(d => d.dispenserId === dispenserId);
+	if (!d) return null;
+	for (const sideKey of ['A', 'B'] as const) {
+		const idx = d.sides[sideKey].findIndex(h => h.fusionHoseId === fusionHoseId);
+		if (idx >= 0) return { dispenser: d, sideKey, idx };
 	}
 	return null;
 }
 
-function updateHose(dispenserId: number, hoseId: number, updates: Partial<HoseState>): boolean {
-	const found = findHose(dispenserId, hoseId);
+function updateHose(dispenserId: number, fusionHoseId: number, updates: Partial<HoseState>): boolean {
+	const found = findHose(dispenserId, fusionHoseId);
 	if (!found) return false;
-	const { dispenser } = found;
-	const sideKey = updates.side ?? found.hose.side;
-	const sideHoses = dispenser.sides[sideKey];
-	const idx = sideHoses.findIndex(h => h.hoseId === hoseId);
-	if (idx < 0) return false;
-	const updated = [...sideHoses];
-	updated[idx] = { ...updated[idx], ...updates };
-	MOCK_DISPENSERS.set(dispenserId, {
-		...dispenser,
-		sides: { ...dispenser.sides, [sideKey]: updated }
+	const updatedHoses = [...found.dispenser.sides[found.sideKey]];
+	updatedHoses[found.idx] = { ...updatedHoses[found.idx], ...updates };
+	dispensers = dispensers.map(d => {
+		if (d.dispenserId !== dispenserId) return d;
+		return { ...d, sides: { ...d.sides, [found.sideKey]: updatedHoses } };
 	});
 	return true;
 }
 
-// ── Mock delay ───────────────────────────────────────────────
-
-function delay(ms = 200): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
+function emit(event: string, data: Record<string, unknown>) {
+	for (const fn of listeners) { try { fn(event, data); } catch { /* */ } }
 }
 
-// ── Mock REST ────────────────────────────────────────────────
+function delay(ms = 200) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── REST API ─────────────────────────────────────────────────
 
 export async function getDispensers(): Promise<{ dispensers: DispenserState[]; fusionConnected: boolean }> {
-	await delay(200);
-	return {
-		dispensers: Array.from(MOCK_DISPENSERS.values()),
-		fusionConnected: mockFusionConnected
-	};
+	await delay(100);
+	return { dispensers: JSON.parse(JSON.stringify(dispensers)), fusionConnected: true };
 }
 
 export async function getDispenser(id: number): Promise<DispenserState> {
-	await delay(100);
-	const d = MOCK_DISPENSERS.get(id);
+	await delay(50);
+	const d = dispensers.find(d => d.dispenserId === id);
 	if (!d) throw new Error(`Dispenser ${id} not found`);
 	return JSON.parse(JSON.stringify(d));
 }
 
 export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: string }> {
-	await delay(400);
+	const hose = findHose(data.dispenser_id, data.hose_id)?.dispenser
+		?.sides[data.side]?.find(h => h.hoseId === data.hose_id);
+	if (!hose) throw new Error(`Hose ${data.hose_id} not found`);
 
-	const updated = updateHose(data.dispenser_id, data.hose_id, {
+	const presetAmount = parseFloat(data.preset_value) || 0;
+
+	// Step 0: AUTHORIZED (immediate)
+	updateHose(data.dispenser_id, data.hose_id, {
 		status: 'AUTHORIZED',
 		subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
-		presetAmount: parseFloat(data.preset_value) || 0,
-		attendantName: 'Carlos',
-		shiftId: 47
+		presetAmount, attendantName: 'Carlos', shiftId: 47
 	});
+	emit('HOSE_STATUS', {
+		type: 'HOSE_STATUS', dispenserId: data.dispenser_id, hoseId: data.hose_id,
+		side: data.side, fusionHoseId: hose.fusionHoseId,
+		status: 'AUTHORIZED', subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
+		attendantName: 'Carlos', presetAmount
+	} satisfies HoseStatusEvent);
 
-	if (!updated) {
-		throw new Error(`Hose ${data.hose_id} not found on dispenser ${data.dispenser_id}`);
-	}
-
-	const hose = findHose(data.dispenser_id, data.hose_id)?.hose;
-	if (!hose) throw new Error('Hose disappeared');
-
-	// Simulate fueling sequence via broadcast
+	// Step 1: STARTING (3s)
 	setTimeout(() => {
-		broadcastToAll('HOSE_STATUS', {
-			type: 'HOSE_STATUS',
-			dispenserId: data.dispenser_id,
-			hoseId: data.hose_id,
-			side: data.side,
-			fusionHoseId: hose.fusionHoseId,
-			status: 'AUTHORIZED',
-			subStatus: data.preset_type === 'MONEY' ? 'MONEY_PRESET' : 'VOLUME_PRESET',
-			attendantName: 'Carlos',
-			presetAmount: parseFloat(data.preset_value) || 0
+		updateHose(data.dispenser_id, data.hose_id, { status: 'STARTING', subStatus: '' });
+		emit('HOSE_STATUS', {
+			type: 'HOSE_STATUS', dispenserId: data.dispenser_id, hoseId: data.hose_id,
+			side: data.side, fusionHoseId: hose.fusionHoseId,
+			status: 'STARTING', subStatus: '', attendantName: 'Carlos'
 		} satisfies HoseStatusEvent);
-	}, 1000);
-
-	setTimeout(() => {
-		updateHose(data.dispenser_id, data.hose_id, { status: 'FUELLING' });
-		broadcastToAll('HOSE_STATUS', {
-			type: 'HOSE_STATUS',
-			dispenserId: data.dispenser_id,
-			hoseId: data.hose_id,
-			side: data.side,
-			fusionHoseId: hose.fusionHoseId,
-			status: 'FUELLING',
-			subStatus: '',
-			attendantName: 'Carlos'
-		} satisfies HoseStatusEvent);
-
-		broadcastToAll('FUELING_PROGRESS', {
-			type: 'FUELING_PROGRESS',
-			dispenserId: data.dispenser_id,
-			hoseId: data.hose_id,
-			side: data.side,
-			volume: '1.500',
-			amount: '15.00'
-		});
 	}, 3000);
 
+	// Step 2: FUELLING (6s)
 	setTimeout(() => {
-		broadcastToAll('FUELING_PROGRESS', {
-			type: 'FUELING_PROGRESS',
-			dispenserId: data.dispenser_id,
-			hoseId: data.hose_id,
-			side: data.side,
-			volume: '3.200',
-			amount: '32.00'
-		});
-	}, 4500);
-
-	setTimeout(() => {
-		updateHose(data.dispenser_id, data.hose_id, {
-			status: 'IDLE',
-			subStatus: '',
-			presetAmount: 0,
-			attendantName: null,
-			shiftId: null
-		});
-		broadcastToAll('HOSE_STATUS', {
-			type: 'HOSE_STATUS',
-			dispenserId: data.dispenser_id,
-			hoseId: data.hose_id,
-			side: data.side,
-			fusionHoseId: hose.fusionHoseId,
-			status: 'IDLE',
-			subStatus: '',
-			attendantName: undefined,
-			presetAmount: 0
+		updateHose(data.dispenser_id, data.hose_id, { status: 'FUELLING', subStatus: '' });
+		emit('HOSE_STATUS', {
+			type: 'HOSE_STATUS', dispenserId: data.dispenser_id, hoseId: data.hose_id,
+			side: data.side, fusionHoseId: hose.fusionHoseId,
+			status: 'FUELLING', subStatus: '', attendantName: 'Carlos'
 		} satisfies HoseStatusEvent);
-
-		broadcastToAll('SALE_COMPLETED', {
-			type: 'SALE_COMPLETED',
-			dispenserId: data.dispenser_id,
-			hoseId: data.hose_id,
-			side: data.side,
-			orderId: data.order_id,
-			volume: '38.000',
-			amount: data.preset_value
-		});
+		emit('FUELING_PROGRESS', { type: 'FUELING_PROGRESS', dispenserId: data.dispenser_id,
+			hoseId: data.hose_id, side: data.side, volume: '8.000', amount: (presetAmount * 0.30).toFixed(2) });
 	}, 6000);
 
+	// Step 3: Progress update (10s)
+	setTimeout(() => {
+		emit('FUELING_PROGRESS', { type: 'FUELING_PROGRESS', dispenserId: data.dispenser_id,
+			hoseId: data.hose_id, side: data.side, volume: '18.000', amount: (presetAmount * 0.70).toFixed(2) });
+	}, 10000);
+
+	// Step 4: Complete → IDLE (14s)
+	setTimeout(() => {
+		const finalVolume = (presetAmount / 1.5).toFixed(3);
+		updateHose(data.dispenser_id, data.hose_id, { status: 'IDLE', subStatus: '',
+			presetAmount: 0, attendantName: null, shiftId: null });
+		emit('HOSE_STATUS', {
+			type: 'HOSE_STATUS', dispenserId: data.dispenser_id, hoseId: data.hose_id,
+			side: data.side, fusionHoseId: hose.fusionHoseId,
+			status: 'IDLE', subStatus: '', presetAmount: 0
+		} satisfies HoseStatusEvent);
+		emit('SALE_COMPLETED', { type: 'SALE_COMPLETED', dispenserId: data.dispenser_id,
+			hoseId: data.hose_id, side: data.side, orderId: data.order_id,
+			volume: finalVolume, amount: presetAmount.toFixed(2) });
+	}, 14000);
+
+	await delay(400);
 	return { status: 'AUTHORIZED' };
 }
 
 export async function cancelDispenser(dispenserId: number, hoseId: number): Promise<boolean> {
 	await delay(200);
-	return updateHose(dispenserId, hoseId, {
-		status: 'IDLE',
-		subStatus: '',
-		presetAmount: 0,
-		attendantName: null,
-		shiftId: null
-	});
+	const ok = updateHose(dispenserId, hoseId, { status: 'IDLE', subStatus: '',
+		presetAmount: 0, attendantName: null, shiftId: null });
+	if (ok) {
+		const found = findHose(dispenserId, hoseId);
+		emit('HOSE_STATUS', { type: 'HOSE_STATUS', dispenserId, hoseId,
+			side: found?.dispenser.sides[found.sideKey][found.idx].side ?? 'A',
+			fusionHoseId: found?.dispenser.sides[found.sideKey][found.idx].fusionHoseId ?? 0,
+			status: 'IDLE', subStatus: '', presetAmount: 0 });
+	}
+	return ok;
 }
 
 export async function getPrintPolicy(): Promise<{ policy: string }> {
@@ -247,70 +182,49 @@ export async function printReceipt(_data: unknown): Promise<{ status: string }> 
 	return { status: 'PRINTED' };
 }
 
-// ── Mock SSE ─────────────────────────────────────────────────
+// ── Mock SSE (local events) ──────────────────────────────────
 
 export class MockEventSource {
-	private listeners: Map<string, Array<(data: Record<string, unknown>) => void>> = new Map();
 	private closed = false;
+	onerror: ((e: unknown) => void) | null = null;
 
 	constructor() {
-		activeEventSources.add(this);
+		listeners.push((event, data) => {
+			if (this.closed) return;
+			// Route events through the registered handler
+			this._handler?.(event, data);
+		});
 
-		// Send INIT after connection, then current hose states
+		// Send INIT + current states after a tick
 		setTimeout(() => {
-			this.send('INIT', { fusionConnected: mockFusionConnected });
-
-			for (const d of MOCK_DISPENSERS.values()) {
+			if (this.closed) return;
+			this._handler?.('INIT', { fusionConnected: true });
+			for (const d of dispensers) {
 				for (const side of ['A', 'B'] as const) {
 					for (const hose of d.sides[side]) {
-						this.send('HOSE_STATUS', {
-							type: 'HOSE_STATUS',
-							dispenserId: d.dispenserId,
-							hoseId: hose.hoseId,
-							side: hose.side,
-							fusionHoseId: hose.fusionHoseId,
-							status: hose.status,
-							subStatus: hose.subStatus,
-							attendantName: hose.attendantName ?? undefined,
-							presetAmount: hose.presetAmount
-						} satisfies HoseStatusEvent);
+						this._handler?.('HOSE_STATUS', {
+							type: 'HOSE_STATUS', dispenserId: d.dispenserId, hoseId: hose.hoseId,
+							side: hose.side, fusionHoseId: hose.fusionHoseId,
+							status: hose.status, subStatus: hose.subStatus,
+							attendantName: hose.attendantName ?? undefined, presetAmount: hose.presetAmount
+						});
 					}
 				}
 			}
 		}, 500);
 	}
 
+	private _handler: ((event: string, data: Record<string, unknown>) => void) | null = null;
+
 	addEventListener(type: string, handler: (data: Record<string, unknown>) => void): void {
-		if (!this.listeners.has(type)) {
-			this.listeners.set(type, []);
-		}
-		this.listeners.get(type)!.push(handler);
+		const prev = this._handler;
+		this._handler = (event, data) => {
+			if (event === type) handler(data);
+			prev?.(event, data);
+		};
 	}
 
-	send(event: string, data: Record<string, unknown>): void {
-		emit(this, event, data);
-	}
-
-	emit = (event: string, data: Record<string, unknown>): void => {
-		if (this.closed) return;
-		const handlers = this.listeners.get(event);
-		if (handlers) {
-			for (const handler of handlers) {
-				try { handler(data); } catch { /* ignore */ }
-			}
-		}
-	}
-
-	onerror: ((e: unknown) => void) | null = null;
-
-	close(): void {
-		this.closed = true;
-		activeEventSources.delete(this);
-	}
-}
-
-function emit(es: MockEventSource, event: string, data: Record<string, unknown>) {
-	es.emit(event, data);
+	close(): void { this.closed = true; }
 }
 
 export function connectToEvents(
@@ -318,16 +232,11 @@ export function connectToEvents(
 	_onError?: (error: Event) => void
 ): MockEventSource {
 	const es = new MockEventSource();
-
-	const eventTypes = [
-		'INIT', 'HOSE_STATUS', 'NEW_TRANSACTION',
+	const eventTypes = ['INIT', 'HOSE_STATUS', 'NEW_TRANSACTION',
 		'FUELING_PROGRESS', 'SALE_COMPLETED', 'TRANSACTION_LOCK', 'SALE_CLEARED',
-		'PRICE_CHANGE', 'CONFIG_CHANGE', 'FUSION_STATUS'
-	];
-
+		'PRICE_CHANGE', 'CONFIG_CHANGE', 'FUSION_STATUS'];
 	for (const type of eventTypes) {
 		es.addEventListener(type, (data) => onEvent(type, data));
 	}
-
 	return es;
 }

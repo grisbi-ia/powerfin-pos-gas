@@ -63,3 +63,4 @@ print-agent/target/
 jacoco.exec
 coverage/
 tools/powerfin_state.json
+.clauge-worktrees/
