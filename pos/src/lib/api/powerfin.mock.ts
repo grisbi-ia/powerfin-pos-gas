@@ -1,0 +1,478 @@
+import type {
+	User, LoginRequest, LoginResponse, AppConfig, Customer,
+	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
+	VehicleResult, CustomerFormData, RegisterCustomerResponse,
+	CollectDispatchRequest, CollectDispatchResponse,
+	DispatchOrder
+} from './types';
+
+// ── Mock data ────────────────────────────────────────────────
+
+const MOCK_USER: User = {
+	user_id: 3,
+	name: 'Carlos Sarmiento',
+	role: 'DISPATCHER',
+	location_id: 1,
+	location_name: 'NEOPAUTE'
+};
+
+const MOCK_CONFIG: AppConfig = {
+	location: {
+		location_id: 1,
+		name: 'NEOPAUTE',
+		address: 'Av. Principal 123, Cuenca'
+	},
+	dispensers: [
+		{
+			dispenser_id: 1,
+			fusion_pump_id: 1,
+			name: 'Surtidor 1',
+			printer_island: 1,
+			sides: {
+				A: [
+					{ hose_id: 1, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 2, fusion_hose_id: 2, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
+					{ hose_id: 3, fusion_hose_id: 3, grade_id: 'DIESEL', grade_name: 'Diesel' },
+					{ hose_id: 4, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				],
+				B: [
+					{ hose_id: 5, fusion_hose_id: 5, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 6, fusion_hose_id: 6, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
+					{ hose_id: 7, fusion_hose_id: 7, grade_id: 'DIESEL', grade_name: 'Diesel' },
+					{ hose_id: 8, fusion_hose_id: 8, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				]
+			}
+		},
+		{
+			dispenser_id: 2,
+			fusion_pump_id: 2,
+			name: 'Surtidor 2',
+			printer_island: 1,
+			sides: {
+				A: [
+					{ hose_id: 9, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 10, fusion_hose_id: 2, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
+					{ hose_id: 11, fusion_hose_id: 3, grade_id: 'DIESEL', grade_name: 'Diesel' },
+					{ hose_id: 12, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				],
+				B: [
+					{ hose_id: 13, fusion_hose_id: 5, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 14, fusion_hose_id: 6, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
+					{ hose_id: 15, fusion_hose_id: 7, grade_id: 'DIESEL', grade_name: 'Diesel' },
+					{ hose_id: 16, fusion_hose_id: 8, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				]
+			}
+		},
+		{
+			dispenser_id: 3,
+			fusion_pump_id: 3,
+			name: 'Surtidor 3',
+			printer_island: 2,
+			sides: {
+				A: [
+					{ hose_id: 17, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 18, fusion_hose_id: 2, grade_id: 'DIESEL', grade_name: 'Diesel' }
+				],
+				B: [
+					{ hose_id: 19, fusion_hose_id: 3, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
+					{ hose_id: 20, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				]
+			}
+		},
+		{
+			dispenser_id: 4,
+			fusion_pump_id: 4,
+			name: 'Surtidor 4',
+			printer_island: 2,
+			sides: {
+				A: [
+					{ hose_id: 21, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
+					{ hose_id: 22, fusion_hose_id: 2, grade_id: 'DIESEL', grade_name: 'Diesel' }
+				],
+				B: [
+					{ hose_id: 23, fusion_hose_id: 3, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
+					{ hose_id: 24, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+				]
+			}
+		}
+	],
+	grades: [
+		{ grade_id: 'SUPER', name: 'Gasolina Super', unit: 'litros' },
+		{ grade_id: 'EXTRA', name: 'Gasolina Extra', unit: 'litros' },
+		{ grade_id: 'DIESEL', name: 'Diesel', unit: 'litros' }
+	],
+	price_lists: [
+		{ code: 'STANDARD', name: 'Precio Normal' },
+		{ code: 'VIP', name: 'Cliente VIP' }
+	],
+	payment_methods: [
+		{ code: 'EFECTIVO', name: 'Efectivo', requires_reference: false },
+		{ code: 'TARJETA', name: 'Tarjeta Crédito/Débito', requires_reference: true },
+		{ code: 'QR', name: 'QR / Transferencia', requires_reference: false },
+		{ code: 'CREDITO', name: 'Crédito', requires_reference: false },
+		{ code: 'DEUNA', name: 'DeUna', requires_reference: true },
+		{ code: 'JEPFAST', name: 'JepFast', requires_reference: true },
+		{ code: 'SIPY', name: 'Sipy', requires_reference: true }
+	],
+	polling: {
+		interval_ms: 2000,
+		enabled: true
+	}
+};
+
+const MOCK_CUSTOMERS: Customer[] = [
+	{
+		customer_id: '0912345678',
+		id_type: 'CED',
+		id_number: '0912345678',
+		name: 'Juan Carlos Pérez',
+		email: 'jperez@email.com',
+		phone: '0991234567',
+		price_list: 'VIP',
+		price_list_name: 'Cliente VIP',
+		credit_active: false,
+		credit_balance: 0,
+		plates: ['ABC-1234']
+	},
+	{
+		customer_id: '1790012345001',
+		id_type: 'RUC',
+		id_number: '1790012345001',
+		name: 'Transportes Andinos S.A.',
+		email: 'trans@andinos.com',
+		phone: '022345678',
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal',
+		credit_active: true,
+		credit_balance: 500,
+		plates: ['XYZ-5678', 'XYZ-5679']
+	},
+	{
+		customer_id: '1001234567001',
+		id_type: 'RUC',
+		id_number: '1001234567001',
+		name: 'María Fernanda López',
+		email: 'mflopez@email.com',
+		phone: '0987654321',
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal',
+		credit_active: false,
+		credit_balance: 0,
+		plates: []
+	}
+];
+
+const MOCK_VEHICLES: Record<string, VehicleResult> = {
+	'ABC1234': {
+		plate: 'ABC1234',
+		vehicle_found: true,
+		incomplete_fields: [],
+		owner: {
+			customer_id: '0912345678',
+			id_type: 'CED',
+			id_number: '0912345678',
+			name: 'Juan Carlos Pérez',
+			email: 'jperez@email.com',
+			phone: '0991234567'
+		},
+		price_list: 'VIP',
+		price_list_name: 'Cliente VIP'
+	},
+	'XYZ5678': {
+		plate: 'XYZ5678',
+		vehicle_found: true,
+		incomplete_fields: ['email'],
+		owner: {
+			customer_id: '1790012345001',
+			id_type: 'RUC',
+			id_number: '1790012345001',
+			name: 'Transportes Andinos S.A.',
+			email: null,
+			phone: '022345678'
+		},
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
+	}
+};
+
+// ── Mock delay ───────────────────────────────────────────────
+
+function delay(ms = 300): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ── Mock implementation ──────────────────────────────────────
+
+const MOCK_SERVER_ORDERS_KEY = 'mockServerOrders';
+
+let mockToken = '';
+let mockShift: Shift | null = null;
+let shiftCounter = 45;
+let orderSeq = 0;
+
+// ── Mock server persistence (simula la base de datos de PowerFin) ──
+function loadMockOrders(): DispatchOrder[] {
+	try {
+		if (typeof localStorage === 'undefined') return [];
+		const stored = localStorage.getItem(MOCK_SERVER_ORDERS_KEY);
+		if (!stored) return [];
+		return JSON.parse(stored) as DispatchOrder[];
+	} catch {
+		return [];
+	}
+}
+
+function saveMockOrders() {
+	try {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem(MOCK_SERVER_ORDERS_KEY, JSON.stringify(mockOrders));
+	} catch { /* quota exceeded */ }
+}
+
+const mockOrders: DispatchOrder[] = loadMockOrders();
+
+// Restore sequence counter to avoid duplicate order IDs after refresh
+if (mockOrders.length > 0) {
+	orderSeq = mockOrders.length;
+}
+
+export async function login(data: LoginRequest): Promise<LoginResponse> {
+	await delay(500);
+	if (data.pin === '1234') {
+		mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock_token';
+		return {
+			access_token: mockToken,
+			expires_in: 28800,
+			user: { ...MOCK_USER, name: data.username }
+		};
+	}
+	throw new Error('Credenciales inválidas');
+}
+
+export async function fetchConfig(_token: string): Promise<AppConfig> {
+	await delay(300);
+	return MOCK_CONFIG;
+}
+
+export async function searchCustomers(_token: string, query: string): Promise<Customer[]> {
+	await delay(200);
+	const q = query.toLowerCase();
+	return MOCK_CUSTOMERS.filter(c =>
+		c.name.toLowerCase().includes(q) ||
+		c.id_number.includes(q) ||
+		c.plates.some(p => p.toLowerCase().includes(q))
+	);
+}
+
+export async function getCustomerPrice(
+	_token: string, customerId: string, _gradeId: string
+): Promise<PriceInfo> {
+	await delay(200);
+	const customer = MOCK_CUSTOMERS.find(c => c.customer_id === customerId);
+	const unitPrice = customer?.price_list === 'VIP' ? 1.100 : 1.500;
+	return {
+		grade_id: 'SUPER',
+		grade_name: 'Gasolina Super',
+		unit_price: unitPrice,
+		price_list: customer?.price_list ?? 'STANDARD',
+		currency: 'USD'
+	};
+}
+
+export async function openShift(_token: string, data: OpenShiftRequest): Promise<Shift> {
+	await delay(400);
+	mockShift = {
+		shift_id: ++shiftCounter,
+		user_id: MOCK_USER.user_id,
+		user_name: MOCK_USER.name,
+		opened_at: new Date().toISOString(),
+		accounting_date: new Date().toISOString().split('T')[0],
+		status: 'OPEN',
+		opening_cash: data.opening_cash
+	};
+	if (typeof localStorage !== 'undefined') {
+		localStorage.setItem('shift', JSON.stringify(mockShift));
+	}
+	return { ...mockShift };
+}
+
+export async function getCurrentShift(_token: string): Promise<Shift | null> {
+	await delay(200);
+	// In production, PowerFin is the source of truth.
+	// The mock simulates persistence via localStorage on refresh.
+	if (!mockShift && typeof localStorage !== 'undefined') {
+		const stored = localStorage.getItem('shift');
+		if (stored) {
+			try { mockShift = JSON.parse(stored); } catch { /* ignore */ }
+		}
+	}
+	return mockShift ? { ...mockShift } : null;
+}
+
+export async function closeShift(
+	_token: string, _shiftId: number, data: { closing_cash: number; notes: string }
+): Promise<CloseShiftResponse> {
+	await delay(500);
+	mockShift = null;
+	return {
+		shift_id: shiftCounter,
+		closed_at: new Date().toISOString(),
+		opening_cash: 0,
+		closing_cash: data.closing_cash,
+		expected_cash: data.closing_cash,
+		difference: 0,
+		total_sales: 12,
+		total_volume: 487.5,
+		dispatch_count: 45
+	};
+}
+
+export async function createDispatch(
+	_token: string, _data: unknown
+): Promise<{ order_id: string; status: string }> {
+	await delay(300);
+	const data = _data as Record<string, unknown>;
+	orderSeq++;
+	const seq = String(orderSeq).padStart(3, '0');
+	const date = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+	const orderId = `OV-${date}-${seq}`;
+	const order: DispatchOrder = {
+		order_id: orderId,
+		dispenser_id: data.dispenser_id as number,
+		hose_id: data.hose_id as number,
+		side: (data.side as 'A' | 'B') ?? 'A',
+		grade: 'SUPER',
+		preset_type: (data.preset_type as 'MONEY' | 'VOLUME') ?? 'MONEY',
+		preset_value: data.preset_value as string,
+		unit_price: (data as Record<string, number>).unit_price ?? 1.500,
+		payment_method: (data.payment_method as string) ?? 'EFECTIVO',
+		customer_id: data.customer_id as string | undefined,
+		customer_name: data.customer_name as string | undefined,
+		plate: data.plate as string | undefined,
+		status: 'AUTHORIZED',
+		created_at: new Date().toISOString(),
+		shift_id: mockShift?.shift_id ?? 0,
+		authorized_by: mockShift?.user_name
+	};
+	mockOrders.push(order);
+	saveMockOrders();
+	return { order_id: orderId, status: 'PENDING' };
+}
+
+export async function completeDispatch(
+	_token: string, _orderId: string, _saleData: unknown
+): Promise<void> {
+	await delay(200);
+	const sale = _saleData as Record<string, unknown>;
+	const order = mockOrders.find(o => o.order_id === _orderId);
+	if (order) {
+		order.status = 'COMPLETED';
+		order.final_amount = sale.amount as number;
+		order.final_volume = sale.volume as string;
+		order.invoice_number = sale.invoice_number as string | undefined;
+		saveMockOrders();
+	}
+}
+
+export async function cancelDispatchApi(
+	_token: string, _orderId: string
+): Promise<void> {
+	await delay(200);
+	const order = mockOrders.find(o => o.order_id === _orderId);
+	if (order) {
+		order.status = 'CANCELLED';
+		saveMockOrders();
+	}
+}
+
+export async function collectDispatch(
+	_token: string, orderId: string, _data: CollectDispatchRequest
+): Promise<CollectDispatchResponse> {
+	await delay(300);
+	// Mark order as collected in mock storage
+	const order = mockOrders.find(o => o.order_id === orderId);
+	if (order) {
+		order.status = 'COLLECTED';
+		order.shift_id = _data.collected_by_shift_id;
+		saveMockOrders();
+	}
+	return {
+		order_id: orderId,
+		status: 'COLLECTED',
+		collected_by_shift_id: _data.collected_by_shift_id,
+		collected_by_name: MOCK_USER.name,
+		payment_method: _data.payment_method,
+		collected_amount: _data.collected_amount,
+		change_amount: _data.change_amount
+	};
+}
+
+export async function lookupVehicle(_token: string, plate: string): Promise<VehicleResult> {
+	await delay(300);
+	const normalized = plate.toUpperCase().replace(/\s+/g, '');
+	const result = MOCK_VEHICLES[normalized];
+	if (result) {
+		return result;
+	}
+	return {
+		plate: normalized,
+		vehicle_found: false,
+		incomplete_fields: [],
+		owner: null,
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
+	};
+}
+
+export async function getCustomerById(
+	_token: string,
+	idType: 'CED' | 'RUC',
+	idNumber: string,
+	_updateBilling = false
+): Promise<Customer | null> {
+	await delay(300);
+	return MOCK_CUSTOMERS.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
+}
+
+export async function getShiftDispatches(_token: string, _shiftId: number): Promise<DispatchOrder[]> {
+	await delay(200);
+	// Return all mock orders created during this session (in-memory)
+	return [...mockOrders];
+}
+
+export async function registerCustomer(
+	_token: string,
+	data: CustomerFormData
+): Promise<RegisterCustomerResponse> {
+	await delay(400);
+	const newCustomer: Customer = {
+		customer_id: data.id_number,
+		id_type: data.id_type,
+		id_number: data.id_number,
+		name: data.name,
+		email: data.email || null,
+		phone: null,
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal',
+		credit_active: false,
+		credit_balance: 0,
+		plates: [data.plate]
+	};
+	MOCK_CUSTOMERS.push(newCustomer);
+	MOCK_VEHICLES[data.plate.toUpperCase().replace(/\s+/g, '')] = {
+		plate: data.plate.toUpperCase().replace(/\s+/g, ''),
+		vehicle_found: true,
+		incomplete_fields: [],
+		owner: {
+			customer_id: newCustomer.customer_id,
+			id_type: newCustomer.id_type,
+			id_number: newCustomer.id_number,
+			name: newCustomer.name,
+			email: newCustomer.email,
+			phone: newCustomer.phone
+		},
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
+	};
+	return { customer_id: data.id_number, price_list: 'STANDARD' };
+}

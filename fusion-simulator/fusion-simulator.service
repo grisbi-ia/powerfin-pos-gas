@@ -1,0 +1,36 @@
+# Fusion Simulator — systemd unit
+# Place at: /etc/systemd/system/fusion-simulator.service
+#
+# Install:
+#   sudo cp fusion-simulator.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable fusion-simulator
+#   sudo systemctl start fusion-simulator
+
+[Unit]
+Description=Wayne Fusion / Synergy Simulator (TCP 3011)
+Documentation=https://github.com/powerfin/fusion-simulator
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+WorkingDirectory=/opt/fusion-simulator
+ExecStart=/usr/bin/node /opt/fusion-simulator/server.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fusion-simulator
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/tmp
+ReadOnlyPaths=/opt/fusion-simulator
+
+[Install]
+WantedBy=multi-user.target

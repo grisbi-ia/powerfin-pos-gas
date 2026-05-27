@@ -1,0 +1,12 @@
+{
+	"/(pos)": [],
+	"/": [],
+	"/(pos)/confirmation": [],
+	"/(pos)/fueling": [],
+	"/(pos)/history": [],
+	"/login": [],
+	"/(pos)/new-dispatch": [],
+	"/(pos)/sale": [],
+	"/shift/close": [],
+	"/shift/open": []
+}

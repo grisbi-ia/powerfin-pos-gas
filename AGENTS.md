@@ -110,7 +110,11 @@ powerfin_pos_gas/
 
 ## Current state
 
-**Phase 1 — Foundation.** No code written yet. Directories exist but are empty. The docs/ directory contains the complete design. Everything in `docs/FUSION_BRIDGE.md` and `docs/POWERFIN_POS.md` is reference architecture, not implemented code.
+**Phase 1 — Foundation (completed).** FusionBridge project compiles, 35 unit tests passing with real GASOLINERA message data. All core classes implemented. Hardware validation pending (no Synergy available).
+
+**Phase 3 — Powerfin POS base (completed).** SvelteKit 2.x project with TypeScript, Tailwind CSS, and mock API layer. Login with PIN, shift opening, main dispensers screen with SSE connection via mocks. 15 Vitest tests passing, build to static files.
+
+**Phase 4 — Sales flow (completed).** Complete end-to-end sales flow with mock APIs: customer search with debounce, amount input with quick buttons, payment method selector, fueling progress via SSE, sale confirmation with change calculation and print policy (ALWAYS/ASK/NEVER). 31 Vitest tests passing total. Mock implementations ready to swap for real APIs when backends are available.
 
 ## When building
 

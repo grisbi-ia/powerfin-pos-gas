@@ -1,0 +1,1 @@
+import{d as e,w as i}from"./tTEra87F.js";function r(){const{subscribe:o,set:t}=i({config:null,loaded:!1});return{subscribe:o,setConfig(c){t({config:c,loaded:!0})}}}const n=r(),f=e(n,o=>o.config),s=e(n,o=>o.loaded);export{f as config,s as configLoaded,n as configStore};
