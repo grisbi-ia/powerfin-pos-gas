@@ -19,7 +19,7 @@ Tests obligatorios antes de cada versión git.
 | **2** | APIs en PowerFin            | 1       | Endpoints /api/pos/\* listos               |
 | **3** | Powerfin POS base           | 2       | Login, turno, pantalla principal           |
 | **4** | Flujo de venta completo     | 1       | Venta end-to-end con factura SRI           |
-| **5** | Impresión                   | 1       | Tickets en impresora térmica de red        |
+| **5** | Impresión                   | 1       | Tickets en impresora térmica de red ✅     |
 | **6** | Funcionalidades adicionales | 1       | Historial, caja, cobertura, cierre         |
 | **7** | Pruebas con hardware real   | 1       | Validación en GASOLINERA con dispensadores |
 | **8** | Go-live                     | 1       | Deploy final, capacitación, producción     |
@@ -250,46 +250,67 @@ Flujo end-to-end: desde buscar cliente hasta recibir factura SRI.
 
 ---
 
-## FASE 5 — Impresión (Semana 6)
+## FASE 5 — Impresión (Semana 6) ✅ COMPLETADA
 
 ### Objetivo
 
 Tickets impresos en la impresora térmica de red de cada isla.
 
 ```
-☐ FusionBridge — PrinterConfig.java
-    ☐ Leer IPs de impresoras desde variables de entorno
-    ☐ Leer política ALWAYS/ASK/NEVER
-    ☐ Mapear dispenser_id → impresora de la isla
-☐ FusionBridge — ReceiptBuilder.java
-    ☐ Generar bytes ESC/POS con escpos-coffee
-    ☐ Encabezado, datos del despacho, factura, pie
-    ☐ Manejo de campos opcionales (cliente, placa, factura)
-☐ FusionBridge — ThermalPrinter.java
-    ☐ Socket TCP directo a IP:9100
-    ☐ Timeout y manejo de error si la impresora no responde
-☐ FusionBridge — PrintResource.java
-    ☐ POST /api/print
-    ☐ GET /api/print/policy
-    ☐ Incluir estado de impresoras en GET /health
-☐ Powerfin POS — PrintPrompt.svelte + lógica en ConfirmationPage
-    ☐ Consultar política al arrancar (loadConfig)
-    ☐ ALWAYS → imprimir automáticamente
-    ☐ ASK → mostrar botones SÍ/NO
-    ☐ NEVER → no mostrar opción
-☐ Test físico: imprimir ticket de prueba en la impresora real
-☐ ReceiptBuilderTest.java — verificar bytes generados
+[x] FusionBridge — PrinterConfig.java
+    [x] Leer IPs de impresoras desde variables de entorno
+    [x] Leer política ALWAYS/ASK/NEVER
+    [x] Configuración multi-isla con persistencia JSON en disco
+    [x] API PUT /api/print/config para editar en runtime
+    [x] Mapear isla → IP:puerto (cada surtidor tiene printer_island)
+[x] FusionBridge — ReceiptBuilder.java
+    [x] Construir datos de ticket desde request JSON
+    [x] Manejo de campos opcionales (cliente, placa, factura)
+[x] FusionBridge — TemplateRenderer.java
+    [x] Motor de templates con placeholders {{variable}}
+    [x] Bloques condicionales {#customer}...{/customer}, {#invoice}...{/invoice}
+    [x] Directivas de formato: [BOLD], [CENTER], [CUT]
+    [x] Separadores: --- (thin), === (bold)
+    [x] Template por defecto profesional
+    [x] API GET/PUT /api/print/template para editar templates
+[x] FusionBridge — ThermalPrinter.java
+    [x] Socket TCP directo a IP:9100
+    [x] Timeout 5s y manejo de error si la impresora no responde
+[x] FusionBridge — PrintResource.java
+    [x] POST /api/print (con island-based routing)
+    [x] POST /api/print/test (ticket de prueba)
+    [x] GET /api/print/policy
+    [x] GET/PUT /api/print/config
+    [x] GET/PUT /api/print/template
+    [x] Estado de impresoras en GET /health (IP + reachable)
+[x] FusionBridge — PrintException.java
+    [x] Excepción tipada para errores de impresión
+[x] Powerfin POS — UI en SaleWizard (ConfirmationPage)
+    [x] Consultar política vía bridge.getPrintPolicy()
+    [x] ALWAYS → imprimir automáticamente
+    [x] ASK → mostrar botones SÍ/NO
+    [x] NEVER → no mostrar opción
+    [x] Estados: imprimiendo, impreso ✅, error ⚠️
+    [x] Botón reimprimir tras impresión exitosa
+    [x] Botón reintentar en caso de error
+    [x] Opción "Continuar sin ticket" (no bloquea la venta)
+[x] Tests — 34 tests de impresión (12 PrinterConfig + 13 Template + 9 ReceiptBuilder)
+[x] dispenser config incluye printer_island (PowerFin mock + Python server)
+☐ Test físico: imprimir ticket de prueba en la impresora real (192.168.1.31)
 ```
 
 ### Criterio de completitud
 
 ```
-✅ Ticket imprime correctamente en impresora 192.168.1.31
+✅ Templates editables vía API REST (GET/PUT /api/print/template)
+✅ Config multi-isla persistente en JSON (GET/PUT /api/print/config)
 ✅ Política ALWAYS imprime sin preguntar
-✅ Política ASK muestra botones
+✅ Política ASK muestra botones SÍ/NO
 ✅ Política NEVER no muestra opción
-✅ Error de impresora muestra mensaje claro (no bloquea la venta)
-✅ git tag v0.4.0 -m "Fase 5: Thermal printing"
+✅ Error de impresora muestra mensaje claro, permite reintentar o continuar
+✅ 34 tests de impresión pasando (69 total FusionBridge, 41 POS)
+☐ Ticket imprime correctamente en impresora física 192.168.1.31 (pendiente hardware)
+✅ git tag v0.5.0 -m "Fase 5: Thermal printing"
 ```
 
 ---
@@ -386,6 +407,7 @@ Validar todo con el Synergy conectado a los dispensadores físicos en la GASOLIN
 | Fase 2       | interno  | APIs PowerFin (no versiona el POS) |
 | Fase 3       | `v0.2.0` | Powerfin POS base                  |
 | Fase 4       | `v0.3.0` | Flujo de venta                     |
-| Fase 5       | `v0.4.0` | Impresión                          |
-| Fase 6       | `v0.5.0` | Funcionalidades completas          |
+| Fase 5       | `v0.5.0` | Impresión ✅                       |
+| Fase 6       | `v0.6.0` | Funcionalidades completas          |
+| Fase 7       | `v0.7.0` | Pruebas hardware real              |
 | Fase 8       | `v1.0.0` | Producción GASOLINERA              |

@@ -43,6 +43,7 @@ export interface DispenserConfig {
 	dispenser_id: number;
 	fusion_pump_id: number;
 	name: string;
+	printer_island?: number;
 	sides: {
 		A: HoseConfig[];
 		B: HoseConfig[];

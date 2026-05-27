@@ -27,6 +27,7 @@ const MOCK_CONFIG: AppConfig = {
 			dispenser_id: 1,
 			fusion_pump_id: 1,
 			name: 'Surtidor 1',
+			printer_island: 1,
 			sides: {
 				A: [
 					{ hose_id: 1, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
@@ -46,6 +47,7 @@ const MOCK_CONFIG: AppConfig = {
 			dispenser_id: 2,
 			fusion_pump_id: 2,
 			name: 'Surtidor 2',
+			printer_island: 1,
 			sides: {
 				A: [
 					{ hose_id: 9, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
@@ -65,6 +67,7 @@ const MOCK_CONFIG: AppConfig = {
 			dispenser_id: 3,
 			fusion_pump_id: 3,
 			name: 'Surtidor 3',
+			printer_island: 2,
 			sides: {
 				A: [
 					{ hose_id: 17, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
@@ -80,6 +83,7 @@ const MOCK_CONFIG: AppConfig = {
 			dispenser_id: 4,
 			fusion_pump_id: 4,
 			name: 'Surtidor 4',
+			printer_island: 2,
 			sides: {
 				A: [
 					{ hose_id: 21, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },

@@ -43,6 +43,8 @@
 	let referenceCode = '';
 	let confirmed = false;
 	let printing = false;
+	let hasPrinted = false;
+	let printError = false;
 	let printPolicy: 'ALWAYS' | 'ASK' | 'NEVER' = 'ASK';
 	let autoReturnTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -183,7 +185,14 @@
 
 	async function doPrint() {
 		printing = true;
-		try { await bridge.printReceipt({ type: 'FUEL_RECEIPT', dispenserId, fuelData: { dispenserId, orderId: collectOrder?.orderId ?? '', volume: finalVolume, amount: finalAmount.toFixed(2), unitPrice: (collectOrder?.unitPrice ?? 0).toFixed(3), paymentMethod, grade: 'SUPER' } }); }
+		printError = false;
+		try {
+			const island = dispenserConfig?.printer_island ?? 1;
+			await bridge.printReceipt({ type: 'FUEL_RECEIPT', island, dispenserId, fuelData: { dispenserId, orderId: collectOrder?.orderId ?? '', volume: finalVolume, amount: finalAmount.toFixed(2), unitPrice: (collectOrder?.unitPrice ?? 0).toFixed(3), paymentMethod, grade: 'SUPER' } });
+			hasPrinted = true;
+		} catch {
+			printError = true;
+		}
 		finally { printing = false; }
 	}
 
@@ -460,6 +469,9 @@
 				{#if printPolicy === 'ASK' && !printing}
 					<div class="card p-4 mb-4 text-center">
 						<p class="text-gray-700 mb-3">¿El cliente desea ticket?</p>
+						{#if printError}
+							<div class="bg-red-50 text-red-600 text-sm rounded-lg py-2 mb-3">⚠️ Impresora no disponible</div>
+						{/if}
 						<div class="grid grid-cols-2 gap-2">
 							<button class="touch-btn bg-blue-600 text-white rounded-xl py-3 font-semibold" on:click={doPrint}>🖨 SÍ</button>
 							<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-medium" on:click={handleNewSale}>✗ NO</button>
@@ -468,7 +480,25 @@
 				{:else if printing}
 					<div class="text-center text-sm text-blue-600 py-4">🖨 Imprimiendo ticket...</div>
 				{:else}
-					<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold" on:click={handleNewSale}>Nueva Venta</button>
+					{#if hasPrinted}
+						<div class="card p-4 mb-4 bg-green-50 border-green-200 text-center">
+							<p class="text-green-700 text-sm mb-2">✅ Ticket impreso</p>
+							<div class="grid grid-cols-2 gap-2">
+								<button class="touch-btn bg-blue-600 text-white rounded-xl py-3 font-semibold" on:click={doPrint}>🖨 Reimprimir</button>
+								<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-medium" on:click={handleNewSale}>Nueva Venta</button>
+							</div>
+						</div>
+					{:else if printError}
+						<div class="card p-4 mb-4 text-center">
+							<div class="bg-red-50 text-red-600 text-sm rounded-lg py-2 mb-3">⚠️ Impresora no disponible</div>
+							<div class="grid grid-cols-2 gap-2">
+								<button class="touch-btn bg-blue-600 text-white rounded-xl py-3 font-semibold" on:click={doPrint}>🖨 Reintentar</button>
+								<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-medium" on:click={handleNewSale}>Continuar sin ticket</button>
+							</div>
+						</div>
+					{:else}
+						<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold" on:click={handleNewSale}>Nueva Venta</button>
+					{/if}
 				{/if}
 			{/if}
 		{/if}
