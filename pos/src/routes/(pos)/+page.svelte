@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { auth } from '$lib/stores/auth';
+	import { auth, currentUser } from '$lib/stores/auth';
 	import { shift } from '$lib/stores/shift';
 	import { config, configLoaded } from '$lib/stores/config';
 	import { dispensers, dispenserList, fusionConnected } from '$lib/stores/dispensers';
@@ -24,6 +24,8 @@
 	let loading = true;
 	let error = '';
 	let pollIntervalMs = 2000;
+	let openingShift = false;
+	let shiftError = '';
 	const RECONCILE_INTERVAL_MS = 30_000;
 
 	// Debounced poll trigger for real-time SSE events (avoids polling flood)
@@ -67,6 +69,24 @@
 		}
 	}
 
+	// ── Open shift ───────────────────────────────────────────
+	async function handleOpenShift() {
+		if (!$auth.token) return;
+		openingShift = true;
+		shiftError = '';
+		try {
+			const result = await powerfin.openShift($auth.token, {
+				opening_cash: 0,
+				notes: ''
+			});
+			shift.set(result);
+		} catch {
+			shiftError = 'Error al abrir el turno';
+		} finally {
+			openingShift = false;
+		}
+	}
+
 	onMount(async () => {
 		// 1. Reload pendingOrders from localStorage (survives page refresh)
 		pendingOrders.reloadFromStorage();
@@ -79,46 +99,45 @@
 			} catch { error = 'Error cargando configuración'; }
 		}
 
+		// 2. Load shift from server (source of truth)
 		if ($auth.token) {
 			try {
 				const serverShift = await powerfin.getCurrentShift($auth.token);
-				if (!serverShift) { shift.clear(); goto('/shift/open'); return; }
-				shift.set(serverShift);
+				if (serverShift) {
+					shift.set(serverShift);
+				} else {
+					shift.clear();
+				}
 			} catch {
-				if (!$shift) { goto('/shift/open'); return; }
+				// Server unreachable — keep localStorage value if any
 			}
 		}
 
-		// 2. Reconcile with PowerFin (authoritative source)
-		await reconcileWithPowerFin();
+		// 3. Reconcile with PowerFin (authoritative source)
+		if ($shift) await reconcileWithPowerFin();
 
 		await pollDispensers();
 
-		// 3. Fast polling for dispenser state (every 2s)
+		// 4. Fast polling for dispenser state (every 2s)
 		pollTimer = setInterval(() => { pollDispensers(); }, pollIntervalMs);
 
-		// 4. Slow polling for PowerFin reconciliation (every 30s)
+		// 5. Slow polling for PowerFin reconciliation (every 30s)
 		reconcileTimer = setInterval(reconcileWithPowerFin, RECONCILE_INTERVAL_MS);
 
-		// 5. Real-time SSE events for instant state updates
-		// FusionBridge sends: PUMP_STATUS_CHANGE, DELIVERY_PROGRESS, NEW_TRANSACTION,
-		// TRANSACTION_LOCK, SALE_CLEARED, FUSION_STATUS
+		// 6. Real-time SSE events
 		console.log('[SSE] Connecting to FusionBridge events...');
 		sseConnection = realBridge.connectToEvents(
 			(eventType, data) => {
 				switch (eventType) {
 					case 'PUMP_STATUS_CHANGE':
 					case 'DELIVERY_PROGRESS':
-						// Pump-level state changed → trigger debounced poll
 						triggerSsePoll();
 						break;
 					case 'NEW_TRANSACTION':
-						// Sale completed → refresh state and auto-complete orders
 						triggerSsePoll();
 						break;
 					case 'TRANSACTION_LOCK':
 					case 'SALE_CLEARED':
-						// Payment events → refresh state
 						triggerSsePoll();
 						break;
 					case 'FUSION_STATUS':
@@ -141,7 +160,7 @@
 		}
 	});
 
-	// ── Poll dispenser state (hose-level from mock or FusionBridge) ──
+	// ── Poll dispenser state ──────────────────────────────────
 	async function pollDispensers() {
 		try {
 			const result = await getDispensersState($config);
@@ -150,7 +169,6 @@
 			}
 			dispensers.setFusionConnected(result.fusionConnected);
 			error = '';
-			// Auto-complete orders with fresh poll data
 			autoCompleteOrders();
 		} catch {
 			if (loading) error = 'FusionBridge no disponible';
@@ -159,6 +177,9 @@
 	}
 
 	function handleSideClick(dispenserId: number, side: 'A' | 'B', hose: HoseState) {
+		// Block all operations without an open shift
+		if (!$shift) return;
+
 		const busy = ['AUTHORIZED', 'CALLING', 'STARTING', 'FUELLING', 'PAUSED'].includes(hose.status);
 		const key = `${dispenserId}-${hose.hoseId}`;
 		const pendingOrder = $orderByHose.get(key);
@@ -173,6 +194,8 @@
 	}
 
 	function handleHistory() { goto('/history'); }
+	function handleCash() { goto('/cash'); }
+	function handleUsers() { goto('/users'); }
 	function handleCloseShift() { goto('/shift/close'); }
 </script>
 
@@ -188,7 +211,47 @@
 			</div>
 		</div>
 	{:else}
-		<div class="grid gap-3">
+		<!-- Sin turno abierto: mostrar botón de apertura + surtidores bloqueados -->
+		{#if !$shift}
+			<div class="card p-6 mb-4 text-center">
+				<div class="text-3xl mb-3">🔒</div>
+				<h2 class="text-lg font-bold text-gray-800 mb-2">Turno no aperturado</h2>
+				<p class="text-sm text-gray-500 mb-4">
+					Debe abrir su turno para realizar ventas, cobros y movimientos de caja.
+				</p>
+
+				<!-- Info del usuario -->
+				<div class="bg-gray-50 rounded-xl p-4 mb-4 text-left text-sm">
+					<div class="flex justify-between py-1">
+						<span class="text-gray-500">Usuario:</span>
+						<span class="font-semibold text-gray-800">{$currentUser?.name ?? '—'}</span>
+					</div>
+					<div class="flex justify-between py-1">
+						<span class="text-gray-500">Fecha:</span>
+						<span class="font-semibold text-gray-800">{new Date().toLocaleDateString('es-EC', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+					</div>
+					<div class="flex justify-between py-1">
+						<span class="text-gray-500">Hora:</span>
+						<span class="font-semibold text-gray-800">{new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}</span>
+					</div>
+				</div>
+
+				{#if shiftError}
+					<div class="bg-red-50 text-red-600 text-sm rounded-lg py-2 mb-3">{shiftError}</div>
+				{/if}
+
+				<button
+					class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold disabled:opacity-50"
+					on:click={handleOpenShift}
+					disabled={openingShift}
+				>
+					{openingShift ? 'Abriendo turno...' : '🔓 Abrir Turno'}
+				</button>
+			</div>
+		{/if}
+
+		<!-- Surtidores (bloqueados visualmente si no hay turno) -->
+		<div class="grid gap-3 {!$shift ? 'opacity-50 pointer-events-none' : ''}">
 			{#each $dispenserList as d (d.dispenserId)}
 				<DispenserCard dispenser={d} onSideClick={handleSideClick} />
 			{:else}
@@ -215,13 +278,23 @@
 			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
 			<span class="text-xs">Inicio</span>
 		</button>
-		<button class="touch-btn flex flex-col items-center gap-1 text-gray-400" on:click={handleHistory}>
+		<button class="touch-btn flex flex-col items-center gap-1 {$shift ? 'text-gray-400' : 'text-gray-300'}" on:click={handleCash} disabled={!$shift}>
+			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+			<span class="text-xs">Caja</span>
+		</button>
+		<button class="touch-btn flex flex-col items-center gap-1 {$shift ? 'text-gray-400' : 'text-gray-300'}" on:click={handleHistory} disabled={!$shift}>
 			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
 			<span class="text-xs">Historial</span>
 		</button>
-		<button class="touch-btn flex flex-col items-center gap-1 text-gray-400" on:click={handleCloseShift}>
-			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-			<span class="text-xs">Cerrar turno</span>
+		<button class="touch-btn flex flex-col items-center gap-1 text-gray-400" on:click={handleUsers}>
+			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" /></svg>
+			<span class="text-xs">Usuarios</span>
 		</button>
+		{#if $shift}
+			<button class="touch-btn flex flex-col items-center gap-1 text-gray-400" on:click={handleCloseShift}>
+				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+				<span class="text-xs">Cerrar turno</span>
+			</button>
+		{/if}
 	</div>
 </nav>

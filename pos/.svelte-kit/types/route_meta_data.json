@@ -1,6 +1,9 @@
 {
 	"/(pos)": [],
 	"/": [],
+	"/(pos)/cash": [],
+	"/(pos)/cash/movement": [],
+	"/(pos)/cash/transfer": [],
 	"/(pos)/confirmation": [],
 	"/(pos)/fueling": [],
 	"/(pos)/history": [],
@@ -8,5 +11,6 @@
 	"/(pos)/new-dispatch": [],
 	"/(pos)/sale": [],
 	"/shift/close": [],
-	"/shift/open": []
+	"/shift/open": [],
+	"/(pos)/users": []
 }

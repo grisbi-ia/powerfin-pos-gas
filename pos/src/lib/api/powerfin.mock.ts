@@ -3,8 +3,11 @@ import type {
 	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
 	VehicleResult, CustomerFormData, RegisterCustomerResponse,
 	CollectDispatchRequest, CollectDispatchResponse,
-	DispatchOrder
+	DispatchOrder,
+	CashMovement, CashTransfer, OnlineUser, ShiftCashSummary,
+	CreateCashMovementRequest, CreateTransferRequest
 } from './types';
+import { SAFE_VAULT_USER_ID, SAFE_VAULT_ROLE } from './types';
 
 // ── Mock data ────────────────────────────────────────────────
 
@@ -475,4 +478,185 @@ export async function registerCustomer(
 		price_list_name: 'Precio Normal'
 	};
 	return { customer_id: data.id_number, price_list: 'STANDARD' };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Cash Management Mocks
+// ═══════════════════════════════════════════════════════════════
+
+const MOCK_CASH_MOVEMENTS_KEY = 'mockCashMovements';
+const MOCK_TRANSFERS_KEY = 'mockTransfers';
+
+function loadMockMovements(): CashMovement[] {
+	try {
+		if (typeof localStorage === 'undefined') return [];
+		const stored = localStorage.getItem(MOCK_CASH_MOVEMENTS_KEY);
+		return stored ? JSON.parse(stored) as CashMovement[] : [];
+	} catch { return []; }
+}
+
+function saveMockMovements(movements: CashMovement[]) {
+	try {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem(MOCK_CASH_MOVEMENTS_KEY, JSON.stringify(movements));
+	} catch { /* quota exceeded */ }
+}
+
+function loadMockTransfers(): CashTransfer[] {
+	try {
+		if (typeof localStorage === 'undefined') return [];
+		const stored = localStorage.getItem(MOCK_TRANSFERS_KEY);
+		return stored ? JSON.parse(stored) as CashTransfer[] : [];
+	} catch { return []; }
+}
+
+function saveMockTransfers(transfers: CashTransfer[]) {
+	try {
+		if (typeof localStorage === 'undefined') return;
+		localStorage.setItem(MOCK_TRANSFERS_KEY, JSON.stringify(transfers));
+	} catch { /* quota exceeded */ }
+}
+
+const mockMovements: CashMovement[] = loadMockMovements();
+const mockTransfers: CashTransfer[] = loadMockTransfers();
+let movementSeq = mockMovements.length;
+let transferSeq = mockTransfers.length;
+
+const MOCK_ONLINE_USERS: OnlineUser[] = [
+	{ user_id: 3, name: 'Carlos Sarmiento', role: 'DISPATCHER', shift_id: 45, sales_count: 12, total_amount: 587.50 },
+	{ user_id: 4, name: 'María Fernanda López', role: 'DISPATCHER', shift_id: 46, sales_count: 8, total_amount: 342.00 },
+	{ user_id: 5, name: 'Pedro Ramírez', role: 'DISPATCHER', shift_id: 47, sales_count: 15, total_amount: 723.80 },
+	{ user_id: SAFE_VAULT_USER_ID, name: 'Caja Fuerte', role: SAFE_VAULT_ROLE, shift_id: 0, sales_count: 0, total_amount: 0 }
+];
+
+export async function createCashMovement(
+	_token: string, data: CreateCashMovementRequest
+): Promise<CashMovement> {
+	await delay(300);
+
+	// Calculate running balance
+	const shiftMovements = mockMovements.filter(m => m.shift_id === data.shift_id);
+	const lastBalance = shiftMovements.length > 0
+		? shiftMovements[shiftMovements.length - 1].running_balance
+		: 0;
+
+	movementSeq++;
+	const amount = data.type === 'INCOME' ? data.amount : -data.amount;
+	const movement: CashMovement = {
+		movement_id: movementSeq,
+		shift_id: data.shift_id,
+		type: data.type,
+		amount: data.amount,
+		observation: data.observation,
+		created_at: new Date().toISOString(),
+		running_balance: lastBalance + amount
+	};
+
+	mockMovements.push(movement);
+	saveMockMovements(mockMovements);
+	return movement;
+}
+
+export async function getCashMovements(
+	_token: string, shiftId: number
+): Promise<CashMovement[]> {
+	await delay(200);
+	return mockMovements
+		.filter(m => m.shift_id === shiftId)
+		.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export async function getShiftCashSummary(
+	_token: string, shiftId: number
+): Promise<ShiftCashSummary> {
+	await delay(200);
+	const movements = mockMovements.filter(m => m.shift_id === shiftId);
+	const transfers = mockTransfers.filter(t => t.from_shift_id === shiftId || t.to_user_id === shiftId);
+
+	const total_income = movements
+		.filter(m => m.type === 'INCOME')
+		.reduce((sum, m) => sum + m.amount, 0);
+	const total_expense = movements
+		.filter(m => m.type === 'EXPENSE')
+		.reduce((sum, m) => sum + m.amount, 0);
+
+	// Sales cash: sum of COMPLETED orders with CASH payment for this shift
+	const salesCash = mockOrders
+		.filter(o => o.shift_id === shiftId && o.status === 'COMPLETED' && o.payment_method === 'EFECTIVO')
+		.reduce((sum, o) => sum + (o.final_amount ?? 0), 0);
+
+	const openingCash = mockShift?.opening_cash ?? 0;
+
+	return {
+		shift_id: shiftId,
+		opening_cash: openingCash,
+		current_balance: openingCash + total_income + salesCash - total_expense,
+		total_income,
+		total_expense,
+		total_sales_cash: salesCash,
+		total_transfers_received: 0,
+		total_transfers_sent: 0,
+		total_safe_drops: 0
+	};
+}
+
+export async function getOnlineUsers(_token: string): Promise<OnlineUser[]> {
+	await delay(200);
+	// Calculate real sales data from mock orders
+	return MOCK_ONLINE_USERS.map(u => {
+		if (u.role === SAFE_VAULT_ROLE) return { ...u, sales_count: 0, total_amount: 0 };
+		const userOrders = mockOrders.filter(o => o.shift_id === u.shift_id && o.status === 'COMPLETED');
+		return {
+			...u,
+			sales_count: userOrders.length,
+			total_amount: userOrders.reduce((sum, o) => sum + (o.final_amount ?? 0), 0)
+		};
+	});
+}
+
+export async function createTransfer(
+	_token: string, data: CreateTransferRequest
+): Promise<CashTransfer> {
+	await delay(300);
+
+	const fromUser = MOCK_ONLINE_USERS.find(u => u.shift_id === data.from_shift_id);
+	const toUser = MOCK_ONLINE_USERS.find(u => u.user_id === data.to_user_id);
+
+	transferSeq++;
+	const transfer: CashTransfer = {
+		transfer_id: transferSeq,
+		from_shift_id: data.from_shift_id,
+		from_user_name: fromUser?.name ?? 'Desconocido',
+		to_user_id: data.to_user_id,
+		to_user_name: toUser?.name ?? 'Desconocido',
+		amount: data.amount,
+		observation: data.observation,
+		created_at: new Date().toISOString()
+	};
+
+	mockTransfers.push(transfer);
+	saveMockTransfers(mockTransfers);
+
+	// Also create a cash movement for the sender (EXPENSE)
+	movementSeq++;
+	const shiftMovements = mockMovements.filter(m => m.shift_id === data.from_shift_id);
+	const lastBalance = shiftMovements.length > 0
+		? shiftMovements[shiftMovements.length - 1].running_balance
+		: 0;
+
+	const movement: CashMovement = {
+		movement_id: movementSeq,
+		shift_id: data.from_shift_id,
+		type: toUser?.role === SAFE_VAULT_ROLE ? 'SAFE_DROP' : 'TRANSFER_OUT',
+		amount: data.amount,
+		observation: data.observation,
+		related_user_id: data.to_user_id,
+		related_user_name: toUser?.name,
+		created_at: new Date().toISOString(),
+		running_balance: lastBalance - data.amount
+	};
+	mockMovements.push(movement);
+	saveMockMovements(mockMovements);
+
+	return transfer;
 }

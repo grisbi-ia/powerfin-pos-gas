@@ -13,6 +13,23 @@ Endpoints:
     POST   /api/pos/auth/login
     GET    /api/pos/config
     GET    /api/pos/customers?q=
+    GET    /api/pos/customers/by-id?id_type=&id_number=
+    POST   /api/pos/customers
+    GET    /api/pos/vehicles?plate=
+    GET    /api/pos/prices?customerId=&gradeId=
+    POST   /api/pos/shifts/open
+    GET    /api/pos/shifts/current
+    POST   /api/pos/shifts/{id}/close
+    GET    /api/pos/shifts/{id}/dispatches
+    POST   /api/pos/dispatches
+    POST   /api/pos/dispatches/{id}/complete
+    POST   /api/pos/dispatches/{id}/collect
+    POST   /api/pos/dispatches/{id}/cancel
+    POST   /api/pos/cash-movements
+    GET    /api/pos/shifts/{id}/cash-movements
+    GET    /api/pos/shifts/{id}/cash-summary
+    GET    /api/pos/users/online
+    POST   /api/pos/transfers
     POST   /api/pos/customers
     GET    /api/pos/prices?customerId=&gradeId=
     POST   /api/pos/shifts/open
@@ -214,13 +231,21 @@ PRICES = {
 
 def load_state():
     """Load server state from JSON file. Returns fresh state if file missing."""
+    default = {"shifts": [], "orders": [], "order_seq": 0,
+               "cash_movements": [], "transfers": [],
+               "movement_seq": 0, "transfer_seq": 0}
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f:
-                return json.load(f)
+                state = json.load(f)
+            # Ensure all keys exist (backward compat with older state files)
+            for key, val in default.items():
+                if key not in state:
+                    state[key] = val
+            return state
         except (json.JSONDecodeError, IOError):
             pass
-    return {"shifts": [], "orders": [], "order_seq": 0}
+    return dict(default)
 
 
 def save_state(state):
@@ -340,6 +365,67 @@ class PowerFinHandler(BaseHTTPRequestHandler):
                 return self._error("Invalid shift_id", 400)
             orders = [o for o in self.state["orders"] if o["shift_id"] == shift_id]
             return self._json_reply(orders)
+
+        # /api/pos/shifts/{id}/cash-movements
+        if len(parts) == 6 and parts[0:4] == ["", "api", "pos", "shifts"] and parts[5] == "cash-movements":
+            try:
+                shift_id = int(parts[4])
+            except ValueError:
+                return self._error("Invalid shift_id", 400)
+            movements = sorted(
+                [m for m in self.state["cash_movements"] if m["shift_id"] == shift_id],
+                key=lambda m: m["created_at"], reverse=True
+            )
+            return self._json_reply(movements)
+
+        # /api/pos/shifts/{id}/cash-summary
+        if len(parts) == 6 and parts[0:4] == ["", "api", "pos", "shifts"] and parts[5] == "cash-summary":
+            try:
+                shift_id = int(parts[4])
+            except ValueError:
+                return self._error("Invalid shift_id", 400)
+            movements = [m for m in self.state["cash_movements"] if m["shift_id"] == shift_id]
+            total_income = sum(m["amount"] for m in movements if m["type"] == "INCOME")
+            total_expense = sum(m["amount"] for m in movements if m["type"] == "EXPENSE")
+            sales_cash = sum(o["final_amount"] or 0 for o in self.state["orders"]
+                           if o["shift_id"] == shift_id and o["status"] == "COMPLETED"
+                           and o["payment_method"] == "EFECTIVO")
+            shift = find_shift(self.state, shift_id)
+            opening = shift["opening_cash"] if shift else 0
+            balance = opening + total_income + sales_cash - total_expense
+            return self._json_reply({
+                "shift_id": shift_id, "opening_cash": opening,
+                "current_balance": balance, "total_income": total_income,
+                "total_expense": total_expense, "total_sales_cash": sales_cash,
+                "total_transfers_received": 0, "total_transfers_sent": 0, "total_safe_drops": 0
+            })
+
+        # /api/pos/users/online
+        if parts == ["", "api", "pos", "users", "online"]:
+            online = []
+            for s in self.state["shifts"]:
+                if s["status"] == "OPEN":
+                    shift_id = s["shift_id"]
+                    # Count completed orders for this shift
+                    shift_orders = [o for o in self.state["orders"]
+                                   if o["shift_id"] == shift_id and o["status"] == "COMPLETED"]
+                    sales_count = len(shift_orders)
+                    total_amount = sum(o.get("final_amount", 0) or 0 for o in shift_orders)
+                    online.append({
+                        "user_id": s.get("user_id", 3),
+                        "name": s.get("user_name", "Despachador"),
+                        "role": "DISPATCHER",
+                        "shift_id": shift_id,
+                        "sales_count": sales_count,
+                        "total_amount": round(total_amount, 2)
+                    })
+            # Always add Caja Fuerte (no sales)
+            online.append({
+                "user_id": 0, "name": "Caja Fuerte",
+                "role": "SAFE_VAULT", "shift_id": 0,
+                "sales_count": 0, "total_amount": 0
+            })
+            return self._json_reply(online)
 
         return self._error("Not found", 404)
 
@@ -536,6 +622,83 @@ class PowerFinHandler(BaseHTTPRequestHandler):
                 order["status"] = "CANCELLED"
                 save_state(self.state)
             return self._json_reply({"status": "ok"})
+
+        # ── Cash Management ───────────────────────────────────────
+        # POST /api/pos/cash-movements
+        if parts == ["", "api", "pos", "cash-movements"]:
+            shift_id = body.get("shift_id", 0)
+            mv_type = body.get("type", "INCOME")
+            amount = float(body.get("amount", 0))
+            observation = body.get("observation", "")
+
+            # Calculate running balance
+            shift_movements = [m for m in self.state["cash_movements"] if m["shift_id"] == shift_id]
+            last_balance = shift_movements[-1]["running_balance"] if shift_movements else 0
+            balance_delta = amount if mv_type == "INCOME" else -amount
+
+            self.state["movement_seq"] += 1
+            movement = {
+                "movement_id": self.state["movement_seq"],
+                "shift_id": shift_id,
+                "type": mv_type,
+                "amount": amount,
+                "observation": observation,
+                "related_user_id": None,
+                "related_user_name": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "running_balance": last_balance + balance_delta
+            }
+            self.state["cash_movements"].append(movement)
+            save_state(self.state)
+            return self._json_reply(movement, 201)
+
+        # POST /api/pos/transfers
+        if parts == ["", "api", "pos", "transfers"]:
+            from_shift_id = body.get("from_shift_id", 0)
+            to_user_id = body.get("to_user_id", 0)
+            amount = float(body.get("amount", 0))
+            observation = body.get("observation", "")
+
+            from_shift = find_shift(self.state, from_shift_id)
+            from_name = from_shift["user_name"] if from_shift else "Desconocido"
+
+            # Find recipient name
+            to_name = "Caja Fuerte" if to_user_id == 0 else "Despachador"
+            to_role = "SAFE_VAULT" if to_user_id == 0 else "DISPATCHER"
+
+            self.state["transfer_seq"] += 1
+            transfer = {
+                "transfer_id": self.state["transfer_seq"],
+                "from_shift_id": from_shift_id,
+                "from_user_name": from_name,
+                "to_user_id": to_user_id,
+                "to_user_name": to_name,
+                "amount": amount,
+                "observation": observation,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            self.state["transfers"].append(transfer)
+
+            # Also create a cash movement for the sender
+            mv_type = "SAFE_DROP" if to_user_id == 0 else "TRANSFER_OUT"
+            shift_movements = [m for m in self.state["cash_movements"] if m["shift_id"] == from_shift_id]
+            last_balance = shift_movements[-1]["running_balance"] if shift_movements else 0
+
+            self.state["movement_seq"] += 1
+            movement = {
+                "movement_id": self.state["movement_seq"],
+                "shift_id": from_shift_id,
+                "type": mv_type,
+                "amount": amount,
+                "observation": observation,
+                "related_user_id": to_user_id,
+                "related_user_name": to_name,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "running_balance": last_balance - amount
+            }
+            self.state["cash_movements"].append(movement)
+            save_state(self.state)
+            return self._json_reply(transfer, 201)
 
         return self._error("Not found", 404)
 

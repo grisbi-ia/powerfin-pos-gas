@@ -217,6 +217,13 @@
 	</div>
 
 	<main class="flex-1 px-4 py-4 overflow-y-auto">
+		{#if !$shift}
+			<div class="card p-6 text-center mt-8">
+				<div class="text-3xl mb-3">🔒</div>
+				<h2 class="text-lg font-bold text-gray-800 mb-2">Turno no aperturado</h2>
+				<p class="text-sm text-gray-500">Debe abrir su turno para realizar ventas o cobros.</p>
+			</div>
+		{:else}
 		{#if mode === 'sale'}
 			<div class="flex items-center gap-1 mb-4 text-xs text-gray-400">
 				<span class={step === 'hose' ? 'text-primary font-medium' : ''}>Pistola</span><span>→</span>
@@ -501,6 +508,7 @@
 					{/if}
 				{/if}
 			{/if}
+		{/if}
 		{/if}
 	</main>
 </div>

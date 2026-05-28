@@ -20,7 +20,7 @@ Tests obligatorios antes de cada versión git.
 | **3** | Powerfin POS base           | 2       | Login, turno, pantalla principal           |
 | **4** | Flujo de venta completo     | 1       | Venta end-to-end con factura SRI           |
 | **5** | Impresión                   | 1       | Tickets en impresora térmica de red ✅     |
-| **6** | Funcionalidades adicionales | 1       | Historial, caja, cobertura, cierre         |
+| **6** | Funcionalidades adicionales | 1       | Caja, historial, usuarios en línea ✅     |
 | **7** | Pruebas con hardware real   | 1       | Validación en GASOLINERA con dispensadores |
 | **8** | Go-live                     | 1       | Deploy final, capacitación, producción     |
 
@@ -315,18 +315,26 @@ Tickets impresos en la impresora térmica de red de cada isla.
 
 ---
 
-## FASE 6 — Funcionalidades adicionales (Semana 7)
+## FASE 6 — Funcionalidades adicionales (Semana 7) ✅ COMPLETADA
 
 ```
-☐ /history → Historial del turno actual
-    ☐ Lista de despachos con estado
-    ☐ Resumen parcial (ventas, volumen, monto)
-☐ /shift/close → Cierre de turno
-    ☐ Resumen completo
-    ☐ Ingreso de efectivo en caja
-    ☐ Mostrar diferencia
-    ☐ Imprimir reporte de turno
-☐ Movimientos de caja (ingreso/egreso)
+[x] /history → Historial del turno actual
+    [x] Lista de despachos con estado, monto, cliente, placa, factura
+    [x] Resumen parcial (ventas, monto)
+    [x] Reimpresión de tickets desde el historial
+    [x] Tab de movimientos de caja con saldo running
+[x] /cash → Módulo de caja completo
+    [x] Ingresos y egresos con valor + observación
+    [x] Transferencias entre empleados y a Caja Fuerte
+    [x] Saldo en tiempo real con running balance
+[x] /users → Usuarios en línea
+    [x] Dashboard con resumen general (usuarios activos, ventas, monto)
+    [x] Detalle por usuario: ventas y total facturado del turno
+[x] Refactor de turnos
+    [x] Login sin redirect forzado a apertura de turno
+    [x] Card "Abrir Turno" en dashboard con datos del usuario
+    [x] Apertura con $0.00 fijo, solo confirmación
+    [x] Bloqueo de operaciones sin turno abierto
 ☐ Cobertura de surtidor adicional ([+ Cubrir])
 ☐ Panel básico de supervisor (reportes del día)
 ```
@@ -408,6 +416,6 @@ Validar todo con el Synergy conectado a los dispensadores físicos en la GASOLIN
 | Fase 3       | `v0.2.0` | Powerfin POS base                  |
 | Fase 4       | `v0.3.0` | Flujo de venta                     |
 | Fase 5       | `v0.5.0` | Impresión ✅                       |
-| Fase 6       | `v0.6.0` | Funcionalidades completas          |
+| Fase 6       | `v0.6.0` | Caja + historial + usuarios ✅     |
 | Fase 7       | `v0.7.0` | Pruebas hardware real              |
 | Fase 8       | `v1.0.0` | Producción GASOLINERA              |

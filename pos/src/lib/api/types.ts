@@ -302,20 +302,72 @@ export interface SaleCompletedEvent {
 	amount: string;
 }
 
-/** Depósito a caja fuerte cuando el efectivo excede el umbral */
-export interface SafeDrop {
-	drop_id: number;
+// ═══════════════════════════════════════════════════════════════
+// Cash Management — Ingresos, Egresos, Transferencias
+// ═══════════════════════════════════════════════════════════════
+
+/** Special user_id representing the safe vault (Caja Fuerte) */
+export const SAFE_VAULT_USER_ID = 0;
+export const SAFE_VAULT_ROLE = 'SAFE_VAULT';
+
+export type CashMovementType = 'INCOME' | 'EXPENSE' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'SAFE_DROP';
+
+export interface CashMovement {
+	movement_id: number;
 	shift_id: number;
+	type: CashMovementType;
 	amount: number;
-	reason: string;
+	observation: string;
+	related_user_id?: number;
+	related_user_name?: string;
 	created_at: string;
-	shift_cash_after_drop: number;
+	running_balance: number;
 }
 
-export interface CreateSafeDropRequest {
-	shift_id: number;
+export interface CashTransfer {
+	transfer_id: number;
+	from_shift_id: number;
+	from_user_name: string;
+	to_user_id: number;
+	to_user_name: string;
 	amount: number;
-	reason: string;
+	observation: string;
+	created_at: string;
+}
+
+export interface OnlineUser {
+	user_id: number;
+	name: string;
+	role: string;
+	shift_id: number;
+	sales_count: number;
+	total_amount: number;
+}
+
+export interface ShiftCashSummary {
+	shift_id: number;
+	opening_cash: number;
+	current_balance: number;
+	total_income: number;
+	total_expense: number;
+	total_sales_cash: number;
+	total_transfers_received: number;
+	total_transfers_sent: number;
+	total_safe_drops: number;
+}
+
+export interface CreateCashMovementRequest {
+	shift_id: number;
+	type: 'INCOME' | 'EXPENSE';
+	amount: number;
+	observation: string;
+}
+
+export interface CreateTransferRequest {
+	from_shift_id: number;
+	to_user_id: number;
+	amount: number;
+	observation: string;
 }
 
 export interface AuthStore {

@@ -203,3 +203,68 @@ export async function collectDispatch(
 	if (!res.ok) throw new Error('Error cobrando despacho');
 	return res.json();
 }
+
+// ── Cash Management ──────────────────────────────────────────
+
+export async function createCashMovement(
+	token: string,
+	data: import('./types').CreateCashMovementRequest
+): Promise<import('./types').CashMovement> {
+	if (USE_MOCKS_POWERFIN) return mock.createCashMovement(token, data);
+	const res = await fetch(powerfinUrl('/api/pos/cash-movements'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error registrando movimiento');
+	return res.json();
+}
+
+export async function getCashMovements(
+	token: string,
+	shiftId: number
+): Promise<import('./types').CashMovement[]> {
+	if (USE_MOCKS_POWERFIN) return mock.getCashMovements(token, shiftId);
+	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/cash-movements`), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error consultando movimientos');
+	return res.json();
+}
+
+export async function getShiftCashSummary(
+	token: string,
+	shiftId: number
+): Promise<import('./types').ShiftCashSummary> {
+	if (USE_MOCKS_POWERFIN) return mock.getShiftCashSummary(token, shiftId);
+	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/cash-summary`), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error consultando saldo');
+	return res.json();
+}
+
+export async function getOnlineUsers(
+	token: string
+): Promise<import('./types').OnlineUser[]> {
+	if (USE_MOCKS_POWERFIN) return mock.getOnlineUsers(token);
+	const res = await fetch(powerfinUrl('/api/pos/users/online'), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error consultando usuarios en línea');
+	return res.json();
+}
+
+export async function createTransfer(
+	token: string,
+	data: import('./types').CreateTransferRequest
+): Promise<import('./types').CashTransfer> {
+	if (USE_MOCKS_POWERFIN) return mock.createTransfer(token, data);
+	const res = await fetch(powerfinUrl('/api/pos/transfers'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error realizando transferencia');
+	return res.json();
+}

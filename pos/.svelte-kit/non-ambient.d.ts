@@ -29,13 +29,16 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/(pos)" | "/" | "/(pos)/confirmation" | "/(pos)/fueling" | "/(pos)/history" | "/login" | "/(pos)/new-dispatch" | "/(pos)/sale" | "/shift" | "/shift/close" | "/shift/open";
+		RouteId(): "/(pos)" | "/" | "/(pos)/cash" | "/(pos)/cash/movement" | "/(pos)/cash/transfer" | "/(pos)/confirmation" | "/(pos)/fueling" | "/(pos)/history" | "/login" | "/(pos)/new-dispatch" | "/(pos)/sale" | "/shift" | "/shift/close" | "/shift/open" | "/(pos)/users";
 		RouteParams(): {
 			
 		};
 		LayoutParams(): {
 			"/(pos)": Record<string, never>;
 			"/": Record<string, never>;
+			"/(pos)/cash": Record<string, never>;
+			"/(pos)/cash/movement": Record<string, never>;
+			"/(pos)/cash/transfer": Record<string, never>;
 			"/(pos)/confirmation": Record<string, never>;
 			"/(pos)/fueling": Record<string, never>;
 			"/(pos)/history": Record<string, never>;
@@ -44,9 +47,10 @@ declare module "$app/types" {
 			"/(pos)/sale": Record<string, never>;
 			"/shift": Record<string, never>;
 			"/shift/close": Record<string, never>;
-			"/shift/open": Record<string, never>
+			"/shift/open": Record<string, never>;
+			"/(pos)/users": Record<string, never>
 		};
-		Pathname(): "/" | "/confirmation" | "/fueling" | "/history" | "/login" | "/new-dispatch" | "/sale" | "/shift/close" | "/shift/open";
+		Pathname(): "/" | "/cash" | "/cash/movement" | "/cash/transfer" | "/confirmation" | "/fueling" | "/history" | "/login" | "/new-dispatch" | "/sale" | "/shift/close" | "/shift/open" | "/users";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): string & {};
 	}

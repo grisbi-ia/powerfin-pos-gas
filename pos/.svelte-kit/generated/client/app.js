@@ -12,21 +12,29 @@ export const nodes = [
 	() => import('./nodes/8'),
 	() => import('./nodes/9'),
 	() => import('./nodes/10'),
-	() => import('./nodes/11')
+	() => import('./nodes/11'),
+	() => import('./nodes/12'),
+	() => import('./nodes/13'),
+	() => import('./nodes/14'),
+	() => import('./nodes/15')
 ];
 
 export const server_loads = [];
 
 export const dictionary = {
 		"/(pos)": [3,[2]],
-		"/(pos)/confirmation": [4,[2]],
-		"/(pos)/fueling": [5,[2]],
-		"/(pos)/history": [6,[2]],
-		"/login": [9],
-		"/(pos)/new-dispatch": [7,[2]],
-		"/(pos)/sale": [8,[2]],
-		"/shift/close": [10],
-		"/shift/open": [11]
+		"/(pos)/cash": [4,[2]],
+		"/(pos)/cash/movement": [5,[2]],
+		"/(pos)/cash/transfer": [6,[2]],
+		"/(pos)/confirmation": [7,[2]],
+		"/(pos)/fueling": [8,[2]],
+		"/(pos)/history": [9,[2]],
+		"/login": [13],
+		"/(pos)/new-dispatch": [10,[2]],
+		"/(pos)/sale": [11,[2]],
+		"/shift/close": [14],
+		"/shift/open": [15],
+		"/(pos)/users": [12,[2]]
 	};
 
 export const hooks = {
