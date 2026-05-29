@@ -16,6 +16,7 @@
 	let side: 'A' | 'B' = 'A';
 	let selectedHoseId = 0;
 	let selectedFusionHoseId = 0;
+	let selectedFusionPumpId = 0;
 	let selectedGradeId = '';
 	let selectedGradeName = '';
 
@@ -44,6 +45,7 @@
 	function selectHose(hose: HoseConfig) {
 		selectedHoseId = hose.hose_id;
 		selectedFusionHoseId = hose.fusion_hose_id;
+		selectedFusionPumpId = hose.fusion_pump_id;
 		selectedGradeId = hose.grade_id;
 		selectedGradeName = hose.grade_name;
 		currentStep = 'plate';
@@ -172,8 +174,8 @@
 
 			await bridge.authorizeDispatch({
 				order_id: orderId,
-				dispenser_id: dispenserId,
-				hose_id: selectedHoseId,
+				dispenser_id: selectedFusionPumpId,
+				hose_id: selectedFusionHoseId,
 				side: side,
 				preset_type: 'MONEY',
 				preset_value: amount,

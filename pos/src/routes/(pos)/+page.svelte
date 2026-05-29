@@ -37,23 +37,23 @@
 	}
 
 	// ── Auto-complete pending orders when hose goes IDLE ─────
-	function autoCompleteOrders() {
-		const orders = $orderByHose;
-		if (orders.size === 0) return;
-		for (const d of $dispenserList) {
-			for (const sideKey of ['A', 'B'] as const) {
-				for (const hose of d.sides[sideKey]) {
-					if (hose.status === 'IDLE') {
-						const key = `${d.dispenserId}-${hose.hoseId}`;
-						const order = orders.get(key);
-						if (order && order.status === 'FUELLING') {
-							pendingOrders.completeOrder(d.dispenserId, hose.hoseId);
-						}
-					}
-				}
-			}
-		}
-	}
+// 	function autoCompleteOrders() {
+// 		const orders = $orderByHose;
+// 		if (orders.size === 0) return;
+// 		for (const d of $dispenserList) {
+// 			for (const sideKey of ['A', 'B'] as const) {
+// 				for (const hose of d.sides[sideKey]) {
+// 					if (hose.status === 'IDLE') {
+// 						const key = `${d.dispenserId}-${hose.hoseId}`;
+// 						const order = orders.get(key);
+// 						if (order && order.status === 'FUELLING') {
+// 							pendingOrders.completeOrder(d.dispenserId, hose.hoseId);
+// 						}
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
 
 	// ── Reconciliation with PowerFin (every 30s) ────────────
 	async function reconcileWithPowerFin() {
@@ -169,7 +169,7 @@
 			}
 			dispensers.setFusionConnected(result.fusionConnected);
 			error = '';
-			autoCompleteOrders();
+			// Orders completed only via NEW_TRANSACTION SSE event
 		} catch {
 			if (loading) error = 'FusionBridge no disponible';
 			dispensers.setFusionConnected(false);

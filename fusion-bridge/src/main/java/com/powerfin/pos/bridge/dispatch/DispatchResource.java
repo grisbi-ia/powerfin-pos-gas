@@ -82,6 +82,49 @@ public class DispatchResource {
         }
     }
 
+    /**
+     * Manual Plan B — simple authorization with NO amount limit.
+     * Only use when PRESET mode is confirmed unavailable (e.g. hardware issue).
+     * The pump dispenses at console price with no automatic stop.
+     * Requires explicit manual activation — never called automatically.
+     */
+    @POST
+    @Path("/authorize-auth")
+    public Response authorizeAuth(Map<String, Object> request) {
+        if (!tcpClient.isConnected()) {
+            return Response.status(503)
+                .entity(Map.of("error", "No connection to Fusion"))
+                .build();
+        }
+
+        try {
+            int dispenserId = ((Number) request.getOrDefault("dispenser_id", 1)).intValue();
+            int hoseId = ((Number) request.getOrDefault("hose_id", 1)).intValue();
+
+            String message = FusionMessageBuilder.buildAuth(dispenserId, hoseId);
+
+            boolean sent = tcpClient.sendRaw(message);
+            if (sent) {
+                Log.warnf("AUTH (manual Plan B) sent: pump=%d hose=%d",
+                    dispenserId, hoseId);
+                return Response.ok(Map.of(
+                    "status", "AUTH_SENT",
+                    "mode", "MANUAL_PLAN_B",
+                    "warning", "Sin límite de monto. La bomba usa su precio de consola."
+                )).build();
+            } else {
+                return Response.status(503)
+                    .entity(Map.of("error", "Failed to send auth"))
+                    .build();
+            }
+        } catch (Exception e) {
+            Log.error("Error sending auth (Plan B)", e);
+            return Response.serverError()
+                .entity(Map.of("error", e.getMessage()))
+                .build();
+        }
+    }
+
     @POST
     @Path("/cancel")
     public Response cancel(Map<String, Object> request) {

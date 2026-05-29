@@ -36,11 +36,24 @@ public class FusionMessageBuilder {
         String params = "TY=" + presetType
             + "|VA=" + value
             + "|HO=" + hoseWithPrice
+            + "|LV=1"
             + "|PAY_TY=" + paymentMethod
             + "|PAY_IN=" + payIn
             + "|FTS=YES";
 
         return build("REQ_PUMP_PRESET_ID_" + String.format("%03d", pumpId), params);
+    }
+
+    /**
+     * Build REQ_PUMP_AUTH — simple authorization with NO money/volume limit.
+     * This is a MANUAL Plan B. It does NOT support dynamic pricing,
+     * preset amounts, or PAY_IN data. Use only when PRESET is unavailable.
+     * The pump will use its console price and dispense until the customer
+     * hangs up — no automatic stop.
+     */
+    public static String buildAuth(int pumpId, int hose) {
+        String params = "HO=" + hose;
+        return build("REQ_PUMP_AUTH_ID_" + String.format("%03d", pumpId), params);
     }
 
     public static String buildPumpStatusRequest(int pumpId) {

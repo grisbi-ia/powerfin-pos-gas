@@ -57,6 +57,10 @@ public class FusionEventHandler {
         String presetAmount = msg.params.getOrDefault("PR", "0.00");
         String grade = msg.params.getOrDefault("GR", "");
         String activeHoseStr = msg.params.getOrDefault("HO", "");
+        // For AUTHORIZED state with PRESET, the hose is in PR_HO, not HO
+        if (activeHoseStr.isEmpty()) {
+            activeHoseStr = msg.params.getOrDefault("PR_HO", "");
+        }
         // HO may be "3@1.150" — extract just the hose number
         int activeHose = 0;
         if (!activeHoseStr.isEmpty()) {

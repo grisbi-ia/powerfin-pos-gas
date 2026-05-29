@@ -39,47 +39,87 @@ export function convertToDispenserState(
 ): { dispensers: DispenserState[]; fusionConnected: boolean } {
 	const configDispensers = config?.dispensers ?? [];
 
-	const dispensers: DispenserState[] = fbResponse.dispensers.map(fb => {
-		const cfg = configDispensers.find(c => c.dispenser_id === fb.dispenserId);
-		const name = cfg?.name ?? `Surtidor ${fb.dispenserId}`;
+	// Build a lookup: Fusion pump ID → { dispenserId, side, hoseConfig }
+	const pumpToDispenser = new Map<number, { dispenserId: number; side: 'A' | 'B'; hose: { hose_id: number; fusion_hose_id: number; fusion_pump_id: number; grade_id: string; grade_name: string } }>();
+	for (const cfg of configDispensers) {
+		for (const sideKey of ['A', 'B'] as const) {
+			for (const h of cfg.sides[sideKey]) {
+				const pumpId = h.fusion_pump_id ?? cfg.fusion_pump_id;
+				pumpToDispenser.set(pumpId, { dispenserId: cfg.dispenser_id, side: sideKey, hose: h });
+			}
+		}
+	}
+
+	// Initialize one DispenserState per config dispenser (all IDLE)
+	const dispenserMap = new Map<number, DispenserState>();
+	for (const cfg of configDispensers) {
+		const initHose = (h: { hose_id: number; fusion_hose_id: number; fusion_pump_id: number; grade_id: string; grade_name: string }, sideKey: 'A' | 'B'): HoseState => ({
+			hoseId: h.hose_id, dispenserId: cfg.dispenser_id, side: sideKey,
+			fusionHoseId: h.fusion_hose_id, gradeId: h.grade_id, gradeName: h.grade_name,
+			status: 'IDLE', subStatus: '', presetAmount: 0, attendantName: null, shiftId: null
+		});
+		dispenserMap.set(cfg.dispenser_id, {
+			dispenserId: cfg.dispenser_id,
+			fusionPumpId: cfg.fusion_pump_id,
+			name: cfg.name,
+			connected: true,
+			online: true,
+			sides: {
+				A: cfg.sides.A.map(h => initHose(h, 'A')),
+				B: cfg.sides.B.map(h => initHose(h, 'B'))
+			}
+		});
+	}
+
+	// Merge Fusion pump states into their config dispensers
+	// Track per-pump online status: dispenser is online if ANY pump is not CLOSED/ERROR
+	const dispenserPumpStates = new Map<number, boolean[]>();
+	for (const fb of fbResponse.dispensers) {
+		const mapping = pumpToDispenser.get(fb.dispenserId);
+		if (!mapping) {
+			console.warn('[bridge-client] No config mapping for Fusion pump ' + fb.dispenserId + ' — state "' + fb.status + '" not shown');
+			continue;
+		}
+		const cfg = configDispensers.find(c => c.dispenser_id === mapping.dispenserId);
+		if (!cfg) continue;
+		const d = dispenserMap.get(mapping.dispenserId);
+		if (!d) continue;
+
 		const activeFusionHose = fb.activeHose ?? 0;
+		const isGlobalState = ['CLOSED', 'ERROR', 'STOPPED'].includes(fb.status);
 
-		const buildSide = (sideKey: 'A' | 'B', hoses: Array<{ hose_id: number; fusion_hose_id: number; grade_id: string; grade_name: string }>): HoseState[] => {
-			return hoses.map((h) => {
-				// Active only if this hose's fusion_hose_id matches the activeFusionHose reported by Fusion
-				const isActive = activeFusionHose > 0 && h.fusion_hose_id === activeFusionHose;
-				return {
-					hoseId: h.hose_id,
-					dispenserId: fb.dispenserId,
-					side: sideKey,
-					fusionHoseId: h.fusion_hose_id,
-					gradeId: h.grade_id,
-					gradeName: h.grade_name,
-					status: isActive ? fb.status : 'IDLE',
-					subStatus: isActive ? fb.subStatus : '',
-					presetAmount: isActive ? fb.presetAmount : 0,
-					attendantName: null,
-					shiftId: null
-				};
-			});
-		};
+		// Track this pump's online status
+		if (!dispenserPumpStates.has(mapping.dispenserId)) {
+			dispenserPumpStates.set(mapping.dispenserId, []);
+		}
+		dispenserPumpStates.get(mapping.dispenserId)!.push(fb.status !== 'CLOSED' && fb.status !== 'ERROR');
 
-		const sides = {
-			A: cfg ? buildSide('A', cfg.sides.A) : [],
-			B: cfg ? buildSide('B', cfg.sides.B) : []
-		};
+		// Connection: dispenser is disconnected only if ALL pumps are disconnected
+		if (!fb.connected) d.connected = false;
 
-		return {
-			dispenserId: fb.dispenserId,
-			fusionPumpId: fb.dispenserId,
-			name,
-			connected: fb.connected,
-			online: fb.status !== 'CLOSED' && fb.status !== 'ERROR',
-			sides
-		};
-	});
+		// Update each hose that belongs to this pump
+		for (const sideKey of ['A', 'B'] as const) {
+			for (const h of d.sides[sideKey]) {
+				const belongsToPump = (cfg.sides[sideKey].find(sh => sh.hose_id === h.hoseId)?.fusion_pump_id ?? cfg.fusion_pump_id) === fb.dispenserId;
+				if (!belongsToPump) continue;
 
-	return { dispensers, fusionConnected: fbResponse.fusionConnected };
+				const isActiveHose = activeFusionHose > 0 && h.fusionHoseId === activeFusionHose;
+				if (isActiveHose || isGlobalState) {
+					h.status = fb.status;
+					h.subStatus = fb.subStatus;
+					h.presetAmount = fb.presetAmount;
+				}
+			}
+		}
+	}
+
+	// Calculate online: dispenser is online if at least one pump is not CLOSED/ERROR
+	for (const [dispId, pumpStates] of dispenserPumpStates) {
+		const d = dispenserMap.get(dispId);
+		if (d) d.online = pumpStates.some(s => s);
+	}
+
+	return { dispensers: Array.from(dispenserMap.values()), fusionConnected: fbResponse.fusionConnected };
 }
 
 // ── Public API (mock-aware: preserves per-hose state when USE_MOCKS) ──

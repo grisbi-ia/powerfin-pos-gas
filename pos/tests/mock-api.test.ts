@@ -19,9 +19,9 @@ describe('PowerFin Mock API', () => {
 	it('fetchConfig returns dispenser configuration with sides', async () => {
 		const { fetchConfig } = await import('$lib/api/powerfin.mock');
 		const config = await fetchConfig('mock-token');
-		expect(config.dispensers).toHaveLength(4);
-		expect(config.dispensers[0].sides.A[0].grade_id).toBe('SUPER');
-		expect(config.dispensers[0].sides.B[0].grade_id).toBe('SUPER');
+		expect(config.dispensers).toHaveLength(1);
+		expect(config.dispensers[0].sides.A[0].grade_id).toBe('DIESEL');
+		expect(config.dispensers[0].sides.B[0].grade_id).toBe('DIESEL');
 	});
 
 	it('searchCustomers finds by name', async () => {
@@ -44,17 +44,17 @@ describe('PowerFin Mock API', () => {
 		expect(results).toHaveLength(0);
 	});
 
-	it('getCustomerPrice returns VIP price', async () => {
+	it('getCustomerPrice returns standard price', async () => {
 		const { getCustomerPrice } = await import('$lib/api/powerfin.mock');
-		const price = await getCustomerPrice('token', '0912345678', 'SUPER');
-		expect(price.unit_price).toBe(1.100);
-		expect(price.price_list).toBe('VIP');
+		const price = await getCustomerPrice('token', '0912345678', 'DIESEL');
+		expect(price.unit_price).toBe(3.103);
+		expect(price.price_list).toBe('STANDARD');
 	});
 
 	it('getCustomerPrice returns standard price for unknown', async () => {
 		const { getCustomerPrice } = await import('$lib/api/powerfin.mock');
 		const price = await getCustomerPrice('token', 'UNKNOWN', 'SUPER');
-		expect(price.unit_price).toBe(1.500);
+		expect(price.unit_price).toBe(3.103);
 		expect(price.price_list).toBe('STANDARD');
 	});
 
@@ -84,7 +84,7 @@ describe('PowerFin Mock API', () => {
 		expect(result.plate).toBe('ABC1234');
 		expect(result.owner?.name).toContain('Pérez');
 		expect(result.incomplete_fields).toHaveLength(0);
-		expect(result.price_list).toBe('VIP');
+		expect(result.price_list).toBe('STANDARD');
 	});
 
 	it('lookupVehicle returns incomplete fields when email missing', async () => {

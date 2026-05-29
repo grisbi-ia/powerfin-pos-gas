@@ -75,100 +75,36 @@ MOCK_USERS = {
 MOCK_CONFIG = {
     "location": {
         "location_id": 1,
-        "name": "NEOPAUTE",
+        "name": "NEOGAS",
         "address": "Av. Principal 123, Cuenca"
     },
     "dispensers": [
         {
             "dispenser_id": 1,
             "fusion_pump_id": 1,
-            "name": "Surtidor 1",
+            "name": "Surtidor DIESEL",
             "printer_island": 1,
             "sides": {
                 "A": [
-                    {"hose_id": 1, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 2, "fusion_hose_id": 2, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
-                    {"hose_id": 3, "fusion_hose_id": 3, "grade_id": "DIESEL", "grade_name": "Diesel"},
-                    {"hose_id": 4, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
+                    {"hose_id": 1, "fusion_pump_id": 1, "fusion_hose_id": 1, "grade_id": "DIESEL", "grade_name": "Diesel"}
                 ],
                 "B": [
-                    {"hose_id": 5, "fusion_hose_id": 5, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 6, "fusion_hose_id": 6, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
-                    {"hose_id": 7, "fusion_hose_id": 7, "grade_id": "DIESEL", "grade_name": "Diesel"},
-                    {"hose_id": 8, "fusion_hose_id": 8, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
-                ]
-            }
-        },
-        {
-            "dispenser_id": 2,
-            "fusion_pump_id": 2,
-            "name": "Surtidor 2",
-            "printer_island": 1,
-            "sides": {
-                "A": [
-                    {"hose_id": 9, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 10, "fusion_hose_id": 2, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
-                    {"hose_id": 11, "fusion_hose_id": 3, "grade_id": "DIESEL", "grade_name": "Diesel"},
-                    {"hose_id": 12, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
-                ],
-                "B": [
-                    {"hose_id": 13, "fusion_hose_id": 5, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 14, "fusion_hose_id": 6, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
-                    {"hose_id": 15, "fusion_hose_id": 7, "grade_id": "DIESEL", "grade_name": "Diesel"},
-                    {"hose_id": 16, "fusion_hose_id": 8, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
-                ]
-            }
-        },
-        {
-            "dispenser_id": 3,
-            "fusion_pump_id": 3,
-            "name": "Surtidor 3",
-            "printer_island": 2,
-            "sides": {
-                "A": [
-                    {"hose_id": 17, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 18, "fusion_hose_id": 2, "grade_id": "DIESEL", "grade_name": "Diesel"}
-                ],
-                "B": [
-                    {"hose_id": 19, "fusion_hose_id": 3, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
-                    {"hose_id": 20, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
-                ]
-            }
-        },
-        {
-            "dispenser_id": 4,
-            "fusion_pump_id": 4,
-            "name": "Surtidor 4",
-            "printer_island": 2,
-            "sides": {
-                "A": [
-                    {"hose_id": 21, "fusion_hose_id": 1, "grade_id": "SUPER", "grade_name": "Gasolina Super"},
-                    {"hose_id": 22, "fusion_hose_id": 2, "grade_id": "DIESEL", "grade_name": "Diesel"}
-                ],
-                "B": [
-                    {"hose_id": 23, "fusion_hose_id": 3, "grade_id": "EXTRA", "grade_name": "Gasolina Extra"},
-                    {"hose_id": 24, "fusion_hose_id": 4, "grade_id": "SUPER", "grade_name": "Gasolina Super"}
+                    {"hose_id": 2, "fusion_pump_id": 2, "fusion_hose_id": 1, "grade_id": "DIESEL", "grade_name": "Diesel"}
                 ]
             }
         }
     ],
     "grades": [
-        {"grade_id": "SUPER", "name": "Gasolina Super", "unit": "litros"},
-        {"grade_id": "EXTRA", "name": "Gasolina Extra", "unit": "litros"},
-        {"grade_id": "DIESEL", "name": "Diesel", "unit": "litros"}
+        {"grade_id": "DIESEL", "name": "Diesel", "unit": "GALONES"}
     ],
     "price_lists": [
         {"code": "STANDARD", "name": "Precio Normal"},
-        {"code": "VIP", "name": "Cliente VIP"}
+        {"code": "VIP", "name": "VIP"}
     ],
     "payment_methods": [
         {"code": "EFECTIVO", "name": "Efectivo", "requires_reference": False},
-        {"code": "TARJETA", "name": "Tarjeta Crédito/Débito", "requires_reference": True},
-        {"code": "QR", "name": "QR / Transferencia", "requires_reference": False},
-        {"code": "CREDITO", "name": "Crédito", "requires_reference": False},
-        {"code": "DEUNA", "name": "DeUna", "requires_reference": True},
-        {"code": "JEPFAST", "name": "JepFast", "requires_reference": True},
-        {"code": "SIPY", "name": "Sipy", "requires_reference": True}
+        {"code": "TRANSFERENCIA", "name": "Transferencia", "requires_reference": True},
+        {"code": "QR", "name": "QR / App", "requires_reference": True}
     ],
     "polling": {
         "interval_ms": 2000,
@@ -180,7 +116,7 @@ MOCK_CUSTOMERS = [
     {
         "customer_id": "0912345678", "id_type": "CED", "id_number": "0912345678",
         "name": "Juan Carlos Pérez", "email": "jperez@email.com", "phone": "0991234567",
-        "price_list": "VIP", "price_list_name": "Cliente VIP",
+        "price_list": "STANDARD", "price_list_name": "Precio Normal",
         "credit_active": False, "credit_balance": 0,
         "plates": ["ABC1234"]
     },
@@ -207,7 +143,7 @@ MOCK_VEHICLES = {
             "customer_id": "0912345678", "id_type": "CED", "id_number": "0912345678",
             "name": "Juan Carlos Pérez", "email": "jperez@email.com", "phone": "0991234567"
         },
-        "price_list": "VIP", "price_list_name": "Cliente VIP"
+        "price_list": "STANDARD", "price_list_name": "Precio Normal"
     },
     "XYZ5678": {
         "plate": "XYZ5678", "vehicle_found": True, "incomplete_fields": ["email"],
@@ -220,8 +156,8 @@ MOCK_VEHICLES = {
 }
 
 PRICES = {
-    "VIP": 1.100,
-    "STANDARD": 1.500
+    "VIP": 2.950,
+    "STANDARD": 3.103
 }
 
 

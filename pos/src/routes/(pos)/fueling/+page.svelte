@@ -64,8 +64,8 @@
 						dispenser: String(dispenserId),
 						hose: String(hoseId),
 						side,
-						amount: String(presetAmount * 0.85), // mock: 85% of preset
-						volume: String((presetAmount * 0.85 / (unitPrice || 1.5)).toFixed(3)),
+						amount: String(presetAmount), // mock: 85% of preset
+						volume: String((presetAmount / (unitPrice || 3.103)).toFixed(3)),
 						preset: String(presetAmount),
 						price: String(unitPrice),
 						customerName,

@@ -66,7 +66,7 @@
 				primaryHose: pendingCollectionHose,
 				allIdle: false,
 				isPendingCollection: true,
-				pendingAmount: pendingOrder.finalAmount || pendingOrder.presetAmount * 0.85,
+				pendingAmount: pendingOrder.finalAmount || pendingOrder.presetAmount,
 				pendingCustomer: pendingOrder.customerName
 			};
 		}
@@ -82,9 +82,11 @@
 			};
 		}
 
+		// Use actual hose status (may be CLOSED, ERROR, etc. — not always IDLE)
+		const primaryHose = hoses[0] ?? null;
 		return {
-			status: 'IDLE',
-			primaryHose: hoses[0],
+			status: primaryHose?.status ?? 'IDLE',
+			primaryHose,
 			allIdle,
 			isPendingCollection: false,
 			pendingAmount: 0,

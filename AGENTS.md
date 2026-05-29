@@ -45,6 +45,7 @@ Server:           192.168.1.10       (Debian 12, direct install, NO Docker)
 3. FusionBridge maintains one single TCP connection to Synergy
 4. Printing is FusionBridge's responsibility, not the browser's
 5. `accounting_date` ≠ shift date — turns can cross midnight
+6. **NO silent fallbacks** — errors must be visible, never swallowed. No automatic Plan B (e.g. AUTH when PRESET fails). Fallbacks require explicit manual activation and developer approval.
 
 ## Language rules
 

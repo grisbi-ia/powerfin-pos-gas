@@ -56,8 +56,8 @@
 				hoseId = foundOrder.hoseId;
 				side = foundOrder.side;
 				// Mock: 85% of preset
-				finalAmount = foundOrder.finalAmount || (foundOrder.presetAmount * 0.85);
-				finalVolume = foundOrder.finalVolume || ((foundOrder.presetAmount * 0.85) / (foundOrder.unitPrice || 1.5)).toFixed(3);
+				finalAmount = foundOrder.finalAmount || (foundOrder.presetAmount);
+				finalVolume = foundOrder.finalVolume || ((foundOrder.presetAmount) / (foundOrder.unitPrice || 3.103)).toFixed(3);
 				presetAmount = foundOrder.presetAmount;
 				unitPrice = foundOrder.unitPrice;
 				customerName = foundOrder.customerName;

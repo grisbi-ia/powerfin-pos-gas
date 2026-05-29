@@ -64,3 +64,6 @@ jacoco.exec
 coverage/
 tools/powerfin_state.json
 .clauge-worktrees/
+tools/__pycache__/
+pos/.svelte-kit/
+__pycache__/

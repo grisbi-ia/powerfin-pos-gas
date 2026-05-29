@@ -31,7 +31,9 @@
 	let billingCustomer: Customer | null = null;
 	let presetType: PresetType = 'MONEY';
 	let presetValue = '';
-	let unitPrice = 1.500;
+	let unitPrice = 3.103;
+	$: gradeUnit = $config?.grades?.find(g => g.grade_id === selectedHose?.grade_id)?.unit || 'GALONES';
+	$: unitAbbr = gradeUnit === 'GALONES' ? 'gal' : 'L';
 	let loading = false;
 	let error = '';
 	let idType: 'CED' | 'RUC' = 'CED';
@@ -64,7 +66,7 @@
 	$: canConfirmPayment = paymentMethod !== '' && (!needsReference || referenceCode.trim() !== '');
 
 	$: finalAmount = collectOrder
-		? (collectOrder.finalAmount || collectOrder.presetAmount * 0.85)
+		? (collectOrder.finalAmount || collectOrder.presetAmount)
 		: 0;
 	$: finalVolume = collectOrder
 		? (collectOrder.finalVolume || (finalAmount / (collectOrder.unitPrice || 1.5)).toFixed(3))
@@ -73,7 +75,7 @@
 
 	$: if (mode === 'sale' && sideHoses.length === 1) {
 		selectedHose = sideHoses[0];
-		unitPrice = 1.500;
+		unitPrice = 3.103;
 		step = 'plate';
 	}
 	$: if (mode === 'collect') {
@@ -88,7 +90,7 @@
 	function submitIncomplete() { if (incompleteEmail && vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail, plate }); } }
 	function submitRegistration() { if (regIdNumber && regName && regEmail) { handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName, email: regEmail, plate }); } }
 
-	function selectHose(hose: HoseConfig) { selectedHose = hose; unitPrice = 1.500; step = 'plate'; }
+	function selectHose(hose: HoseConfig) { selectedHose = hose; unitPrice = 3.103; step = 'plate'; }
 
 	async function handlePlateSearch() {
 		if (plate.length < 3) return;
@@ -98,12 +100,12 @@
 			vehicleResult = result; plate = result.plate;
 			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
 			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
-			else { confirmedOwner = result.owner; unitPrice = result.price_list === 'VIP' ? 1.100 : 1.500; step = 'billing'; }
+			else { confirmedOwner = result.owner; unitPrice = result.price_list === 'VIP' ? 2.950 : 3.103; step = 'billing'; }
 		} catch { error = 'Error al buscar placa'; }
 		finally { loading = false; }
 	}
 
-	function handleSkipPlate() { vehicleResult = null; confirmedOwner = null; unitPrice = 1.500; step = 'presetType'; }
+	function handleSkipPlate() { vehicleResult = null; confirmedOwner = null; unitPrice = 3.103; step = 'presetType'; }
 	function handleBillingConfirm() { if (vehicleResult?.owner) confirmedOwner = vehicleResult.owner; step = 'presetType'; }
 	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
 
@@ -123,7 +125,7 @@
 		loading = true; idLookupError = '';
 		try {
 			const customer = await powerfin.getCustomerById('token', idType, idNumber, true);
-			if (customer) { billingCustomer = customer; unitPrice = customer.price_list === 'VIP' ? 1.100 : 1.500; step = 'billing'; }
+			if (customer) { billingCustomer = customer; unitPrice = customer.price_list === 'VIP' ? 2.950 : 3.103; step = 'billing'; }
 			else { step = 'registration'; }
 		} catch { idLookupError = 'Error al buscar'; }
 		finally { loading = false; }
@@ -136,7 +138,7 @@
 			await powerfin.registerCustomer('token', formData);
 			plate = formData.plate;
 			vehicleResult = { plate: formData.plate, vehicle_found: true, incomplete_fields: [], owner: { customer_id: formData.id_number, id_type: formData.id_type, id_number: formData.id_number, name: formData.name, email: formData.email, phone: null }, price_list: 'STANDARD', price_list_name: 'Precio Normal' };
-			confirmedOwner = vehicleResult.owner; unitPrice = 1.500; step = 'billing';
+			confirmedOwner = vehicleResult.owner; unitPrice = 3.103; step = 'billing';
 		} catch { error = 'Error al registrar'; }
 		finally { loading = false; }
 	}
@@ -153,7 +155,7 @@
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
 			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
-			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: dispenserId, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
+			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 					const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
 			const authorizedBy = $shift?.user_name ?? '';
 			pendingOrders.addOrder({
@@ -241,7 +243,7 @@
 							<button class="touch-btn w-full p-4 rounded-xl border-2 border-gray-200 hover:border-primary text-left"
 								on:click={() => selectHose(hose)}>
 								<div class="font-semibold text-gray-800">Pistola {hose.hose_id} · ⛽ {hose.grade_name}</div>
-								<div class="text-xs text-gray-500">${unitPrice.toFixed(3)}/L</div>
+								<div class="text-xs text-gray-500">${unitPrice.toFixed(3)}/{unitAbbr}</div>
 							</button>
 						{/each}
 					</div>
@@ -276,7 +278,7 @@
 					<div class="bg-green-50 rounded-xl p-4 mb-3">
 						<div class="font-semibold text-gray-800">{(billingCustomer ?? vehicleResult?.owner)?.name}</div>
 						<div class="text-sm text-gray-500">{(billingCustomer ?? vehicleResult?.owner)?.id_type}: {(billingCustomer ?? vehicleResult?.owner)?.id_number}</div>
-						<div class="text-sm text-purple-600 font-medium mt-1">{vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? ''} · ${unitPrice.toFixed(3)}/L</div>
+						<div class="text-sm text-purple-600 font-medium mt-1">{vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? ''} · ${unitPrice.toFixed(3)}/{unitAbbr}</div>
 					</div>
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold" on:click={handleBillingConfirm}>✓ Correcto</button>
@@ -369,7 +371,7 @@
 				<div class="card p-4 mb-4">
 					{#if presetType === 'MONEY'}
 						<h3 class="text-sm font-semibold text-gray-700 mb-1">Monto a despachar</h3>
-						<div class="text-xs text-gray-500 mb-3">Precio: ${unitPrice.toFixed(3)}/L</div>
+						<div class="text-xs text-gray-500 mb-3">Precio: ${unitPrice.toFixed(3)}/{unitAbbr}</div>
 						<input type="number" bind:value={presetValue} placeholder="0.00" step="0.01" min="1"
 							class="w-full rounded-xl border border-gray-200 px-4 py-3 text-2xl text-center font-bold focus:border-primary focus:outline-none mb-3" />
 						<div class="flex flex-wrap gap-2 mb-3">
@@ -377,10 +379,10 @@
 								<button class="touch-btn px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200" on:click={() => setQuickAmount(btn)}>${btn}</button>
 							{/each}
 						</div>
-						{#if estimatedLiters}<div class="text-sm text-gray-500 text-center">≈ {estimatedLiters} litros</div>{/if}
+						{#if estimatedLiters}<div class="text-sm text-gray-500 text-center">≈ {estimatedLiters} {gradeUnit.toLowerCase()}</div>{/if}
 					{:else if presetType === 'VOLUME'}
 						<h3 class="text-sm font-semibold text-gray-700 mb-1">Galones a despachar</h3>
-						<div class="text-xs text-gray-500 mb-3">Precio: ${unitPrice.toFixed(3)}/L</div>
+						<div class="text-xs text-gray-500 mb-3">Precio: ${unitPrice.toFixed(3)}/{unitAbbr}</div>
 						<input type="number" bind:value={presetValue} placeholder="0.00" step="0.01" min="0.1"
 							class="w-full rounded-xl border border-gray-200 px-4 py-3 text-2xl text-center font-bold focus:border-primary focus:outline-none mb-3" />
 						<div class="flex flex-wrap gap-2 mb-3">
@@ -432,7 +434,7 @@
 				<div class="card p-4 mb-4">
 					<div class="space-y-2">
 						<div class="flex justify-between text-sm"><span class="text-gray-500">Volumen</span><span class="font-medium">{finalVolume} L</span></div>
-						<div class="flex justify-between text-sm"><span class="text-gray-500">Precio</span><span class="font-medium">${collectOrder.unitPrice.toFixed(3)}/L</span></div>
+						<div class="flex justify-between text-sm"><span class="text-gray-500">Precio</span><span class="font-medium">${collectOrder.unitPrice.toFixed(3)}/{unitAbbr}</span></div>
 						{#if collectOrder.customerName}<div class="flex justify-between text-sm"><span class="text-gray-500">Cliente</span><span class="font-medium">{collectOrder.customerName}</span></div>{/if}
 						{#if collectOrder.plate}<div class="flex justify-between text-sm"><span class="text-gray-500">Placa</span><span class="font-medium font-mono">{collectOrder.plate}</span></div>{/if}
 						<hr class="border-gray-100" />

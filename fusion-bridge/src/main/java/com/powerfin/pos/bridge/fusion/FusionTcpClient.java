@@ -35,12 +35,10 @@ public class FusionTcpClient {
     private volatile boolean connected = false;
 
     private static final String[] MANDATORY_SUBSCRIPTIONS = {
-        "EVT_PUMP_STATUS_CHANGE_ID_000",
-        "EVT_PUMP_NEW_TRANSACTION",
-        "EVT_PAYMENT_SALE_CLEARED",
-        "EVT_PAYMENT_TRANSACTION_LOCK",
-        "EVT_NEW_PRICE_CHANGE_APPLIED",
-        "EVT_NEW_CONFIG_APPLIED"
+        // Use ALL wildcard — individual event subscriptions don't broadcast
+        // reliably on this firmware (Rel-5.19.1). ALL ensures we receive
+        // every event regardless of which connection originated the request.
+        "ALL"
     };
 
     void onStart(@Observes StartupEvent ev) {

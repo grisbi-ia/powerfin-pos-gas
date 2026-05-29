@@ -53,6 +53,7 @@ export interface DispenserConfig {
 export interface HoseConfig {
 	hose_id: number;
 	fusion_hose_id: number;
+	fusion_pump_id: number;
 	grade_id: string;
 	grade_name: string;
 }

@@ -16,7 +16,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const results = await searchCustomers(mockToken, '0912345678');
 			expect(results).toHaveLength(1);
 			expect(results[0].name).toContain('Pérez');
-			expect(results[0].price_list).toBe('VIP');
+			expect(results[0].price_list).toBe('STANDARD');
 		});
 
 		it('finds customer by RUC', async () => {
@@ -35,24 +35,24 @@ describe('Phase 4 — Complete Sales Flow', () => {
 	});
 
 	describe('Price lookup', () => {
-		it('returns VIP price for VIP customer', async () => {
+		it('returns standard price for Juan Pérez', async () => {
 			const { getCustomerPrice } = await import('$lib/api/powerfin.mock');
-			const price = await getCustomerPrice(mockToken, '0912345678', 'SUPER');
-			expect(price.unit_price).toBe(1.100);
-			expect(price.price_list).toBe('VIP');
+			const price = await getCustomerPrice(mockToken, '0912345678', 'DIESEL');
+			expect(price.unit_price).toBe(3.103);
+			expect(price.price_list).toBe('STANDARD');
 		});
 
 		it('returns standard price for standard customer', async () => {
 			const { getCustomerPrice } = await import('$lib/api/powerfin.mock');
 			const price = await getCustomerPrice(mockToken, '1790012345001', 'SUPER');
-			expect(price.unit_price).toBe(1.500);
+			expect(price.unit_price).toBe(3.103);
 			expect(price.price_list).toBe('STANDARD');
 		});
 
 		it('returns standard price for unknown customer', async () => {
 			const { getCustomerPrice } = await import('$lib/api/powerfin.mock');
 			const price = await getCustomerPrice(mockToken, 'UNKNOWN', 'SUPER');
-			expect(price.unit_price).toBe(1.500);
+			expect(price.unit_price).toBe(3.103);
 		});
 	});
 
@@ -224,7 +224,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const customers = await searchCustomers(auth.access_token, 'Pérez');
 			expect(customers.length).toBeGreaterThan(0);
 			const price = await getCustomerPrice(auth.access_token, customers[0].customer_id, 'SUPER');
-			expect(price.unit_price).toBe(1.100);
+			expect(price.unit_price).toBe(3.103);
 
 			// 4. Create dispatch (with side and hose)
 			const { createDispatch } = await import('$lib/api/powerfin.mock');
@@ -273,15 +273,19 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const config = await fetchConfig(mockToken);
 			const d1 = config.dispensers[0];
 
-			// Side A has SUPER and EXTRA
+			// Side A and B both have DIESEL (1 hose each)
 			const gradesA = d1.sides.A.map(h => h.grade_id);
-			expect(gradesA).toContain('SUPER');
-			expect(gradesA).toContain('EXTRA');
+			expect(gradesA).toContain('DIESEL');
+			expect(gradesA).toHaveLength(1);
 
-			// Side B has DIESEL and SUPER
+			// Side B: mapped to Fusion pump 2
 			const gradesB = d1.sides.B.map(h => h.grade_id);
 			expect(gradesB).toContain('DIESEL');
-			expect(gradesB).toContain('SUPER');
+			expect(gradesB).toHaveLength(1);
+
+			// Each side has its own fusion_pump_id
+			expect(d1.sides.A[0].fusion_pump_id).toBe(1);
+			expect(d1.sides.B[0].fusion_pump_id).toBe(2);
 		});
 	});
 });

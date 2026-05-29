@@ -73,6 +73,7 @@ class FusionMessageBuilderTest {
         assertTrue(msg.contains("HO=1@9.990"));
         assertTrue(msg.contains("PAY_TY=EFECTIVO"));
         assertTrue(msg.contains("PAY_IN=OV=OV-001~CLI=0912345678~PLC=ABC-1234~LISTA=VIP"));
+        assertTrue(msg.contains("LV=1"));
         assertTrue(msg.contains("FTS=YES"));
         assertTrue(msg.endsWith("|^"));
     }
@@ -174,6 +175,35 @@ class FusionMessageBuilderTest {
         assertTrue(FusionMessageBuilder.buildStopAll().endsWith("^"));
         assertTrue(FusionMessageBuilder.buildClearPreset(1).endsWith("^"));
         assertTrue(FusionMessageBuilder.buildClearStop(1).endsWith("^"));
+        assertTrue(FusionMessageBuilder.buildAuth(1, 1).endsWith("^"));
+    }
+
+    @Test
+    void buildAuth() {
+        String msg = FusionMessageBuilder.buildAuth(1, 1);
+        assertTrue(msg.contains("REQ_PUMP_AUTH_ID_001"));
+        assertTrue(msg.contains("HO=1"));
+        assertTrue(msg.endsWith("|^"));
+        // AUTH does NOT support preset amount, price, or PAY_IN
+        assertFalse(msg.contains("TY="), "AUTH should not contain preset type");
+        assertFalse(msg.contains("VA="), "AUTH should not contain preset value");
+        assertFalse(msg.contains("PAY_IN="), "AUTH should not contain PAY_IN");
+    }
+
+    @Test
+    void buildAuthPump2Hose2() {
+        String msg = FusionMessageBuilder.buildAuth(2, 2);
+        assertTrue(msg.contains("REQ_PUMP_AUTH_ID_002"));
+        assertTrue(msg.contains("HO=2"));
+    }
+
+    @Test
+    void buildAuthLenFieldIsCorrect() {
+        String msg = FusionMessageBuilder.buildAuth(1, 1);
+        String lenStr = msg.substring(0, 5);
+        int expectedLen = Integer.parseInt(lenStr);
+        String body = msg.substring(8);
+        assertEquals(expectedLen, body.length());
     }
 
     @Test

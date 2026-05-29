@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-05-28)
+## Estado actual (2026-05-29)
 
 ### ✅ Fases completadas
 
@@ -12,212 +12,178 @@
 | 4 | `v0.3.0` | Flujo de venta completo |
 | 5 | `v0.5.0` | Impresión térmica — ESC/POS, config multi-isla, templates editables |
 | 5.1 | `v0.6.0` | Módulo de caja + refactor turnos + historial + usuarios en línea |
+| 6 | `v0.7.0` | **Validación hardware real — Wayne Synergy** ✅ |
 
 ### 📊 Tests
 
 ```bash
-# FusionBridge — 69 tests
+# FusionBridge — 72 tests
 cd fusion-bridge && ./mvnw test   # BUILD SUCCESS
 
 # POS — 41 tests (Vitest)
 cd pos && npm run test            # 41 passed
 
-# Total: 110 tests pasando
-```
-
-### 🏗️ Ramas
-
-```
-main     — último merge de develop
-develop  — cambios de la sesión pendientes de commit
+# Total: 113 tests pasando
 ```
 
 ---
 
-## Cambios realizados esta sesión (v0.6.0)
+## Logros de la sesión 2026-05-29
 
-### 1. Módulo de Caja — Ingresos, Egresos, Transferencias
+### 1. PRESET_EMPTY resuelto ✅
 
-**Archivos nuevos:**
-- `pos/src/routes/(pos)/cash/+page.svelte` — Dashboard: saldo, botones rápidos, historial movimientos
-- `pos/src/routes/(pos)/cash/movement/+page.svelte` — Form ingreso/egreso: valor + botones rápidos + observación
-- `pos/src/routes/(pos)/cash/transfer/+page.svelte` — Form transferencia: selección de destinatario (incluye Caja Fuerte), valor, observación
+**Causa:** Parámetros del Transaction Engine (Retries, ZeroSale, AuthTimeout) no se propagaban de ForecourtManager a las bombas. Quedaban en `-1`.
 
-**Archivos modificados:**
-- `pos/src/lib/api/types.ts` — Tipos: `CashMovement`, `CashTransfer`, `OnlineUser`, `ShiftCashSummary`, `SAFE_VAULT_USER_ID`, `SAFE_VAULT_ROLE`
-- `pos/src/lib/api/powerfin.ts` — Funciones: `createCashMovement`, `getCashMovements`, `getShiftCashSummary`, `getOnlineUsers`, `createTransfer`
-- `pos/src/lib/api/powerfin.mock.ts` — Mocks con persistencia localStorage, cálculo dinámico de ventas por usuario
-- `tools/powerfin_server.py` — Endpoints cash + cálculo de ventas por shift
-- `pos/src/routes/(pos)/+page.svelte` — Botón "Caja" (💰) en nav
+**Solución:** Desconexión/reconexión física del cable serial del dispensador forzó la reinicialización del Transaction Engine desde la DB del Fusion.
 
-### 2. Refactor de Turnos
+**Hallazgo:** Los cambios de configuración de comportamiento (ATO, Retries) requieren reinicializar el dispensador. Los cambios de precios se propagan en caliente.
 
-**Nuevo flujo:**
-- Login → siempre va al dashboard (sin redirect a `/shift/open`)
-- Sin turno abierto → card "Abrir Turno" con datos del usuario + fecha/hora, surtidores bloqueados
-- Con turno abierto → todo funciona normalmente
-- Apertura de turno: efectivo inicial fijo $0.00, solo confirmación
-- Nav: "Cerrar turno" solo visible si hay turno abierto, "Caja"/"Historial" deshabilitados sin turno
+### 2. Conexión FusionBridge → Synergy real ✅
 
-**Archivos modificados:**
-- `pos/src/routes/(pos)/+page.svelte` — Eliminado redirect, agregado card "Abrir Turno", bloqueo de operaciones
-- `pos/src/routes/shift/open/+page.svelte` — Simplificado a confirmación (sin input de efectivo)
-- `pos/src/routes/(pos)/cash/+page.svelte` — Guarda de turno
-- `pos/src/routes/(pos)/cash/movement/+page.svelte` — Guarda de turno
-- `pos/src/routes/(pos)/cash/transfer/+page.svelte` — Guarda de turno
-- `pos/src/lib/components/SaleWizard.svelte` — Guarda de turno
-- `pos/src/lib/components/Header.svelte` — Muestra turno solo si existe
+- `FusionTcpClient` apunta a `192.168.1.20:3011`
+- `SUBSCRIBE|ALL` para recibir todos los eventos (suscripciones individuales no funcionan en Rel-5.19.1)
+- `REQ_PUMP_PRESET` como comando principal de autorización
+- `REQ_PUMP_AUTH` como Plan B manual (endpoint `/api/dispatch/authorize-auth`)
+- Keep-alive ECHO cada 120s, reconexión con backoff
 
-### 3. Usuarios en Línea
+### 3. Precio dinámico ✅
 
-**Archivo nuevo:**
-- `pos/src/routes/(pos)/users/+page.svelte` — Dashboard de usuarios en línea: resumen general (en línea, ventas, monto) + lista individual con ventas y total facturado por turno. Accesible sin turno abierto.
+- `HO=1@PRECIO` en el PRESET: la bomba despacha al precio del cliente
+- `LV=1` agregado para evitar error `Price Level [0]`
+- Precio DIESEL actualizado en Synergy: $9.999 → $3.103
+- Al expirar ATO, el precio se restaura automáticamente al de consola
+- `PAY_IN` viaja con todos los datos del cliente (OV, CLI, PLC, LISTA)
 
-**Archivos modificados:**
-- `pos/src/lib/api/types.ts` — `OnlineUser` extendido con `sales_count` + `total_amount`
-- `pos/src/lib/api/powerfin.mock.ts` — Cálculo dinámico de ventas desde `mockOrders`
-- `tools/powerfin_server.py` — `GET /api/pos/users/online` incluye ventas por shift
-- `pos/src/routes/(pos)/+page.svelte` — Botón "Usuarios" (👥) en nav, siempre visible
+### 4. Mapeo surtidor/manguera multi-pump ✅
 
-### 4. Historial de Turno
+**Realidad física:** 1 dispensador DIESEL con 2 mangueras.
+**Synergy:** Configurado como 2 pumps independientes (pump 1 → lado A, pump 2 → lado B).
 
-**Archivo modificado:**
-- `pos/src/routes/(pos)/history/+page.svelte` — Completamente rediseñado:
-  - Resumen: # despachos y monto total
-  - Tab Despachos (⛽): lista de órdenes con estado, monto, cliente, placa, factura
-  - **Botón "Reimprimir ticket"** en órdenes completadas
-  - Tab Caja (💰): resumen ingresos/egresos + lista de movimientos con saldo running
+**Solución en código:**
+- `HoseConfig.fusion_pump_id`: cada manguera declara a qué pump del Fusion pertenece
+- `convertToDispenserState`: mergea múltiples Fusion pumps en UN solo `DispenserState`
+- `online = any(pump OK)`: el surtidor está online si al menos un pump no está CLOSED/ERROR
+- Estados globales (CLOSED, ERROR, STOPPED) se aplican a todas las mangueras del pump
 
-### 5. API Endpoints consolidados (21 endpoints PowerFin)
+### 5. Visualización de estados corregida ✅
 
-| # | Método | Endpoint |
-|---|--------|----------|
-| 1 | `POST` | `/api/pos/auth/login` |
-| 2 | `GET` | `/api/pos/config` |
-| 3 | `GET` | `/api/pos/vehicles?plate=` |
-| 4 | `GET` | `/api/pos/customers?q=` |
-| 5 | `GET` | `/api/pos/customers/by-id` |
-| 6 | `POST` | `/api/pos/customers` |
-| 7 | `GET` | `/api/pos/prices` |
-| 8 | `POST` | `/api/pos/shifts/open` |
-| 9 | `GET` | `/api/pos/shifts/current` |
-| 10 | `POST` | `/api/pos/shifts/{id}/close` |
-| 11 | `GET` | `/api/pos/shifts/{id}/dispatches` |
-| 12 | `POST` | `/api/pos/dispatches` |
-| 13 | `POST` | `/api/pos/dispatches/{id}/complete` |
-| 14 | `POST` | `/api/pos/dispatches/{id}/cancel` |
-| 15 | `POST` | `/api/pos/dispatches/{id}/collect` |
-| 16 | `POST` | `/api/pos/cash-movements` |
-| 17 | `GET` | `/api/pos/shifts/{id}/cash-movements` |
-| 18 | `GET` | `/api/pos/shifts/{id}/cash-summary` |
-| 19 | `GET` | `/api/pos/users/online` |
-| 20 | `POST` | `/api/pos/transfers` |
-| 21 | `POST` | `/api/pos/cash-movements` (legacy) |
+| Bug | Causa | Fix |
+|-----|-------|-----|
+| Siempre "Disponible" | `getSideInfo` hardcodeaba `status:'IDLE'` | Usa `primaryHose.status` real |
+| Surtidor "offline" | `online=false` global ignoraba pumps activos | `online = pumpStates.some(s => s)` |
+| CLOSED invisible | `isActive` solo con `activeHose>0` | `isGlobalState` para CLOSED/ERROR/STOPPED |
+| activeHose=0 en AUTHORIZED | `HO` vacío, el dato viene en `PR_HO` | `FusionEventHandler` extrae de `PR_HO` |
+| 2 pumps → 1 dispenser se sobrescribían | `map()` creaba 2 objetos con mismo ID | Merge en UN solo `DispenserState` |
+
+### 6. Mock PowerFin actualizado ✅
+
+- 1 dispensador DIESEL con 2 lados (Side A → pump 1, Side B → pump 2)
+- Precio STANDARD: $3.103/galón
+- Cliente Juan Carlos Pérez → STANDARD (ya no VIP)
+- Unidad: GALONES (no litros)
+
+### 7. Herramientas y scripts ✅
+
+| Script | Función |
+|--------|---------|
+| `diagnostico_preset.py` | Verificar estado + probar PRESET en bombas |
+| `reiniciar_bomba.py` | Reinicializar Transaction Engine vía protocolo |
+| `actualizar_precio.py` | Cambiar precio de combustible en Synergy |
+| `start.sh` | Control de servicios (start/stop/status) |
+
+### 8. Reglas de arquitectura ✅
+
+- **NO silent fallbacks** agregado a `AGENTS.md`
+- `CONFIGURACION_WAYNE.md`: procedimiento completo de cambios de configuración
+
+---
+
+## Configuración actual del sitio
+
+| Dato | Valor |
+|------|-------|
+| Estación | NEOGAS |
+| Surtidores | 1 físico (DIESEL, 2 mangueras) → 2 pumps lógicos en Synergy |
+| Combustible | DIESEL (Grade 3, P3) |
+| Precio | $3.103/galón |
+| Pump 1 → Side A | Fusion hose 1 |
+| Pump 2 → Side B | Fusion hose 1 |
+| ATO | 180s |
+| Moneda | DÓLARES ($) |
+| Firmware | Rel-5.19.1 |
 
 ---
 
 ## Cómo arrancar todo
 
 ```bash
-# Terminal 1 — Simulador Wayne Fusion
-cd fusion-simulator && node server.js
+cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 
-# Terminal 2 — FusionBridge (Quarkus)
-cd fusion-bridge && ./mvnw quarkus:dev
+# Todo de una vez:
+./start.sh           # POS + PowerFin
+./start.sh bridge    # FusionBridge (tarda ~15s)
 
-# Terminal 3 — PowerFin Server (Python)
-python3 tools/powerfin_server.py
+# O individual:
+./start.sh powerfin  # PowerFin mock :8080
+./start.sh bridge    # FusionBridge :8090
+./start.sh pos       # POS :5173
 
-# Terminal 4 — POS (SvelteKit)
-cd pos && npm run dev -- --host 0.0.0.0
+# Control:
+./start.sh stop      # Detener todo
+./start.sh status    # Ver estado
 ```
 
-Abrir en el celular: `http://192.168.1.10:5173`
+Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
 
 ---
 
-## Para la próxima sesión — Conexión directa a Wayne Synergy
+## Pendiente para la próxima sesión
 
-### Objetivo: Quitar el simulador y conectar FusionBridge al Synergy real
-
-### 1. Revisar y validar comandos Fusion a enviar
-
-**Comandos que FusionBridge envía al Synergy:**
-
-| Comando | Propósito | Parámetros clave |
-|---------|-----------|-----------------|
-| `REQ_PUMP_PRESET` | Autorizar despacho (monto fijo) | `PU=pump_id`, `HO=fusion_hose_id`, `PR=amount`, `OV=order_id`, `CLI=customer_id` |
-| `REQ_VOLUME_PRESET` | Autorizar despacho (volumen fijo) | `PU=pump_id`, `HO=fusion_hose_id`, `VL=volume`, `OV=order_id` |
-| `REQ_CLEAR_SALE` | Cancelar/limpiar preset en manguera | `PU=pump_id`, `HO=fusion_hose_id` |
-| `ECHO` | Keep-alive (cada 120s) | — |
-
-**Formato del protocolo:**
-```
-<len>|<crypt>|<version>|<user_id>|<msg_type>|<event>|<dest>|<origin>|<params>|^
-```
-- `len` = 5 dígitos, desde `<version>` hasta `^` inclusive
-- `crypt=5` = sin encriptación
-- Parámetros: `KEY=VALUE|KEY=VALUE`
-
-### 2. Eventos que FusionBridge recibe del Synergy
-
-| Evento | Significado | Datos útiles |
-|--------|-------------|-------------|
-| `PUMP_STATUS_CHANGE` | Cambio de estado de manguera | `PU`, `HO`, `ST` (IDLE/AUTHORIZED/FUELLING/STOPPED) |
-| `DELIVERY_PROGRESS` | Progreso de despacho (vol+amount) | `PU`, `HO`, `VL`, `AM` |
-| `NEW_TRANSACTION` | Venta completada | `PU`, `HO`, `VL`, `AM`, `UP`, `SA` (sale_id) |
-| `TRANSACTION_LOCK` | Venta bloqueada para cobro | `PU`, `HO` |
-| `SALE_CLEARED` | Venta liberada/limpiada | `PU`, `HO` |
-
-### 3. Tareas pendientes
+### Prioridad 1 — Prueba de despacho físico real
 
 ```
-☐ Conectar FusionBridge a 192.168.1.20:3011 (Synergy real)
-☐ Validar REQ_PUMP_PRESET con datos reales de la gasolinera
-☐ Validar estados de manguera contra dispensador físico
-☐ Probar ciclo completo: autorizar → despachar → completar → cobrar
-☐ Validar keep-alive ECHO/120s contra Synergy
-☐ Probar reconexión automática al cortar TCP
-☐ Probar impresión en 192.168.1.31:9100
-☐ Ajustar ATO en consola Wayne de 0 → 180 segundos
-☐ Probar múltiples despachos simultáneos (lados A y B)
+☐ Levantar pistola + palanca manual en dispensador físico
+☐ Verificar transiciones de estado: IDLE → CALLING → AUTHORIZED → STARTING → FUELLING → EOT → IDLE
+☐ Verificar NEW_TRANSACTION: SA, VO, AM, PU, PAY_IN correctos
+☐ Verificar DELIVERY_PROGRESS en tiempo real
+☐ Flujo completo: autorizar → despachar → cobrar → imprimir
+☐ Probar despachos simultáneos en ambos lados
 ```
 
-### 4. Archivos clave a revisar
+### Prioridad 2 — Prueba de topologías de dispensadores
 
 ```
-fusion-bridge/src/main/java/com/powerfin/pos/bridge/
-├── fusion/FusionTcpClient.java        ← Conexión TCP, reconexión, keep-alive
-├── fusion/FusionMessage.java          ← Parser de mensajes (pipe-delimited)
-├── fusion/FusionMessageBuilder.java   ← Constructor de comandos (len correcto)
-├── fusion/FusionEventHandler.java     ← Manejo de eventos del Synergy
-├── dispatch/DispatchResource.java     ← REST API para autorizar/cancelar
-├── dispenser/DispenserStatusCache.java ← Cache de estado de surtidores
-├── sse/StationEventBus.java           ← Broadcast SSE a clientes
-└── sse/SseEventResource.java          ← Endpoint SSE
+☐ Probar mapeo con 2+ dispensadores físicos (varios fusion_pump_id por dispenser)
+☐ Probar dispensador con múltiples mangueras por lado (ej: 2 grades por lado)
+☐ Probar mezcla: algunos pumps 1:1 con dispensers, otros multi-pump → 1 dispenser
+☐ Validar que convertToDispenserState mergea correctamente en todas las topologías
+☐ Validar que online/offline funciona con combinaciones complejas
 ```
 
-### 5. Comandos de prueba directa (desde el servidor)
+### Prioridad 3 — Impresión térmica
 
-```bash
-# Test de conectividad
-echo -n "00012|5|2||ECHO||||^" | nc -v 192.168.1.20 3011
-
-# Test de estado de surtidores (suscribirse)
-echo -n "00020|5|2||SUBSCRIBE||||^" | nc -v 192.168.1.20 3011
-
-# Test de impresora
-nc -zv 192.168.1.31 9100
-
-# Health check FusionBridge
-curl -s http://localhost:8090/health
+```
+☐ Probar impresora en 192.168.1.31:9100
+☐ Verificar formato de ticket ESC/POS
+☐ Integrar impresión en flujo de cobro
 ```
 
-### NOTAS
+### Prioridad 4 — Integración con PowerFin ERP real
+
+```
+☐ Conectar FusionBridge al ERP real (cuando esté disponible)
+☐ Validar APIs de clientes, precios, listas
+☐ Validar cierre de turno con datos reales
+```
+
+---
+
+## NOTAS
 
 - `plate = 'ABC1234'` está hardcodeado en `SaleWizard.svelte:28` para pruebas. Remover ANTES de producción.
-- El delay de 2-5s en "Despachando" → "Cobrar" es del intervalo de polling
-- No modificar estructura de polling/SSE sin tests previos
+- El dispensador físico requiere **palanca manual** además de levantar la pistola (equipo antiguo)
+- `SUBSCRIBE|ALL` es necesario en firmware Rel-5.19.1 (suscripciones individuales no funcionan)
+- El error `Price Level [0]` en logs del Synergy es cosmético — el Fusion lo ignora
+- `Retries [-1] ZeroSale [-1] AuthTimeout [-1]` en logs es DEBUG, no bloquea el PRESET
+- El cambio de precio por protocolo requiere aprobación manual en consola (módulo "Price Change Add In")
 - Siempre `rm -rf .svelte-kit` al reiniciar el POS para evitar caché de Vite
-- Los tags v0.4.0/v0.4.1 ya existían (Reasonix, fixes SSE). Phase 5 es v0.5.0
-- El estado del server Python se persiste en `tools/powerfin_state.json`. Borrar para reset.

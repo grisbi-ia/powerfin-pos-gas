@@ -22,87 +22,27 @@ const MOCK_USER: User = {
 const MOCK_CONFIG: AppConfig = {
 	location: {
 		location_id: 1,
-		name: 'NEOPAUTE',
+		name: 'NEOGAS',
 		address: 'Av. Principal 123, Cuenca'
 	},
 	dispensers: [
 		{
 			dispenser_id: 1,
 			fusion_pump_id: 1,
-			name: 'Surtidor 1',
+			name: 'Surtidor DIESEL',
 			printer_island: 1,
 			sides: {
 				A: [
-					{ hose_id: 1, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-					{ hose_id: 2, fusion_hose_id: 2, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
-					{ hose_id: 3, fusion_hose_id: 3, grade_id: 'DIESEL', grade_name: 'Diesel' },
-					{ hose_id: 4, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+					{ hose_id: 1, fusion_pump_id: 1, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel' }
 				],
 				B: [
-					{ hose_id: 5, fusion_hose_id: 5, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-					{ hose_id: 6, fusion_hose_id: 6, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
-					{ hose_id: 7, fusion_hose_id: 7, grade_id: 'DIESEL', grade_name: 'Diesel' },
-					{ hose_id: 8, fusion_hose_id: 8, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
-				]
-			}
-		},
-		{
-			dispenser_id: 2,
-			fusion_pump_id: 2,
-			name: 'Surtidor 2',
-			printer_island: 1,
-			sides: {
-				A: [
-					{ hose_id: 9, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-					{ hose_id: 10, fusion_hose_id: 2, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
-					{ hose_id: 11, fusion_hose_id: 3, grade_id: 'DIESEL', grade_name: 'Diesel' },
-					{ hose_id: 12, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
-				],
-				B: [
-					{ hose_id: 13, fusion_hose_id: 5, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-					{ hose_id: 14, fusion_hose_id: 6, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
-					{ hose_id: 15, fusion_hose_id: 7, grade_id: 'DIESEL', grade_name: 'Diesel' },
-					{ hose_id: 16, fusion_hose_id: 8, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
-				]
-			}
-		},
-		{
-			dispenser_id: 3,
-			fusion_pump_id: 3,
-			name: 'Surtidor 3',
-			printer_island: 2,
-			sides: {
-				A: [
-					{ hose_id: 17, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-					{ hose_id: 18, fusion_hose_id: 2, grade_id: 'DIESEL', grade_name: 'Diesel' }
-				],
-				B: [
-					{ hose_id: 19, fusion_hose_id: 3, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
-					{ hose_id: 20, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
-				]
-			}
-		},
-		{
-			dispenser_id: 4,
-			fusion_pump_id: 4,
-			name: 'Surtidor 4',
-			printer_island: 2,
-			sides: {
-				A: [
-					{ hose_id: 21, fusion_hose_id: 1, grade_id: 'SUPER', grade_name: 'Gasolina Super' },
-					{ hose_id: 22, fusion_hose_id: 2, grade_id: 'DIESEL', grade_name: 'Diesel' }
-				],
-				B: [
-					{ hose_id: 23, fusion_hose_id: 3, grade_id: 'EXTRA', grade_name: 'Gasolina Extra' },
-					{ hose_id: 24, fusion_hose_id: 4, grade_id: 'SUPER', grade_name: 'Gasolina Super' }
+					{ hose_id: 2, fusion_pump_id: 2, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel' }
 				]
 			}
 		}
 	],
 	grades: [
-		{ grade_id: 'SUPER', name: 'Gasolina Super', unit: 'litros' },
-		{ grade_id: 'EXTRA', name: 'Gasolina Extra', unit: 'litros' },
-		{ grade_id: 'DIESEL', name: 'Diesel', unit: 'litros' }
+		{ grade_id: 'DIESEL', name: 'Diesel', unit: 'GALONES' }
 	],
 	price_lists: [
 		{ code: 'STANDARD', name: 'Precio Normal' },
@@ -131,8 +71,8 @@ const MOCK_CUSTOMERS: Customer[] = [
 		name: 'Juan Carlos Pérez',
 		email: 'jperez@email.com',
 		phone: '0991234567',
-		price_list: 'VIP',
-		price_list_name: 'Cliente VIP',
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal',
 		credit_active: false,
 		credit_balance: 0,
 		plates: ['ABC-1234']
@@ -178,8 +118,8 @@ const MOCK_VEHICLES: Record<string, VehicleResult> = {
 			email: 'jperez@email.com',
 			phone: '0991234567'
 		},
-		price_list: 'VIP',
-		price_list_name: 'Cliente VIP'
+		price_list: 'STANDARD',
+		price_list_name: 'Precio Normal'
 	},
 	'XYZ5678': {
 		plate: 'XYZ5678',
@@ -272,7 +212,7 @@ export async function getCustomerPrice(
 ): Promise<PriceInfo> {
 	await delay(200);
 	const customer = MOCK_CUSTOMERS.find(c => c.customer_id === customerId);
-	const unitPrice = customer?.price_list === 'VIP' ? 1.100 : 1.500;
+	const unitPrice = customer?.price_list === 'VIP' ? 2.950 : 3.103;
 	return {
 		grade_id: 'SUPER',
 		grade_name: 'Gasolina Super',
