@@ -162,3 +162,18 @@ export async function printReceipt(data: unknown): Promise<{ status: string }> {
 	if (USE_MOCKS_BRIDGE) return mockBridge.printReceipt(data);
 	return realBridge.printReceipt(data);
 }
+
+export async function paymentLock(saleId: string, lockId?: string): Promise<{ status: string; sale_id: string; lock_id: string }> {
+	if (USE_MOCKS_BRIDGE) return { status: 'LOCKED', sale_id: saleId, lock_id: lockId || saleId };
+	return realBridge.paymentLock(saleId, lockId);
+}
+
+export async function paymentClear(saleId: string, method: string, lockId?: string): Promise<{ status: string; sale_id: string }> {
+	if (USE_MOCKS_BRIDGE) return { status: 'CLEARED', sale_id: saleId };
+	return realBridge.paymentClear(saleId, method, lockId);
+}
+
+export async function paymentUnlock(saleId: string, lockId?: string): Promise<{ status: string; sale_id: string }> {
+	if (USE_MOCKS_BRIDGE) return { status: 'UNLOCKED', sale_id: saleId };
+	return realBridge.paymentUnlock(saleId, lockId);
+}

@@ -12,7 +12,8 @@
 | 4 | `v0.3.0` | Flujo de venta completo |
 | 5 | `v0.5.0` | Impresión térmica — ESC/POS, config multi-isla, templates editables |
 | 5.1 | `v0.6.0` | Módulo de caja + refactor turnos + historial + usuarios en línea |
-| 6 | `v0.7.0` | **Validación hardware real — Wayne Synergy** ✅ |
+| 6 | `v0.7.0` | Validación hardware real — Wayne Synergy |
+| 6.1 | `v0.7.1` | **Bugfix: match de IDs dispensador/manguera, flujo de cobro** ✅ |
 
 ### 📊 Tests
 
@@ -28,73 +29,55 @@ cd pos && npm run test            # 41 passed
 
 ---
 
-## Logros de la sesión 2026-05-29
+## Logros de la sesión 2026-05-29 (tarde)
 
-### 1. PRESET_EMPTY resuelto ✅
+### 1. Flujo de cobro arreglado ✅
 
-**Causa:** Parámetros del Transaction Engine (Retries, ZeroSale, AuthTimeout) no se propagaban de ForecourtManager a las bombas. Quedaban en `-1`.
+**Bug:** Después de despachar, el surtidor volvía a "Disponible" en vez de "Cobrar".
 
-**Solución:** Desconexión/reconexión física del cable serial del dispensador forzó la reinicialización del Transaction Engine desde la DB del Fusion.
+**Causa raíz — doble mismatch de IDs:**
+- `completeOrder()` buscaba por `dispenserId` (ID del armario en config, siempre 1), pero el SSE traía `pumpNumber` (ID del lado en Synergy, 1 o 2). Side A funcionaba por coincidencia (ambos son 1), side B fallaba (config 1 ≠ Fusion 2).
+- `completeOrder()` también matcheaba por `hoseId` config (1 o 2) vs `HO` del Fusion (siempre 1). Side B fallaba de nuevo (2 ≠ 1).
 
-**Hallazgo:** Los cambios de configuración de comportamiento (ATO, Retries) requieren reinicializar el dispensador. Los cambios de precios se propagan en caliente.
+**Fix:** Se agregaron `fusionPumpId` y `fusionHoseId` a `PendingOrder`. `completeOrder()` ahora matchea por estos campos (que son los que reporta el Synergy). Documentado en `docs/TOPOLOGIA_DISPENSADORES.md`.
 
-### 2. Conexión FusionBridge → Synergy real ✅
+### 2. `finalVolume` siempre mostraba '0.00' ✅
 
-- `FusionTcpClient` apunta a `192.168.1.20:3011`
-- `SUBSCRIBE|ALL` para recibir todos los eventos (suscripciones individuales no funcionan en Rel-5.19.1)
-- `REQ_PUMP_PRESET` como comando principal de autorización
-- `REQ_PUMP_AUTH` como Plan B manual (endpoint `/api/dispatch/authorize-auth`)
-- Keep-alive ECHO cada 120s, reconexión con backoff
+**Causa:** `'0.00'` es truthy en JavaScript → `collectOrder.finalVolume || fallback` nunca ejecutaba el fallback.
 
-### 3. Precio dinámico ✅
+**Fix:** `parseFloat(collectOrder.finalVolume) > 0 ? collectOrder.finalVolume : fallback`
 
-- `HO=1@PRECIO` en el PRESET: la bomba despacha al precio del cliente
-- `LV=1` agregado para evitar error `Price Level [0]`
-- Precio DIESEL actualizado en Synergy: $9.999 → $3.103
-- Al expirar ATO, el precio se restaura automáticamente al de consola
-- `PAY_IN` viaja con todos los datos del cliente (OV, CLI, PLC, LISTA)
+### 3. Unidad de volumen hardcodeada ✅
 
-### 4. Mapeo surtidor/manguera multi-pump ✅
+**Fix:** Cambiado `{finalVolume} L` → `{finalVolume} {unitAbbr}` (muestra "gal" para galones).
 
-**Realidad física:** 1 dispensador DIESEL con 2 mangueras.
-**Synergy:** Configurado como 2 pumps independientes (pump 1 → lado A, pump 2 → lado B).
+### 4. `presetAmount = NaN` para tanque lleno ✅
 
-**Solución en código:**
-- `HoseConfig.fusion_pump_id`: cada manguera declara a qué pump del Fusion pertenece
-- `convertToDispenserState`: mergea múltiples Fusion pumps en UN solo `DispenserState`
-- `online = any(pump OK)`: el surtidor está online si al menos un pump no está CLOSED/ERROR
-- Estados globales (CLOSED, ERROR, STOPPED) se aplican a todas las mangueras del pump
+**Fix:** `presetType === 'FULL' ? 0 : (val * unitPrice)`
 
-### 5. Visualización de estados corregida ✅
+### 5. Eliminado `autoCompleteOrders()` ✅
 
-| Bug | Causa | Fix |
-|-----|-------|-----|
-| Siempre "Disponible" | `getSideInfo` hardcodeaba `status:'IDLE'` | Usa `primaryHose.status` real |
-| Surtidor "offline" | `online=false` global ignoraba pumps activos | `online = pumpStates.some(s => s)` |
-| CLOSED invisible | `isActive` solo con `activeHose>0` | `isGlobalState` para CLOSED/ERROR/STOPPED |
-| activeHose=0 en AUTHORIZED | `HO` vacío, el dato viene en `PR_HO` | `FusionEventHandler` extrae de `PR_HO` |
-| 2 pumps → 1 dispenser se sobrescribían | `map()` creaba 2 objetos con mismo ID | Merge en UN solo `DispenserState` |
+Era peligroso: completaba órdenes falsamente cuando el PRESET era rechazado (manguera siempre IDLE + orden FUELLING → falso positivo).
 
-### 6. Mock PowerFin actualizado ✅
+### 6. Eliminado `LID` y `LM` del PRESET ✅
 
-- 1 dispensador DIESEL con 2 lados (Side A → pump 1, Side B → pump 2)
-- Precio STANDARD: $3.103/galón
-- Cliente Juan Carlos Pérez → STANDARD (ya no VIP)
-- Unidad: GALONES (no litros)
+El `LID|LM=NORMAL` en el PRESET creaba locks permanentes en el Synergy que no se liberaban con UNLOCK ni CLEAR_SALE. El firmware Rel-5.19.1 no los maneja correctamente. Documentado en logs de la sesión.
 
-### 7. Herramientas y scripts ✅
+### 7. Endpoints de pago en FusionBridge ✅
+
+Agregados `POST /api/dispatch/payment-lock`, `/payment-clear`, `/payment-unlock` en `DispatchResource.java`. Métodos cliente en `bridge.ts` y `bridge-client.ts`.
+
+### 8. Herramientas de diagnóstico ✅
 
 | Script | Función |
 |--------|---------|
-| `diagnostico_preset.py` | Verificar estado + probar PRESET en bombas |
-| `reiniciar_bomba.py` | Reinicializar Transaction Engine vía protocolo |
-| `actualizar_precio.py` | Cambiar precio de combustible en Synergy |
-| `start.sh` | Control de servicios (start/stop/status) |
+| `tools/info_fusion.py` | Consultar estado de dispensadores en Synergy |
+| `tools/test_lock.py` | Probar REQ_PAYMENT_TRANSACTION_LOCK |
+| `tools/unlock_fusion.py` | Desbloquear venta en Synergy |
 
-### 8. Reglas de arquitectura ✅
+### 9. Documentación de topología ✅
 
-- **NO silent fallbacks** agregado a `AGENTS.md`
-- `CONFIGURACION_WAYNE.md`: procedimiento completo de cambios de configuración
+`docs/TOPOLOGIA_DISPENSADORES.md` — Explicación con referencia física: armario, lado, pistola. Mapeo de IDs entre PowerFin y Synergy. Match robusto para cualquier topología.
 
 ---
 
@@ -103,7 +86,7 @@ cd pos && npm run test            # 41 passed
 | Dato | Valor |
 |------|-------|
 | Estación | NEOGAS |
-| Surtidores | 1 físico (DIESEL, 2 mangueras) → 2 pumps lógicos en Synergy |
+| Surtidores | 1 físico (DIESEL, 2 lados) → 2 pumps lógicos en Synergy |
 | Combustible | DIESEL (Grade 3, P3) |
 | Precio | $3.103/galón |
 | Pump 1 → Side A | Fusion hose 1 |
@@ -119,7 +102,7 @@ cd pos && npm run test            # 41 passed
 ```bash
 cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 
-# Todo de una vez:
+# Todo de una vez (sin FusionBridge):
 ./start.sh           # POS + PowerFin
 ./start.sh bridge    # FusionBridge (tarda ~15s)
 
@@ -131,6 +114,9 @@ cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 # Control:
 ./start.sh stop      # Detener todo
 ./start.sh status    # Ver estado
+
+# Diagnosticar Synergy:
+python3 tools/info_fusion.py
 ```
 
 Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
@@ -139,28 +125,35 @@ Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
 
 ## Pendiente para la próxima sesión
 
-### Prioridad 1 — Prueba de despacho físico real
+### 🔴 Prioridad 1 — Sincronización multi-dispositivo (CRÍTICO)
+
+**Problema:** `pendingOrders` se guarda en `localStorage` (por navegador). Si el dispositivo A crea una orden y el B no la ve, hay riesgo de:
+- Doble cobro (B no sabe que ya se pagó en A)
+- Estados inconsistentes (B muestra "Disponible" cuando A muestra "Cobrar")
+- Fraude (alguien puede despachar sin que el cajero lo vea)
 
 ```
-☐ Levantar pistola + palanca manual en dispensador físico
-☐ Verificar transiciones de estado: IDLE → CALLING → AUTHORIZED → STARTING → FUELLING → EOT → IDLE
-☐ Verificar NEW_TRANSACTION: SA, VO, AM, PU, PAY_IN correctos
-☐ Verificar DELIVERY_PROGRESS en tiempo real
-☐ Flujo completo: autorizar → despachar → cobrar → imprimir
-☐ Probar despachos simultáneos en ambos lados
+☐ Hacer que la reconciliación con PowerFin sea inmediata al montar la página
+☐ Disparar reconciliación al recibir SALE_CLEARED por SSE
+☐ Evaluar si FusionBridge debe broadcastear cambios de pendingOrders vía SSE
+☐ Sincronizar estado de órdenes entre todos los dispositivos en ≤5s
+☐ Probar: 2 navegadores abiertos, venta en A, B debe ver "Cobrar" en ≤5s
+☐ Probar: cobro en A, B debe ver "Disponible" en ≤5s
+☐ Probar: venta en A, B cierra sesión y reabre → debe ver "Cobrar"
 ```
 
-### Prioridad 2 — Prueba de topologías de dispensadores
+**Posibles soluciones a evaluar:**
 
-```
-☐ Probar mapeo con 2+ dispensadores físicos (varios fusion_pump_id por dispenser)
-☐ Probar dispensador con múltiples mangueras por lado (ej: 2 grades por lado)
-☐ Probar mezcla: algunos pumps 1:1 con dispensers, otros multi-pump → 1 dispenser
-☐ Validar que convertToDispenserState mergea correctamente en todas las topologías
-☐ Validar que online/offline funciona con combinaciones complejas
-```
+| Opción | Pros | Contras |
+|--------|------|---------|
+| Polling más agresivo (cada 5s en vez de 30s) | Simple | Carga al servidor |
+| SSE broadcast de cambios de órdenes | Tiempo real, sin polling | FusionBridge no conoce las órdenes (están en PowerFin) |
+| PowerFin → SSE relay | Fuente de verdad única | Requiere cambios en PowerFin mock y real |
+| Shared localStorage vía backend | Consistente | Overengineered |
 
-### Prioridad 3 — Impresión térmica
+**Enfoque recomendado:** Reducir intervalo de reconciliación a 5s + disparar en eventos clave (mount, SALE_CLEARED SSE, después de cobrar). PowerFin es el source of truth, los dispositivos solo cachean.
+
+### 🟠 Prioridad 2 — Prueba de impresión térmica
 
 ```
 ☐ Probar impresora en 192.168.1.31:9100
@@ -168,7 +161,16 @@ Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
 ☐ Integrar impresión en flujo de cobro
 ```
 
-### Prioridad 4 — Integración con PowerFin ERP real
+### 🟡 Prioridad 3 — Prueba de topologías de dispensadores
+
+```
+☐ Probar mapeo con 2+ dispensadores físicos (varios fusion_pump_id por dispenser)
+☐ Probar dispensador con múltiples mangueras por lado (ej: 2 grades por lado)
+☐ Validar que convertToDispenserState mergea correctamente
+☐ Validar que completeOrder matchea correctamente con fusionPumpId + fusionHoseId
+```
+
+### 🟢 Prioridad 4 — Integración con PowerFin ERP real
 
 ```
 ☐ Conectar FusionBridge al ERP real (cuando esté disponible)
@@ -183,7 +185,7 @@ Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
 - `plate = 'ABC1234'` está hardcodeado en `SaleWizard.svelte:28` para pruebas. Remover ANTES de producción.
 - El dispensador físico requiere **palanca manual** además de levantar la pistola (equipo antiguo)
 - `SUBSCRIBE|ALL` es necesario en firmware Rel-5.19.1 (suscripciones individuales no funcionan)
-- El error `Price Level [0]` en logs del Synergy es cosmético — el Fusion lo ignora
-- `Retries [-1] ZeroSale [-1] AuthTimeout [-1]` en logs es DEBUG, no bloquea el PRESET
 - El cambio de precio por protocolo requiere aprobación manual en consola (módulo "Price Change Add In")
 - Siempre `rm -rf .svelte-kit` al reiniciar el POS para evitar caché de Vite
+- **NO usar `LID` ni `LM` en PRESET** — firmware Rel-5.19.1 crea locks permanentes que requieren reinicio del Synergy
+- `localStorage` es por navegador — no usar como source of truth para multi-dispositivo. PowerFin ERP es la fuente de verdad vía reconciliación.

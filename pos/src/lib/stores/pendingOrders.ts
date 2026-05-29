@@ -4,6 +4,8 @@ import type { DispatchOrder } from '$lib/api/types';
 export interface PendingOrder {
 	orderId: string;
 	dispenserId: number;
+	fusionPumpId: number;
+	fusionHoseId: number;
 	hoseId: number;
 	side: 'A' | 'B';
 	customerName: string;
@@ -69,16 +71,20 @@ function createPendingOrdersStore() {
 
 		/**
 		 * Mark order as completed when Fusion reports sale done.
-		 * Matches by (dispenserId, hoseId) since the Fusion may not know orderId.
+		 * Matches by (fusionPumpId, fusionHoseId) to support multi-hose pumps.
+		 * Optionally updates finalAmount and finalVolume from the actual dispense.
 		 */
-		completeOrder(dispenserId: number, hoseId?: number) {
+		completeOrder(fusionPumpId: number, fusionHoseId?: number, finalAmount?: number, finalVolume?: string) {
 			update(state => {
 				const next = new Map(state);
 				for (const [id, order] of next) {
-					const matchesDispenser = order.dispenserId === dispenserId;
-					const matchesHose = hoseId != null ? order.hoseId === hoseId : true;
-					if (matchesDispenser && matchesHose && order.status === 'FUELLING') {
-						next.set(id, { ...order, status: 'COMPLETED' as const });
+					const matchesPump = order.fusionPumpId === fusionPumpId;
+					const matchesHose = fusionHoseId != null ? order.fusionHoseId === fusionHoseId : true;
+					if (matchesPump && matchesHose && order.status === 'FUELLING') {
+						const updates: Partial<PendingOrder> = { status: 'COMPLETED' as const };
+						if (finalAmount !== undefined && finalAmount > 0) updates.finalAmount = finalAmount;
+						if (finalVolume !== undefined && finalVolume !== '0.00' && finalVolume !== '0') updates.finalVolume = finalVolume;
+						next.set(id, { ...order, ...updates });
 					}
 				}
 				saveToStorage(next);
@@ -166,6 +172,8 @@ function createPendingOrdersStore() {
 					const order: PendingOrder = {
 						orderId: server.order_id,
 						dispenserId: server.dispenser_id,
+						fusionPumpId: server.dispenser_id,
+						fusionHoseId: server.hose_id,
 						hoseId: server.hose_id,
 						side: server.side,
 						customerName: server.customer_name ?? 'Consumidor Final',

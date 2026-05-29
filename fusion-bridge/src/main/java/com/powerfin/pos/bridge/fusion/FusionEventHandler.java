@@ -95,22 +95,29 @@ public class FusionEventHandler {
     private void handleNewTransaction(FusionMessage msg) {
         String saleId = msg.params.getOrDefault("SA", "");
         String pumpNumber = msg.params.getOrDefault("PM", "0");
+        String hose = msg.params.getOrDefault("HO", "0");
         String volume = msg.params.getOrDefault("VO", "0");
         String amount = msg.params.getOrDefault("AM", "0");
         String unitPrice = msg.params.getOrDefault("PU", "0");
         String payIn = msg.params.getOrDefault("PAY_IN", "");
+        String orderId = FusionMessage.extractPayInField(payIn, "OV");
+
+        int pumpId = parseInt(pumpNumber, 0);
+        int hoseId = parseInt(hose, 0);
 
         eventBus.broadcast("NEW_TRANSACTION", java.util.Map.of(
             "saleId", saleId,
-            "pumpNumber", parseInt(pumpNumber, 0),
+            "pumpNumber", pumpId,
+            "hoseId", hoseId,
             "volume", volume,
             "amount", amount,
             "unitPrice", unitPrice,
-            "payIn", payIn
+            "payIn", payIn,
+            "orderId", orderId != null ? orderId : ""
         ));
 
-        Log.info(String.format("New transaction — saleId=%s, pump=%s, volume=%s, amount=%s",
-            saleId, pumpNumber, volume, amount));
+        Log.info(String.format("New transaction — saleId=%s, pump=%d, hose=%d, volume=%s, amount=%s, orderId=%s",
+            saleId, pumpId, hoseId, volume, amount, orderId));
     }
 
     private void handleDeliveryProgress(FusionMessage msg) {

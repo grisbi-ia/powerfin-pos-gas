@@ -189,6 +189,8 @@
 			pendingOrders.addOrder({
 				orderId,
 				dispenserId,
+				fusionPumpId: selectedFusionPumpId,
+				fusionHoseId: selectedFusionHoseId,
 				hoseId: selectedHoseId,
 				side: side,
 				customerName: dispatchOwner?.name ?? '',

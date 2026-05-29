@@ -36,24 +36,10 @@
 		}, 150);
 	}
 
-	// ── Auto-complete pending orders when hose goes IDLE ─────
-// 	function autoCompleteOrders() {
-// 		const orders = $orderByHose;
-// 		if (orders.size === 0) return;
-// 		for (const d of $dispenserList) {
-// 			for (const sideKey of ['A', 'B'] as const) {
-// 				for (const hose of d.sides[sideKey]) {
-// 					if (hose.status === 'IDLE') {
-// 						const key = `${d.dispenserId}-${hose.hoseId}`;
-// 						const order = orders.get(key);
-// 						if (order && order.status === 'FUELLING') {
-// 							pendingOrders.completeOrder(d.dispenserId, hose.hoseId);
-// 						}
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
+	// Orders are completed ONLY via NEW_TRANSACTION SSE event from FusionBridge.
+	// If an SSE event is missed (reconnect), PowerFin reconciliation (every 30s)
+	// will sync the correct status. Never auto-complete based on hose state alone
+	// — a rejected PRESET also leaves the hose IDLE but the sale never happened.
 
 	// ── Reconciliation with PowerFin (every 30s) ────────────
 	async function reconcileWithPowerFin() {
@@ -133,9 +119,19 @@
 					case 'DELIVERY_PROGRESS':
 						triggerSsePoll();
 						break;
-					case 'NEW_TRANSACTION':
-						triggerSsePoll();
-						break;
+					case 'NEW_TRANSACTION': {
+					const txData = data as Record<string, unknown>;
+					const pumpNumber = Number(txData.pumpNumber || 0);
+					const hoseId = Number(txData.hoseId || 0);  // Fusion HO
+					const finalAmount = parseFloat(String(txData.amount || '0'));
+					const finalVolume = String(txData.volume || '0.00');
+					if (pumpNumber > 0) {
+						pendingOrders.completeOrder(pumpNumber, hoseId > 0 ? hoseId : undefined, finalAmount, finalVolume);
+						console.log(`[SSE] NEW_TRANSACTION: pump=${pumpNumber} hose=${hoseId} amount=${finalAmount} volume=${finalVolume}`);
+					}
+					triggerSsePoll();
+					break;
+				}
 					case 'TRANSACTION_LOCK':
 					case 'SALE_CLEARED':
 						triggerSsePoll();
@@ -169,7 +165,9 @@
 			}
 			dispensers.setFusionConnected(result.fusionConnected);
 			error = '';
-			// Orders completed only via NEW_TRANSACTION SSE event
+			// Note: orders are completed only via NEW_TRANSACTION SSE event.
+			// Never auto-complete from hose state — PowerFin reconciliation
+			// handles missed events every 30s.
 		} catch {
 			if (loading) error = 'FusionBridge no disponible';
 			dispensers.setFusionConnected(false);

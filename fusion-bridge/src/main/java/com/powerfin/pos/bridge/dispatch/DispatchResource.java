@@ -145,4 +145,122 @@ public class DispatchResource {
             .entity(Map.of("error", "Failed to cancel"))
             .build();
     }
+
+    /**
+     * Lock a completed sale for payment processing.
+     * Keeps the pump from returning to IDLE after dispensing.
+     * Called automatically after NEW_TRANSACTION, but can also be called
+     * manually if the auto-lock was missed.
+     */
+    @POST
+    @Path("/payment-lock")
+    public Response paymentLock(Map<String, Object> request) {
+        if (!tcpClient.isConnected()) {
+            return Response.status(503)
+                .entity(Map.of("error", "No connection to Fusion"))
+                .build();
+        }
+
+        try {
+            String saleId = (String) request.getOrDefault("sale_id", "");
+            String lockId = (String) request.getOrDefault("lock_id", saleId);
+
+            String message = FusionMessageBuilder.buildLock(saleId, lockId);
+            boolean sent = tcpClient.sendRaw(message);
+
+            if (sent) {
+                Log.infof("Payment lock sent: sale=%s lock=%s", saleId, lockId);
+                return Response.ok(Map.of(
+                    "status", "LOCKED",
+                    "sale_id", saleId,
+                    "lock_id", lockId
+                )).build();
+            }
+            return Response.status(503)
+                .entity(Map.of("error", "Failed to send lock"))
+                .build();
+        } catch (Exception e) {
+            Log.error("Error locking sale for payment", e);
+            return Response.serverError()
+                .entity(Map.of("error", e.getMessage()))
+                .build();
+        }
+    }
+
+    /**
+     * Clear/complete a locked sale after payment is collected.
+     * Unlocks the pump so it returns to IDLE for the next customer.
+     */
+    @POST
+    @Path("/payment-clear")
+    public Response paymentClear(Map<String, Object> request) {
+        if (!tcpClient.isConnected()) {
+            return Response.status(503)
+                .entity(Map.of("error", "No connection to Fusion"))
+                .build();
+        }
+
+        try {
+            String saleId = (String) request.getOrDefault("sale_id", "");
+            String lockId = (String) request.getOrDefault("lock_id", saleId);
+            String method = (String) request.getOrDefault("method", "CASH");
+
+            String message = FusionMessageBuilder.buildClearSale(saleId, lockId, method);
+            boolean sent = tcpClient.sendRaw(message);
+
+            if (sent) {
+                Log.infof("Payment clear sent: sale=%s method=%s", saleId, method);
+                return Response.ok(Map.of(
+                    "status", "CLEARED",
+                    "sale_id", saleId
+                )).build();
+            }
+            return Response.status(503)
+                .entity(Map.of("error", "Failed to clear sale"))
+                .build();
+        } catch (Exception e) {
+            Log.error("Error clearing sale", e);
+            return Response.serverError()
+                .entity(Map.of("error", e.getMessage()))
+                .build();
+        }
+    }
+
+    /**
+     * Unlock a sale without clearing it (e.g. if payment needs to be postponed).
+     * Returns the pump to IDLE.
+     */
+    @POST
+    @Path("/payment-unlock")
+    public Response paymentUnlock(Map<String, Object> request) {
+        if (!tcpClient.isConnected()) {
+            return Response.status(503)
+                .entity(Map.of("error", "No connection to Fusion"))
+                .build();
+        }
+
+        try {
+            String saleId = (String) request.getOrDefault("sale_id", "");
+            String lockId = (String) request.getOrDefault("lock_id", saleId);
+
+            String message = FusionMessageBuilder.buildUnlock(saleId, lockId);
+            boolean sent = tcpClient.sendRaw(message);
+
+            if (sent) {
+                Log.infof("Payment unlock sent: sale=%s", saleId);
+                return Response.ok(Map.of(
+                    "status", "UNLOCKED",
+                    "sale_id", saleId
+                )).build();
+            }
+            return Response.status(503)
+                .entity(Map.of("error", "Failed to unlock sale"))
+                .build();
+        } catch (Exception e) {
+            Log.error("Error unlocking sale", e);
+            return Response.serverError()
+                .entity(Map.of("error", e.getMessage()))
+                .build();
+        }
+    }
 }

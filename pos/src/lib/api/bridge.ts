@@ -94,6 +94,36 @@ export async function printReceipt(data: unknown): Promise<{ status: string }> {
 	return res.json();
 }
 
+export async function paymentLock(saleId: string, lockId?: string): Promise<{ status: string; sale_id: string; lock_id: string }> {
+	const res = await fetch(bridgeUrl('/api/dispatch/payment-lock'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ sale_id: saleId, lock_id: lockId || saleId })
+	});
+	if (!res.ok) throw new Error('Payment lock failed');
+	return res.json();
+}
+
+export async function paymentClear(saleId: string, method: string, lockId?: string): Promise<{ status: string; sale_id: string }> {
+	const res = await fetch(bridgeUrl('/api/dispatch/payment-clear'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ sale_id: saleId, lock_id: lockId || saleId, method })
+	});
+	if (!res.ok) throw new Error('Payment clear failed');
+	return res.json();
+}
+
+export async function paymentUnlock(saleId: string, lockId?: string): Promise<{ status: string; sale_id: string }> {
+	const res = await fetch(bridgeUrl('/api/dispatch/payment-unlock'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ sale_id: saleId, lock_id: lockId || saleId })
+	});
+	if (!res.ok) throw new Error('Payment unlock failed');
+	return res.json();
+}
+
 // ── SSE ──────────────────────────────────────────────────────
 
 export function connectToEvents(

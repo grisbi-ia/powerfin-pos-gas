@@ -69,7 +69,9 @@
 		? (collectOrder.finalAmount || collectOrder.presetAmount)
 		: 0;
 	$: finalVolume = collectOrder
-		? (collectOrder.finalVolume || (finalAmount / (collectOrder.unitPrice || 1.5)).toFixed(3))
+		? (parseFloat(collectOrder.finalVolume) > 0
+			? collectOrder.finalVolume
+			: (finalAmount / (collectOrder.unitPrice || 1.5)).toFixed(3))
 		: '0';
 	$: changeAmount = Math.max(0, (collectOrder?.presetAmount ?? 0) - finalAmount);
 
@@ -159,9 +161,9 @@
 					const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
 			const authorizedBy = $shift?.user_name ?? '';
 			pendingOrders.addOrder({
-				orderId: orderResult.order_id, dispenserId, hoseId: hose.hose_id, side,
+				orderId: orderResult.order_id, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
 				customerName, plate,
-				presetAmount: presetType === 'MONEY' ? val : (val * unitPrice),
+				presetAmount: presetType === 'MONEY' ? val : presetType === 'FULL' ? 0 : (val * unitPrice),
 				finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl,
 				status: 'FUELLING', createdAt: new Date().toISOString(),
 				authorizedBy
@@ -181,6 +183,9 @@
 		try {
 			const shiftId = $shift?.shift_id ?? 0;
 			await powerfin.collectDispatch('token', collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: changeAmount, reference_code: referenceCode || undefined });
+			// Note: do NOT removeOrder here — it would nullify collectOrder reactively
+			// and destroy the collect UI before the user sees the print/confirmation.
+			// The order is removed in handleNewSale() when the user clicks "Nueva Venta".
 			if (printPolicy === 'ALWAYS') await doPrint();
 		} catch { error = 'Error al registrar cobro'; confirmed = false; }
 	}
@@ -199,7 +204,10 @@
 	}
 
 	function handleNewSale() { if (collectOrder) pendingOrders.removeOrder(collectOrder.orderId); dispatch('done'); }
-	function handleBackToDashboard() { dispatch('done'); }
+	function handleBackToDashboard() {
+		if (confirmed && collectOrder) pendingOrders.removeOrder(collectOrder.orderId);
+		dispatch('done');
+	}
 
 	function setQuickAmount(val: number) { presetValue = String(val); }
 	const moneyQuick = [5, 10, 20, 50, 100];
@@ -433,7 +441,7 @@
 				</div>
 				<div class="card p-4 mb-4">
 					<div class="space-y-2">
-						<div class="flex justify-between text-sm"><span class="text-gray-500">Volumen</span><span class="font-medium">{finalVolume} L</span></div>
+						<div class="flex justify-between text-sm"><span class="text-gray-500">Volumen</span><span class="font-medium">{finalVolume} {unitAbbr}</span></div>
 						<div class="flex justify-between text-sm"><span class="text-gray-500">Precio</span><span class="font-medium">${collectOrder.unitPrice.toFixed(3)}/{unitAbbr}</span></div>
 						{#if collectOrder.customerName}<div class="flex justify-between text-sm"><span class="text-gray-500">Cliente</span><span class="font-medium">{collectOrder.customerName}</span></div>{/if}
 						{#if collectOrder.plate}<div class="flex justify-between text-sm"><span class="text-gray-500">Placa</span><span class="font-medium font-mono">{collectOrder.plate}</span></div>{/if}
