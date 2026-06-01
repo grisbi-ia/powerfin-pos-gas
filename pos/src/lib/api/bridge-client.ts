@@ -119,6 +119,13 @@ export function convertToDispenserState(
 		if (d) d.online = pumpStates.some(s => s);
 	}
 
+	// If FusionBridge lost connection to Synergy, mark all dispensers as disconnected
+	if (!fbResponse.fusionConnected) {
+		for (const d of dispenserMap.values()) {
+			d.connected = false;
+		}
+	}
+
 	return { dispensers: Array.from(dispenserMap.values()), fusionConnected: fbResponse.fusionConnected };
 }
 
