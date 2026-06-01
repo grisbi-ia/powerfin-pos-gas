@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { auth, currentUser } from '$lib/stores/auth';
 	import { shift } from '$lib/stores/shift';
 	import { config, configLoaded } from '$lib/stores/config';
@@ -26,7 +27,14 @@
 	let pollIntervalMs = 2000;
 	let openingShift = false;
 	let shiftError = '';
-	const RECONCILE_INTERVAL_MS = 30_000;
+	let verifyingSide: 'A' | 'B' | null = null;
+	let refreshingAll = false;
+
+	// Cancel confirmation state
+	let cancelConfirm: { dispenserId: number; side: 'A' | 'B'; hoseId: number; fusionPumpId: number; presetAmount: number; orderId?: string } | null = null;
+	let cancelling = false;
+
+	const RECONCILE_INTERVAL_MS = 3_000;
 
 	// Debounced poll trigger for real-time SSE events (avoids polling flood)
 	function triggerSsePoll() {
@@ -37,15 +45,15 @@
 	}
 
 	// Orders are completed ONLY via NEW_TRANSACTION SSE event from FusionBridge.
-	// If an SSE event is missed (reconnect), PowerFin reconciliation (every 30s)
+	// If an SSE event is missed (reconnect), PowerFin reconciliation (every 3s)
 	// will sync the correct status. Never auto-complete based on hose state alone
 	// — a rejected PRESET also leaves the hose IDLE but the sale never happened.
 
-	// ── Reconciliation with PowerFin (every 30s) ────────────
+	// ── Reconciliation with PowerFin (every 3s) ────────────
 	async function reconcileWithPowerFin() {
 		try {
-			if (!$shift || !$auth.token) return;
-			const serverOrders = await powerfin.getShiftDispatches($auth.token, $shift.shift_id);
+			if (!get(shift) || !get(auth).token) return;
+			const serverOrders = await powerfin.getShiftDispatches(get(auth).token!, get(shift)!.shift_id);
 			const changes = pendingOrders.reconcile(serverOrders);
 			if (changes > 0) {
 				console.log(`[pendingOrders] Reconciled: ${changes} change(s) from PowerFin`);
@@ -57,13 +65,14 @@
 
 	// ── Open shift ───────────────────────────────────────────
 	async function handleOpenShift() {
-		if (!$auth.token) return;
+		if (!get(auth).token) return;
 		openingShift = true;
 		shiftError = '';
 		try {
-			const result = await powerfin.openShift($auth.token, {
+			const result = await powerfin.openShift(get(auth).token!, {
 				opening_cash: 0,
-				notes: ''
+				notes: '',
+				user_name: get(currentUser)?.name
 			});
 			shift.set(result);
 		} catch {
@@ -77,18 +86,18 @@
 		// 1. Reload pendingOrders from localStorage (survives page refresh)
 		pendingOrders.reloadFromStorage();
 
-		if (!$configLoaded && $auth.token) {
+		if (!get(configLoaded) && get(auth).token) {
 			try {
-				const appConfig = await powerfin.fetchConfig($auth.token);
+				const appConfig = await powerfin.fetchConfig(get(auth).token!);
 				(await import('$lib/stores/config')).configStore.setConfig(appConfig);
 				pollIntervalMs = appConfig.polling?.interval_ms ?? 2000;
 			} catch { error = 'Error cargando configuración'; }
 		}
 
 		// 2. Load shift from server (source of truth)
-		if ($auth.token) {
+		if (get(auth).token) {
 			try {
-				const serverShift = await powerfin.getCurrentShift($auth.token);
+				const serverShift = await powerfin.getCurrentShift(get(auth).token!);
 				if (serverShift) {
 					shift.set(serverShift);
 				} else {
@@ -99,15 +108,15 @@
 			}
 		}
 
-		// 3. Reconcile with PowerFin (authoritative source)
-		if ($shift) await reconcileWithPowerFin();
+		// 3. Reconcile with PowerFin immediately on mount (authoritative source)
+		if (get(shift)) await reconcileWithPowerFin();
 
 		await pollDispensers();
 
 		// 4. Fast polling for dispenser state (every 2s)
 		pollTimer = setInterval(() => { pollDispensers(); }, pollIntervalMs);
 
-		// 5. Slow polling for PowerFin reconciliation (every 30s)
+		// 5. Aggressive PowerFin reconciliation (every 3s)
 		reconcileTimer = setInterval(reconcileWithPowerFin, RECONCILE_INTERVAL_MS);
 
 		// 6. Real-time SSE events
@@ -120,21 +129,39 @@
 						triggerSsePoll();
 						break;
 					case 'NEW_TRANSACTION': {
-					const txData = data as Record<string, unknown>;
-					const pumpNumber = Number(txData.pumpNumber || 0);
-					const hoseId = Number(txData.hoseId || 0);  // Fusion HO
-					const finalAmount = parseFloat(String(txData.amount || '0'));
-					const finalVolume = String(txData.volume || '0.00');
-					if (pumpNumber > 0) {
-						pendingOrders.completeOrder(pumpNumber, hoseId > 0 ? hoseId : undefined, finalAmount, finalVolume);
-						console.log(`[SSE] NEW_TRANSACTION: pump=${pumpNumber} hose=${hoseId} amount=${finalAmount} volume=${finalVolume}`);
+						const txData = data as Record<string, unknown>;
+						const pumpNumber = Number(txData.pumpNumber || 0);
+						const hoseId = Number(txData.hoseId || 0);  // Fusion HO
+						const finalAmount = parseFloat(String(txData.amount || '0'));
+						const finalVolume = String(txData.volume || '0.00');
+					const orderId = String(txData.orderId || '');
+					const saleId = String(txData.saleId || '');
+						if (pumpNumber > 0) {
+							pendingOrders.completeOrder(pumpNumber, hoseId > 0 ? hoseId : undefined, finalAmount, finalVolume);
+							console.log(`[SSE] NEW_TRANSACTION: pump=${pumpNumber} hose=${hoseId} amount=${finalAmount} volume=${finalVolume}`);
+					// Update PowerFin so other devices see COMPLETED status on reconciliation
+					if (orderId && finalAmount > 0 && get(auth).token) {
+						powerfin.completeDispatch(get(auth).token!, orderId, {
+							order_id: orderId,
+							fusion_sale_id: saleId,
+							volume: finalVolume,
+							amount: String(finalAmount),
+							unit_price: String(txData.unitPrice || '0'),
+							payment_method: 'EFECTIVO',
+							completed_at: new Date().toISOString()
+						}).catch(() => { /* fire-and-forget — reconciliation will retry */ });
 					}
-					triggerSsePoll();
-					break;
-				}
+						}
+						triggerSsePoll();
+						break;
+					}
 					case 'TRANSACTION_LOCK':
+						triggerSsePoll();
+						break;
 					case 'SALE_CLEARED':
 						triggerSsePoll();
+						// Immediate reconciliation — another device may have collected
+						reconcileWithPowerFin();
 						break;
 					case 'FUSION_STATUS':
 						dispensers.setFusionConnected((data as Record<string,unknown>).connected === true);
@@ -159,45 +186,159 @@
 	// ── Poll dispenser state ──────────────────────────────────
 	async function pollDispensers() {
 		try {
-			const result = await getDispensersState($config);
+			const result = await getDispensersState(get(config));
 			for (const d of result.dispensers) {
 				dispensers.updateDispenser(d);
 			}
 			dispensers.setFusionConnected(result.fusionConnected);
 			error = '';
-			// Note: orders are completed only via NEW_TRANSACTION SSE event.
-			// Never auto-complete from hose state — PowerFin reconciliation
-			// handles missed events every 30s.
 		} catch {
 			if (loading) error = 'FusionBridge no disponible';
 			dispensers.setFusionConnected(false);
 		}
 	}
 
-	function handleSideClick(dispenserId: number, side: 'A' | 'B', hose: HoseState) {
-		// Block all operations without an open shift
-		if (!$shift) return;
+	// ── On-demand verification gate ──────────────────────────
+	// Before navigating to sale/collect, fetches the real state from
+	// FusionBridge and reconciles with PowerFin to prevent:
+	//  - Selling on a hose that is being used on another device
+	//  - Missing a pending collection that appeared while the UI was stale
+	async function handleSideClick(dispenserId: number, side: 'A' | 'B', hose: HoseState) {
+		if (!get(shift)) return;
 
-		const busy = ['AUTHORIZED', 'CALLING', 'STARTING', 'FUELLING', 'PAUSED'].includes(hose.status);
-		const key = `${dispenserId}-${hose.hoseId}`;
-		const pendingOrder = $orderByHose.get(key);
-		const isPendingCollection = pendingOrder?.status === 'COMPLETED' && hose.status === 'IDLE';
+		// Set verifying state — shows spinner on the clicked side
+		verifyingSide = side;
 
-		if (busy) return;
-		if (isPendingCollection && pendingOrder) {
-			goto(`/sale?dispenser=${dispenserId}&side=${side}&hose=${hose.hoseId}&mode=collect&order=${pendingOrder.orderId}`);
-			return;
+		try {
+			// Step 1: Fetch ALL dispenser states from FusionBridge (not just one pump)
+			// This is critical: a single dispenser can span multiple Fusion pumps
+			// (e.g. DIESEL armario = Pump 1 side A + Pump 2 side B)
+			await pollDispensers();
+
+			// Step 2: Check fresh hose state from the updated store
+			const freshDispensers = get(dispenserList);
+			const freshDisp = freshDispensers.find(d => d.dispenserId === dispenserId);
+			const freshHose = freshDisp?.sides[side]?.find(h => h.hoseId === hose.hoseId);
+
+			if (freshHose) {
+				const busy = ['AUTHORIZED', 'CALLING', 'STARTING', 'FUELLING', 'PAUSED'].includes(freshHose.status);
+				if (busy) {
+					console.log(`[verify] Hose ${dispenserId}-${side} is busy (${freshHose.status}) — blocked`);
+					return;
+				}
+			}
+
+			// Step 3: Reconcile with PowerFin to get latest orders
+			await reconcileWithPowerFin();
+
+			// Step 4: Re-check orderByHose after reconciliation
+			const key = `${dispenserId}-${hose.hoseId}`;
+			const pendingOrder = get(orderByHose).get(key);
+
+			if (pendingOrder?.status === 'COMPLETED') {
+				console.log(`[verify] Pending collection found for ${dispenserId}-${side}: ${pendingOrder.orderId}`);
+				goto(`/sale?dispenser=${dispenserId}&side=${side}&hose=${hose.hoseId}&mode=collect&order=${pendingOrder.orderId}`);
+				return;
+			}
+
+			// Step 5: All clear — proceed to sale
+			console.log(`[verify] Hose ${dispenserId}-${side} verified free — starting sale`);
+			goto(`/sale?dispenser=${dispenserId}&side=${side}&mode=sale`);
+		} catch (err) {
+			console.error('[verify] Verification failed:', err);
+			// On error, fall back to local state (existing behavior)
+			const key = `${dispenserId}-${hose.hoseId}`;
+			const pendingOrder = get(orderByHose).get(key);
+			const isPendingCollection = pendingOrder?.status === 'COMPLETED' && hose.status === 'IDLE';
+
+			if (isPendingCollection && pendingOrder) {
+				goto(`/sale?dispenser=${dispenserId}&side=${side}&hose=${hose.hoseId}&mode=collect&order=${pendingOrder.orderId}`);
+			} else {
+				goto(`/sale?dispenser=${dispenserId}&side=${side}&mode=sale`);
+			}
+		} finally {
+			verifyingSide = null;
 		}
-		goto(`/sale?dispenser=${dispenserId}&side=${side}&mode=sale`);
 	}
 
 	function handleHistory() { goto('/history'); }
 	function handleCash() { goto('/cash'); }
 	function handleUsers() { goto('/users'); }
 	function handleCloseShift() { goto('/shift/close'); }
+
+	// ── Manual refresh (dispensers + reconciliation) ──────
+	async function handleRefresh() {
+		refreshingAll = true;
+		try {
+			await pollDispensers();
+			await reconcileWithPowerFin();
+		} catch {
+			// Silently ignore — UI already updated with whatever succeeded
+		} finally {
+			refreshingAll = false;
+		}
+	}
+
+	// ── Cancel authorized dispatch ─────────────────────────
+	function handleCancelClick(dispenserId: number, side: 'A' | 'B', hose: HoseState) {
+		// Find pending order for this hose
+		const key = `${dispenserId}-${hose.hoseId}`;
+		const pendingOrder = get(orderByHose).get(key);
+
+		// Look up the correct fusionPumpId from config (different per side for multi-pump dispensers)
+		const cfg = get(config);
+		const dispCfg = cfg?.dispensers?.find(d => d.dispenser_id === dispenserId);
+		const hoseCfg = dispCfg?.sides[side]?.find(h => h.hose_id === hose.hoseId);
+		const fusionPumpId = hoseCfg?.fusion_pump_id ?? dispCfg?.fusion_pump_id ?? dispenserId;
+
+		cancelConfirm = {
+			dispenserId,
+			side,
+			hoseId: hose.hoseId,
+			fusionPumpId,
+			presetAmount: hose.presetAmount,
+			orderId: pendingOrder?.orderId
+		};
+	}
+
+	async function executeCancel() {
+		if (!cancelConfirm) return;
+		cancelling = true;
+
+		try {
+			// 1. Clear preset from Synergy via FusionBridge (uses fusionPumpId, not dispenserId)
+			await realBridge.cancelDispenser(cancelConfirm.fusionPumpId);
+
+			// 2. Cancel order in PowerFin (if exists)
+			if (cancelConfirm.orderId && get(auth).token) {
+				try {
+					await powerfin.cancelDispatch(get(auth).token!, cancelConfirm.orderId);
+				} catch {
+					console.warn('[cancel] PowerFin cancel-dispatch failed — order may need manual cleanup');
+				}
+			}
+
+			// 3. Remove from local pending orders
+			if (cancelConfirm.orderId) {
+				pendingOrders.removeOrder(cancelConfirm.orderId);
+			}
+
+			// 4. Refresh dispenser states
+			await pollDispensers();
+		} catch (err) {
+			console.error('[cancel] Failed:', err);
+		} finally {
+			cancelling = false;
+			cancelConfirm = null;
+		}
+	}
+
+	function dismissCancel() {
+		cancelConfirm = null;
+	}
 </script>
 
-<Header title="Powerfin POS" />
+<Header title="Powerfin POS" onRefresh={handleRefresh} refreshing={refreshingAll} />
 <OfflineBanner />
 
 <main class="flex-1 px-4 py-4 pb-24">
@@ -251,7 +392,7 @@
 		<!-- Surtidores (bloqueados visualmente si no hay turno) -->
 		<div class="grid gap-3 {!$shift ? 'opacity-50 pointer-events-none' : ''}">
 			{#each $dispenserList as d (d.dispenserId)}
-				<DispenserCard dispenser={d} onSideClick={handleSideClick} />
+				<DispenserCard dispenser={d} onSideClick={handleSideClick} onCancelClick={handleCancelClick} {verifyingSide} />
 			{:else}
 				<div class="text-center py-12 text-gray-400"><p>No hay surtidores configurados</p></div>
 			{/each}
@@ -267,6 +408,50 @@
 				<div class="text-sm text-gray-700 mt-1">Inicio: {new Date($shift.opened_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}</div>
 			</div>
 		{/if}
+	{/if}
+
+	<!-- Cancel confirmation modal -->
+	{#if cancelConfirm}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+			<!-- Backdrop -->
+			<div class="absolute inset-0 bg-black/50" role="presentation" on:click={dismissCancel} on:keydown={(e) => e.key === 'Escape' && dismissCancel()}></div>
+			<!-- Card -->
+			<div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+				<div class="text-center mb-4">
+					<div class="w-12 h-12 mx-auto mb-3 rounded-full bg-red-100 flex items-center justify-center">
+						<span class="text-2xl">⚠️</span>
+					</div>
+					<h3 class="text-lg font-bold text-gray-800">¿Cancelar autorización?</h3>
+					<p class="text-sm text-gray-500 mt-1">
+						Surtidor {cancelConfirm.dispenserId} — Lado {cancelConfirm.side}
+					</p>
+				</div>
+
+				{#if cancelConfirm.presetAmount > 0}
+					<div class="bg-gray-50 rounded-xl p-3 mb-4 text-center">
+						<span class="text-sm text-gray-500">Monto autorizado: </span>
+						<span class="text-lg font-bold text-primary">${cancelConfirm.presetAmount.toFixed(2)}</span>
+					</div>
+				{/if}
+
+				<div class="grid grid-cols-2 gap-3">
+					<button
+						class="touch-btn py-3 rounded-xl text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200"
+						on:click={dismissCancel}
+						disabled={cancelling}
+					>
+						No, mantener
+					</button>
+					<button
+						class="touch-btn py-3 rounded-xl text-sm font-semibold bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+						on:click={executeCancel}
+						disabled={cancelling}
+					>
+						{cancelling ? 'Cancelando...' : 'Sí, cancelar'}
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 </main>
 

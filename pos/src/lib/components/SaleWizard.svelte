@@ -2,6 +2,7 @@
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { config } from '$lib/stores/config';
 	import { shift } from '$lib/stores/shift';
+	import { currentUser } from '$lib/stores/auth';
 	import { pendingOrders } from '$lib/stores/pendingOrders';
 	import type { HoseConfig, VehicleResult, CustomerFormData, Customer, PresetType } from '$lib/api/types';
 	import type { PendingOrder } from '$lib/stores/pendingOrders';
@@ -156,10 +157,10 @@
 			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
-			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
+			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, authorized_by: $currentUser?.name });
 			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 					const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
-			const authorizedBy = $shift?.user_name ?? '';
+			const authorizedBy = $currentUser?.name ?? '';
 			pendingOrders.addOrder({
 				orderId: orderResult.order_id, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
 				customerName, plate,

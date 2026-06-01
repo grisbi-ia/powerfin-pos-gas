@@ -490,7 +490,7 @@ class PowerFinHandler(BaseHTTPRequestHandler):
             # Find active shift
             active_shift = next((s for s in self.state["shifts"] if s["status"] == "OPEN"), None)
             shift_id = active_shift["shift_id"] if active_shift else 0
-            authorized_by = active_shift["user_name"] if active_shift else ""
+            authorized_by = body.get("authorized_by", active_shift["user_name"] if active_shift else "")
 
             order = {
                 "order_id": order_id,

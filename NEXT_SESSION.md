@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-05-29)
+## Estado actual (2026-06-01)
 
 ### ✅ Fases completadas
 
@@ -13,7 +13,8 @@
 | 5 | `v0.5.0` | Impresión térmica — ESC/POS, config multi-isla, templates editables |
 | 5.1 | `v0.6.0` | Módulo de caja + refactor turnos + historial + usuarios en línea |
 | 6 | `v0.7.0` | Validación hardware real — Wayne Synergy |
-| 6.1 | `v0.7.1` | **Bugfix: match de IDs dispensador/manguera, flujo de cobro** ✅ |
+| 6.1 | `v0.7.1` | Bugfix: match de IDs dispensador/manguera, flujo de cobro |
+| 6.2 | `v0.8.0` | **Sincronización multi-dispositivo + cancelación manual** ✅ |
 
 ### 📊 Tests
 
@@ -29,55 +30,61 @@ cd pos && npm run test            # 41 passed
 
 ---
 
-## Logros de la sesión 2026-05-29 (tarde)
+## Logros de la sesión 2026-06-01
 
-### 1. Flujo de cobro arreglado ✅
+### 1. Sincronización multi-dispositivo ✅
 
-**Bug:** Después de despachar, el surtidor volvía a "Disponible" en vez de "Cobrar".
+**Problema:** `pendingOrders` en `localStorage` por navegador. Dispositivo B no veía órdenes creadas en dispositivo A.
 
-**Causa raíz — doble mismatch de IDs:**
-- `completeOrder()` buscaba por `dispenserId` (ID del armario en config, siempre 1), pero el SSE traía `pumpNumber` (ID del lado en Synergy, 1 o 2). Side A funcionaba por coincidencia (ambos son 1), side B fallaba (config 1 ≠ Fusion 2).
-- `completeOrder()` también matcheaba por `hoseId` config (1 o 2) vs `HO` del Fusion (siempre 1). Side B fallaba de nuevo (2 ≠ 1).
+**Solución — 4 capas de protección:**
 
-**Fix:** Se agregaron `fusionPumpId` y `fusionHoseId` a `PendingOrder`. `completeOrder()` ahora matchea por estos campos (que son los que reporta el Synergy). Documentado en `docs/TOPOLOGIA_DISPENSADORES.md`.
+| Capa | Mecanismo | Latencia |
+|------|-----------|----------|
+| 1 | SSE `NEW_TRANSACTION` → `completeOrder()` | <1s |
+| 2 | Reconciliación automática `getShiftDispatches()` → `reconcile()` | 3s |
+| 3 | Verificación bajo demanda al hacer clic: `pollDispensers()` + `reconcileWithPowerFin()` | ~300ms |
+| 4 | Botón 🔄 refresco manual | ~300ms |
 
-### 2. `finalVolume` siempre mostraba '0.00' ✅
+**Archivos modificados:** `+page.svelte`, `DispenserCard.svelte`, `Header.svelte`, `pendingOrders.ts`
 
-**Causa:** `'0.00'` es truthy en JavaScript → `collectOrder.finalVolume || fallback` nunca ejecutaba el fallback.
+### 2. Botón de cancelación manual ✅
 
-**Fix:** `parseFloat(collectOrder.finalVolume) > 0 ? collectOrder.finalVolume : fallback`
+**Funcionalidad:** Cancelar autorización de despacho sin esperar los 180s de ATO.
 
-### 3. Unidad de volumen hardcodeada ✅
+**Reglas de seguridad:**
+- Solo visible en estados AUTHORIZED / CALLING / STARTING (nunca durante FUELLING)
+- Solo para el usuario que inició la venta (`authorizedBy === $currentUser.name`)
+- Diálogo de confirmación obligatorio antes de ejecutar
+- Flujo: CLEAR_PRESET al Synergy → `cancelDispatch` en PowerFin → `removeOrder` local
 
-**Fix:** Cambiado `{finalVolume} L` → `{finalVolume} {unitAbbr}` (muestra "gal" para galones).
+**Archivos modificados:** `DispenserCard.svelte`, `+page.svelte`, `bridge.ts`, `bridge-client.ts`
 
-### 4. `presetAmount = NaN` para tanque lleno ✅
+### 3. Bugfix: cancelDispenser enviaba pump equivocado ✅
 
-**Fix:** `presetType === 'FULL' ? 0 : (val * unitPrice)`
+**Bug:** `cancelDispenser(dispenserId=1)` siempre enviaba `CLEAR_PRESET_ID_001` al Pump 1, incluso para cancelar el Lado B (Pump 2).
 
-### 5. Eliminado `autoCompleteOrders()` ✅
+**Fix:** `handleCancelClick` busca `fusion_pump_id` del hose en `$config.dispensers[].sides[]` y lo pasa al endpoint.
 
-Era peligroso: completaba órdenes falsamente cuando el PRESET era rechazado (manguera siempre IDLE + orden FUELLING → falso positivo).
+### 4. Bugfix: `authorized_by` siempre era 'Carlos Sarmiento' ✅
 
-### 6. Eliminado `LID` y `LM` del PRESET ✅
+**Bug:** El servidor Python usaba `active_shift["user_name"]` que siempre era 'Carlos Sarmiento' (hardcodeado). El POS no enviaba `user_name` al abrir turno. `pendingOrders.addOrder()` tomaba `$shift.user_name` en vez de `$currentUser.name`.
 
-El `LID|LM=NORMAL` en el PRESET creaba locks permanentes en el Synergy que no se liberaban con UNLOCK ni CLEAR_SALE. El firmware Rel-5.19.1 no los maneja correctamente. Documentado en logs de la sesión.
+**Fix (3 lugares):**
+- `SaleWizard`: `authorized_by` y `authorizedBy` usan `$currentUser?.name`
+- `+page.svelte`: `handleOpenShift` envía `user_name: $currentUser.name`
+- `powerfin_server.py`: `authorized_by = body.get("authorized_by", ...)`
 
-### 7. Endpoints de pago en FusionBridge ✅
+### 5. Bugfix: PowerFin nunca pasaba de AUTHORIZED a COMPLETED ✅
 
-Agregados `POST /api/dispatch/payment-lock`, `/payment-clear`, `/payment-unlock` en `DispatchResource.java`. Métodos cliente en `bridge.ts` y `bridge-client.ts`.
+**Bug:** `NEW_TRANSACTION` SSE solo llamaba `pendingOrders.completeOrder()` (local). PowerFin se quedaba en AUTHORIZED. Al reconciliar en otro dispositivo, el status se mapeaba a FUELLING y no mostraba "Cobrar".
 
-### 8. Herramientas de diagnóstico ✅
+**Fix:** El handler SSE `NEW_TRANSACTION` ahora también llama `powerfin.completeDispatch()` (fire-and-forget) para actualizar PowerFin.
 
-| Script | Función |
-|--------|---------|
-| `tools/info_fusion.py` | Consultar estado de dispensadores en Synergy |
-| `tools/test_lock.py` | Probar REQ_PAYMENT_TRANSACTION_LOCK |
-| `tools/unlock_fusion.py` | Desbloquear venta en Synergy |
+### 6. Bugfix: verificación bajo demanda consultaba pump equivocado ✅
 
-### 9. Documentación de topología ✅
+**Bug:** `getDispenser(dispenserId)` solo consultaba un pump (ej: Pump 1 para Lado A). Lado B (Pump 2) nunca se verificaba → dejaba pasar ventas en lado ocupado.
 
-`docs/TOPOLOGIA_DISPENSADORES.md` — Explicación con referencia física: armario, lado, pistola. Mapeo de IDs entre PowerFin y Synergy. Match robusto para cualquier topología.
+**Fix:** `handleSideClick` ahora llama `pollDispensers()` que obtiene TODOS los pumps.
 
 ---
 
@@ -102,13 +109,13 @@ Agregados `POST /api/dispatch/payment-lock`, `/payment-clear`, `/payment-unlock`
 ```bash
 cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 
-# Todo de una vez (sin FusionBridge):
-./start.sh           # POS + PowerFin
-./start.sh bridge    # FusionBridge (tarda ~15s)
+# Limpiar estado viejo (primera vez o después de cambios en powerfin_server.py)
+./start.sh stop
+rm -f tools/powerfin_state.json
 
-# O individual:
+# Arrancar
 ./start.sh powerfin  # PowerFin mock :8080
-./start.sh bridge    # FusionBridge :8090
+./start.sh bridge    # FusionBridge :8090 (tarda ~15s)
 ./start.sh pos       # POS :5173
 
 # Control:
@@ -119,39 +126,19 @@ cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 python3 tools/info_fusion.py
 ```
 
-Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
+Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234` o `maria` / `1234`
 
 ---
 
 ## Pendiente para la próxima sesión
 
-### 🔴 Prioridad 1 — Sincronización multi-dispositivo (CRÍTICO)
+### 🔴 Prioridad 1 — Bug: customer_name se pierde en otros dispositivos
 
-**Problema:** `pendingOrders` se guarda en `localStorage` (por navegador). Si el dispositivo A crea una orden y el B no la ve, hay riesgo de:
-- Doble cobro (B no sabe que ya se pagó en A)
-- Estados inconsistentes (B muestra "Disponible" cuando A muestra "Cobrar")
-- Fraude (alguien puede despachar sin que el cajero lo vea)
+**Problema:** Al terminar una venta con estado "Cobrar", el dispositivo que inició la venta muestra el nombre correcto del cliente, pero los otros dispositivos muestran "Consumidor Final".
 
-```
-☐ Hacer que la reconciliación con PowerFin sea inmediata al montar la página
-☐ Disparar reconciliación al recibir SALE_CLEARED por SSE
-☐ Evaluar si FusionBridge debe broadcastear cambios de pendingOrders vía SSE
-☐ Sincronizar estado de órdenes entre todos los dispositivos en ≤5s
-☐ Probar: 2 navegadores abiertos, venta en A, B debe ver "Cobrar" en ≤5s
-☐ Probar: cobro en A, B debe ver "Disponible" en ≤5s
-☐ Probar: venta en A, B cierra sesión y reabre → debe ver "Cobrar"
-```
+**Causa:** `powerfin.createDispatch()` envía `customer_id` y `plate` a PowerFin, pero NO envía `customer_name`. Al reconciliar en otro dispositivo, `reconcile()` toma `server.customer_name` que es `null` → fallback a `'Consumidor Final'`.
 
-**Posibles soluciones a evaluar:**
-
-| Opción | Pros | Contras |
-|--------|------|---------|
-| Polling más agresivo (cada 5s en vez de 30s) | Simple | Carga al servidor |
-| SSE broadcast de cambios de órdenes | Tiempo real, sin polling | FusionBridge no conoce las órdenes (están en PowerFin) |
-| PowerFin → SSE relay | Fuente de verdad única | Requiere cambios en PowerFin mock y real |
-| Shared localStorage vía backend | Consistente | Overengineered |
-
-**Enfoque recomendado:** Reducir intervalo de reconciliación a 5s + disparar en eventos clave (mount, SALE_CLEARED SSE, después de cobrar). PowerFin es el source of truth, los dispositivos solo cachean.
+**Fix pendiente:** Agregar `customer_name` al `CreateDispatchRequest` y enviarlo en `SaleWizard.handleAuthorize()`.
 
 ### 🟠 Prioridad 2 — Prueba de impresión térmica
 
@@ -188,4 +175,5 @@ Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234`
 - El cambio de precio por protocolo requiere aprobación manual en consola (módulo "Price Change Add In")
 - Siempre `rm -rf .svelte-kit` al reiniciar el POS para evitar caché de Vite
 - **NO usar `LID` ni `LM` en PRESET** — firmware Rel-5.19.1 crea locks permanentes que requieren reinicio del Synergy
-- `localStorage` es por navegador — no usar como source of truth para multi-dispositivo. PowerFin ERP es la fuente de verdad vía reconciliación.
+- `localStorage` es caché local, NO source of truth. PowerFin vía reconciliación cada 3s es la autoridad.
+- Al reiniciar `powerfin_server.py`, borrar `tools/powerfin_state.json` para evitar datos inconsistentes.

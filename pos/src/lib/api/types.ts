@@ -133,6 +133,7 @@ export interface Shift {
 export interface OpenShiftRequest {
 	opening_cash: number;
 	notes: string;
+	user_name?: string;
 }
 
 export interface CloseShiftRequest {
@@ -183,6 +184,7 @@ export interface CreateDispatchRequest {
 	payment_method: string;
 	customer_id?: string;
 	plate?: string;
+	authorized_by?: string;
 }
 
 export interface CreateDispatchResponse {

@@ -148,9 +148,9 @@ export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: 
 	return realBridge.authorizeDispatch(data);
 }
 
-export async function cancelDispenser(dispenserId: number, _hoseId: number): Promise<boolean> {
-	if (USE_MOCKS_BRIDGE) return mockBridge.cancelDispenser(dispenserId, _hoseId);
-	return realBridge.cancelDispenser(dispenserId);
+export async function cancelDispenser(fusionPumpId: number, _hoseId: number): Promise<boolean> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.cancelDispenser(fusionPumpId, _hoseId);
+	return realBridge.cancelDispenser(fusionPumpId);
 }
 
 export async function getPrintPolicy(): Promise<{ policy: string }> {

@@ -295,7 +295,7 @@ export async function createDispatch(
 		status: 'AUTHORIZED',
 		created_at: new Date().toISOString(),
 		shift_id: mockShift?.shift_id ?? 0,
-		authorized_by: mockShift?.user_name
+		authorized_by: (data.authorized_by as string) || mockShift?.user_name
 	};
 	mockOrders.push(order);
 	saveMockOrders();

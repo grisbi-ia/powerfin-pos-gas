@@ -1,10 +1,14 @@
 <script lang="ts">
 	import type { DispenserState, HoseState } from '$lib/api/types';
 	import { orderByHose } from '$lib/stores/pendingOrders';
+	import { currentUser } from '$lib/stores/auth';
+	import { shift } from '$lib/stores/shift';
 	import type { PendingOrder } from '$lib/stores/pendingOrders';
 
 	export let dispenser: DispenserState;
 	export let onSideClick: (dispenserId: number, side: 'A' | 'B', hose: HoseState) => void = () => {};
+	export let onCancelClick: (dispenserId: number, side: 'A' | 'B', hose: HoseState) => void = () => {};
+	export let verifyingSide: 'A' | 'B' | null = null;
 
 	$: isOnline = dispenser.online && dispenser.connected;
 
@@ -134,15 +138,17 @@
 		{#each sides as info}
 			{@const isBusy = info.primaryHose ? isHoseBusy(info.primaryHose) : false}
 			{@const pulse = isBusy && (info.status === 'FUELLING' || info.status === 'STARTING')}
+			{@const isVerifying = verifyingSide === info.side}
 
 			<button
 				class="touch-btn p-3 text-left transition-colors
-					{info.allIdle ? 'hover:bg-green-50 active:bg-green-100' : ''}
-					{info.isPendingCollection ? 'bg-green-50 hover:bg-green-100 ring-1 ring-green-300' : ''}
-					{isBusy ? 'bg-yellow-50' : ''}
-					{!isOnline || (!info.allIdle && !isBusy && !info.isPendingCollection) ? 'cursor-not-allowed' : ''}"
-				on:click={() => info.primaryHose && onSideClick(dispenser.dispenserId, info.side, info.primaryHose)}
-				disabled={!isOnline || (!info.allIdle && !isBusy && !info.isPendingCollection)}
+					{info.allIdle && !isVerifying ? 'hover:bg-green-50 active:bg-green-100' : ''}
+					{info.isPendingCollection && !isVerifying ? 'bg-green-50 hover:bg-green-100 ring-1 ring-green-300' : ''}
+					{isBusy && !isVerifying ? 'bg-yellow-50' : ''}
+					{isVerifying ? 'bg-blue-50' : ''}
+					{!isOnline || (!info.allIdle && !isBusy && !info.isPendingCollection) || isVerifying ? 'cursor-not-allowed' : ''}"
+				on:click={() => info.primaryHose && !isVerifying && onSideClick(dispenser.dispenserId, info.side, info.primaryHose)}
+				disabled={!isOnline || (!info.allIdle && !isBusy && !info.isPendingCollection) || isVerifying}
 			>
 				<!-- Side label -->
 				<div class="text-xs text-gray-400 mb-1">Lado {info.side}</div>
@@ -166,6 +172,21 @@
 							${info.primaryHose.presetAmount.toFixed(2)}
 						</div>
 					{/if}
+				<!-- Cancel button (only pre-fueling + matching attendant via pending order) -->
+				{@const cancelOrder = info.primaryHose ? $orderByHose.get(dispenser.dispenserId + '-' + info.primaryHose.hoseId) : null}
+				{@const canCancel = ['AUTHORIZED', 'CALLING', 'STARTING'].includes(info.primaryHose?.status ?? '') &&
+					cancelOrder != null &&
+					cancelOrder.authorizedBy === $currentUser?.name &&
+					$shift != null}
+				{#if canCancel}
+					<button
+						class="touch-btn mt-2 w-full py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-semibold
+							hover:bg-red-50 active:bg-red-100 transition-colors"
+						on:click|stopPropagation={() => { const h = info.primaryHose; if (h) onCancelClick(dispenser.dispenserId, info.side, h); }}
+					>
+						✕ Cancelar
+					</button>
+				{/if}
 				{/if}
 
 				<!-- Pending collection: show amount to collect -->
@@ -179,8 +200,16 @@
 					<div class="text-xs text-green-600 font-medium mt-0.5">Tocar para cobrar →</div>
 				{/if}
 
+				<!-- Verifying -->
+				{#if isVerifying}
+					<div class="flex items-center gap-2 mt-1">
+						<div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+						<span class="text-xs text-blue-600 font-medium">Verificando...</span>
+					</div>
+				{/if}
+
 				<!-- Available: show grades -->
-				{#if info.allIdle}
+				{#if info.allIdle && !isVerifying}
 					<div class="flex flex-wrap gap-1 mt-1">
 						{#each dispenser.sides[info.side] as h}
 							<span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">

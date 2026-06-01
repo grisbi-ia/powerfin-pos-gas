@@ -63,15 +63,14 @@ export async function authorizeDispatch(data: AuthorizeData): Promise<{ status: 
 	return res.json();
 }
 
-export async function cancelDispenser(dispenserId: number): Promise<boolean> {
+export async function cancelDispenser(fusionPumpId: number): Promise<boolean> {
 	if (USE_MOCKS_BRIDGE) {
-		// Mock needs hoseId — use 0 as default
-		return mock.cancelDispenser(dispenserId, 0);
+		return mock.cancelDispenser(fusionPumpId, 0);
 	}
 	const res = await fetch(bridgeUrl('/api/dispatch/cancel'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ dispenser_id: dispenserId })
+		body: JSON.stringify({ dispenser_id: fusionPumpId })
 	});
 	return res.ok;
 }
