@@ -103,8 +103,12 @@ MOCK_CONFIG = {
     ],
     "payment_methods": [
         {"code": "EFECTIVO", "name": "Efectivo", "requires_reference": False},
-        {"code": "TRANSFERENCIA", "name": "Transferencia", "requires_reference": True},
-        {"code": "QR", "name": "QR / App", "requires_reference": True}
+        {"code": "TARJETA", "name": "Tarjeta Crédito/Débito", "requires_reference": True},
+        {"code": "QR", "name": "QR / Transferencia", "requires_reference": False},
+        {"code": "CREDITO", "name": "Crédito", "requires_reference": False},
+        {"code": "DEUNA", "name": "DeUna", "requires_reference": True},
+        {"code": "JEPFAST", "name": "JepFast", "requires_reference": True},
+        {"code": "SIPY", "name": "Sipy", "requires_reference": True}
     ],
     "polling": {
         "interval_ms": 2000,
