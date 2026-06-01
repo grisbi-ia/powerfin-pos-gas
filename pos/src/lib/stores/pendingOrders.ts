@@ -180,7 +180,7 @@ function createPendingOrdersStore() {
 						fusionHoseId: server.hose_id,
 						hoseId: server.hose_id,
 						side: server.side,
-						customerName: server.customer_name ?? 'Consumidor Final',
+						customerName: server.customer_name ?? 'Sin nombre',
 						plate: server.plate ?? '',
 						presetAmount: parseFloat(server.preset_value) || 0,
 						finalAmount: server.final_amount ?? 0,

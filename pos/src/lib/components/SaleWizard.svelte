@@ -114,7 +114,6 @@
 		finally { loading = false; }
 	}
 
-	function handleSkipPlate() { vehicleResult = null; confirmedOwner = null; unitPrice = 3.103; step = 'presetType'; }
 	function handleBillingConfirm() { if (vehicleResult?.owner) confirmedOwner = vehicleResult.owner; step = 'presetType'; }
 	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
 
@@ -163,7 +162,7 @@
 			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
-			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
+			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
 			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, customer_name: customerName, plate, authorized_by: $currentUser?.name });
 			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 			const authorizedBy = $currentUser?.name ?? '';
@@ -241,10 +240,6 @@
 		} finally {
 			changeBillingLoading = false;
 		}
-	}
-
-	async function handleChangeToConsumer() {
-		await applyBillingChange(undefined, 'Consumidor Final');
 	}
 
 	async function applyBillingChange(customerId: string | undefined, customerName: string) {
@@ -330,9 +325,6 @@
 							{loading ? '...' : 'Buscar'}
 						</button>
 					</div>
-					<button class="touch-btn w-full text-sm text-gray-400 py-2" on:click={handleSkipPlate}>
-						Sin identificar (Consumidor Final)
-					</button>
 				</div>
 			{/if}
 
@@ -537,9 +529,6 @@
 					{#if changeBillingError}
 						<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-3">{changeBillingError}</div>
 					{/if}
-					<button class="touch-btn w-full text-sm text-gray-400 py-2" on:click={handleChangeToConsumer}>
-						Facturar a Consumidor Final
-					</button>
 					<div class="mt-3">
 						<button class="touch-btn w-full bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={cancelChangeBilling}>
 							Cancelar
