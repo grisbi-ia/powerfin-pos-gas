@@ -185,8 +185,10 @@
 	}
 
 	async function handleCollect() {
-		if (!canConfirmPayment || !collectOrder) return;
+		if (!canConfirmPayment) { error = 'Seleccione una forma de pago'; return; }
+		if (!collectOrder) { error = 'Orden no encontrada — regrese al inicio'; return; }
 		confirmed = true;
+		error = '';
 		try {
 			const shiftId = $shift?.shift_id ?? 0;
 			await powerfin.collectDispatch('token', collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: changeAmount, reference_code: referenceCode || undefined });
