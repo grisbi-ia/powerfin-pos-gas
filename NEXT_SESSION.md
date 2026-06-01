@@ -131,6 +131,40 @@ Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234` o `maria` / `1
 
 ## Pendiente para la próxima sesión
 
+### 🔥 Prioridad 0 — Integración con PowerFin ERP real (MAÑANA)
+
+El PowerFin ERP real (OpenXava/Java 8/PostgreSQL/:8080) está disponible.
+El POS ya está listo — solo hay que agregar los endpoints `/api/pos/*` al ERP.
+
+```
+☐ Agregar endpoints al PowerFin ERP (21 endpoints en API_CONTRACT.md)
+☐ POST /api/pos/auth/login
+☐ GET  /api/pos/config
+☐ GET  /api/pos/vehicles?plate=
+☐ GET  /api/pos/customers?q=
+☐ GET  /api/pos/customers/by-id?id_type=&id_number=
+☐ POST /api/pos/customers
+☐ GET  /api/pos/prices?customerId=&gradeId=
+☐ POST /api/pos/shifts/open
+☐ GET  /api/pos/shifts/current
+☐ POST /api/pos/shifts/{id}/close
+☐ POST /api/pos/dispatches
+☐ POST /api/pos/dispatches/{id}/complete
+☐ POST /api/pos/dispatches/{id}/collect
+☐ POST /api/pos/dispatches/{id}/cancel
+☐ POST /api/pos/dispatches/{id}/billing
+☐ GET  /api/pos/shifts/{id}/dispatches
+☐ POST /api/pos/cash-movements
+☐ GET  /api/pos/shifts/{id}/cash-movements
+☐ GET  /api/pos/shifts/{id}/cash-summary
+☐ GET  /api/pos/users/online
+☐ POST /api/pos/transfers
+☐ Conectar POS al ERP → cambiar URL en vite.config.ts
+☐ Quitar powerfin_server.py (ya no es necesario)
+☐ Probar flujo completo: login → turno → venta → cobro → cierre turno
+☐ Probar multi-dispositivo (2 tablets)
+```
+
 ### 🔴 Prioridad 1 — Despachos a crédito, calibraciones y pruebas
 
 Actualmente solo existe venta de combustible normal. Se necesita:
