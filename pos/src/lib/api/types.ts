@@ -213,6 +213,12 @@ export interface CollectDispatchRequest {
 	reference_code?: string;
 }
 
+export interface UpdateDispatchBillingRequest {
+	customer_id?: string;
+	customer_name?: string;
+	plate?: string;
+}
+
 export interface CollectDispatchResponse {
 	order_id: string;
 	status: 'COLLECTED';

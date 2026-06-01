@@ -350,6 +350,21 @@ export async function collectDispatch(
 	};
 }
 
+export async function updateDispatchBilling(
+	_token: string,
+	orderId: string,
+	data: import('./types').UpdateDispatchBillingRequest
+): Promise<void> {
+	await delay(200);
+	const order = mockOrders.find(o => o.order_id === orderId);
+	if (order) {
+		if (data.customer_id !== undefined) order.customer_id = data.customer_id;
+		if (data.customer_name !== undefined) order.customer_name = data.customer_name;
+		if (data.plate !== undefined) order.plate = data.plate;
+		saveMockOrders();
+	}
+}
+
 export async function lookupVehicle(_token: string, plate: string): Promise<VehicleResult> {
 	await delay(300);
 	const normalized = plate.toUpperCase().replace(/\s+/g, '');

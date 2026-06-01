@@ -529,6 +529,21 @@ class PowerFinHandler(BaseHTTPRequestHandler):
                 save_state(self.state)
             return self._json_reply({"status": "ok"})
 
+        # POST /api/pos/dispatches/{id}/billing
+        if len(parts) == 6 and parts[0:4] == ["", "api", "pos", "dispatches"] and parts[5] == "billing":
+            order_id = parts[4]
+            order = next((o for o in self.state["orders"] if o["order_id"] == order_id), None)
+            if not order:
+                return self._error("Orden no encontrada", 404)
+            if "customer_id" in body:
+                order["customer_id"] = body["customer_id"]
+            if "customer_name" in body:
+                order["customer_name"] = body["customer_name"]
+            if "plate" in body:
+                order["plate"] = body["plate"]
+            save_state(self.state)
+            return self._json_reply({"status": "ok"})
+
         # POST /api/pos/dispatches/{id}/collect
         if len(parts) == 6 and parts[0:4] == ["", "api", "pos", "dispatches"] and parts[5] == "collect":
             order_id = parts[4]

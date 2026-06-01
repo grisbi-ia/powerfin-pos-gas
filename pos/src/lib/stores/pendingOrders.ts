@@ -118,8 +118,12 @@ function createPendingOrdersStore() {
 			});
 		},
 
-		/**
-		 * Reload from localStorage explicitly (e.g. after a page refresh
+		/** Update billing info on an existing order (post-dispatch). */
+		updateOrderBilling(orderId: string, customerName: string, plate: string, customerId?: string) {
+			this.updateOrder(orderId, { customerName, plate });
+		},
+
+		/** Reload from localStorage explicitly (e.g. after a page refresh
 		 * where the store may have been recreated before the module loaded).
 		 */
 		reloadFromStorage() {

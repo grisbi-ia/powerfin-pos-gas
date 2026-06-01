@@ -22,7 +22,7 @@
 	type Step =
 		| 'hose' | 'plate' | 'billing' | 'incomplete' | 'idLookup'
 		| 'registration' | 'presetType' | 'presetValue' | 'authorizing'
-		| 'summary' | 'payment' | 'printing' | 'done';
+		| 'summary' | 'payment' | 'printing' | 'done' | 'changeBilling';
 
 	let step: Step = 'hose';
 	let selectedHose: HoseConfig | null = null;
@@ -50,6 +50,12 @@
 	let printError = false;
 	let printPolicy: 'ALWAYS' | 'ASK' | 'NEVER' = 'ASK';
 	let autoReturnTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Change billing state (collect mode)
+	let changeBillingIdType: 'CED' | 'RUC' = 'CED';
+	let changeBillingIdNumber = '';
+	let changeBillingLoading = false;
+	let changeBillingError = '';
 
 	onDestroy(() => {
 		if (autoReturnTimer) clearTimeout(autoReturnTimer);
@@ -208,6 +214,53 @@
 	function handleBackToDashboard() {
 		if (confirmed && collectOrder) pendingOrders.removeOrder(collectOrder.orderId);
 		dispatch('done');
+	}
+
+	// ── Change billing (collect mode) ──────────────────────
+	function startChangeBilling() {
+		changeBillingIdNumber = '';
+		changeBillingError = '';
+		step = 'changeBilling';
+	}
+
+	async function handleChangeBillingSearch() {
+		if (changeBillingIdNumber.length < 5) return;
+		changeBillingLoading = true;
+		changeBillingError = '';
+		try {
+			const customer = await powerfin.getCustomerById('token', changeBillingIdType, changeBillingIdNumber);
+			if (customer) {
+				await applyBillingChange(customer.customer_id, customer.name);
+			} else {
+				changeBillingError = 'Cliente no encontrado';
+			}
+		} catch {
+			changeBillingError = 'Error al buscar';
+		} finally {
+			changeBillingLoading = false;
+		}
+	}
+
+	async function handleChangeToConsumer() {
+		await applyBillingChange(undefined, 'Consumidor Final');
+	}
+
+	async function applyBillingChange(customerId: string | undefined, customerName: string) {
+		if (!collectOrder) return;
+		try {
+			await powerfin.updateDispatchBilling('token', collectOrder.orderId, {
+				customer_id: customerId,
+				customer_name: customerName
+			});
+		} catch {
+			// PowerFin update failed — still update local state
+		}
+		pendingOrders.updateOrderBilling(collectOrder.orderId, customerName, collectOrder.plate, customerId);
+		step = 'summary';
+	}
+
+	function cancelChangeBilling() {
+		step = 'summary';
 	}
 
 	function setQuickAmount(val: number) { presetValue = String(val); }
@@ -457,6 +510,40 @@
 					</div>
 				{/if}
 				<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold" on:click={() => step = 'payment'}>Cobrar Venta</button>
+				<button class="touch-btn w-full mt-2 py-2 text-sm text-gray-400 hover:text-gray-600" on:click={startChangeBilling}>
+					Cambiar facturación →
+				</button>
+			{/if}
+
+			{#if step === 'changeBilling'}
+				<div class="card p-4 mb-4">
+					<h3 class="text-sm font-semibold text-gray-700 mb-1">Cambiar facturación</h3>
+					<p class="text-xs text-gray-400 mb-3">La placa <span class="font-mono font-semibold">{collectOrder.plate || 'sin placa'}</span> no cambia. Busque a quién facturar por cédula o RUC.</p>
+					<div class="flex gap-2 mb-3">
+						<button class="flex-1 py-2 rounded-lg text-sm font-medium {changeBillingIdType === 'CED' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => changeBillingIdType = 'CED'}>Cédula</button>
+						<button class="flex-1 py-2 rounded-lg text-sm font-medium {changeBillingIdType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => changeBillingIdType = 'RUC'}>RUC</button>
+					</div>
+					<div class="flex gap-2 mb-3">
+						<input type="text" bind:value={changeBillingIdNumber} placeholder={changeBillingIdType === 'CED' ? '0912345678' : '1790012345001'}
+							class="flex-1 rounded-xl border border-gray-200 px-4 py-3 focus:border-primary focus:outline-none"
+							on:keydown={(e) => e.key === 'Enter' && handleChangeBillingSearch()} />
+						<button class="touch-btn bg-primary text-white rounded-xl px-6 py-3 font-semibold disabled:opacity-50"
+							on:click={handleChangeBillingSearch} disabled={changeBillingIdNumber.length < 5 || changeBillingLoading}>
+							{changeBillingLoading ? '...' : 'Buscar'}
+						</button>
+					</div>
+					{#if changeBillingError}
+						<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-3">{changeBillingError}</div>
+					{/if}
+					<button class="touch-btn w-full text-sm text-gray-400 py-2" on:click={handleChangeToConsumer}>
+						Facturar a Consumidor Final
+					</button>
+					<div class="mt-3">
+						<button class="touch-btn w-full bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={cancelChangeBilling}>
+							Cancelar
+						</button>
+					</div>
+				</div>
 			{/if}
 
 			{#if step === 'payment' && !confirmed}

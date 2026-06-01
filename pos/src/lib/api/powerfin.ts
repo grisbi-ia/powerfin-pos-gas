@@ -204,6 +204,22 @@ export async function collectDispatch(
 	return res.json();
 }
 
+// ── Billing update (post-dispatch) ──────────────────────────
+
+export async function updateDispatchBilling(
+	token: string,
+	orderId: string,
+	data: import('./types').UpdateDispatchBillingRequest
+): Promise<void> {
+	if (USE_MOCKS_POWERFIN) return mock.updateDispatchBilling(token, orderId, data);
+	const res = await fetch(powerfinUrl(`/api/pos/dispatches/${orderId}/billing`), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error actualizando facturación');
+}
+
 // ── Cash Management ──────────────────────────────────────────
 
 export async function createCashMovement(
