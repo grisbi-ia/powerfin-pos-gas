@@ -183,6 +183,7 @@ export interface CreateDispatchRequest {
 	preset_value: string;
 	payment_method: string;
 	customer_id?: string;
+	customer_name?: string;
 	plate?: string;
 	authorized_by?: string;
 }

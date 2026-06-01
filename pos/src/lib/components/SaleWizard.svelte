@@ -157,9 +157,9 @@
 			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
-			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, authorized_by: $currentUser?.name });
+			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
+			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, customer_name: customerName, plate, authorized_by: $currentUser?.name });
 			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
-					const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Consumidor Final');
 			const authorizedBy = $currentUser?.name ?? '';
 			pendingOrders.addOrder({
 				orderId: orderResult.order_id, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
