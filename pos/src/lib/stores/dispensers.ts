@@ -42,7 +42,16 @@ function createDispensersStore() {
 		},
 
 		setFusionConnected(connected: boolean) {
-			update(state => ({ ...state, fusionConnected: connected }));
+			update(state => {
+				const dispensers = new Map(state.dispensers);
+				if (!connected) {
+					// Mark all dispensers as disconnected when Fusion loses Synergy
+					for (const d of dispensers.values()) {
+						d.connected = false;
+					}
+				}
+				return { ...state, dispensers, fusionConnected: connected };
+			});
 		},
 
 		reset() {
