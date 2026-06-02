@@ -4,7 +4,7 @@
 #   sin args      → arranca todo
 #   pos           → solo POS frontend
 #   bridge        → solo FusionBridge
-#   powerfin      → solo PowerFin mock
+#   backend       → solo POS Backend (FastAPI :8080)
 #   stop          → detiene todo
 
 set -e
@@ -13,6 +13,7 @@ cd "$(dirname "$0")"
 stop_all() {
     echo "Deteniendo servicios..."
     pkill -f "powerfin_server.py" 2>/dev/null || true
+    pkill -f "uvicorn" 2>/dev/null || true
     pkill -f "quarkus" 2>/dev/null || true
     pkill -f "fusion-bridge" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
@@ -20,15 +21,20 @@ stop_all() {
     echo "✓ Servicios detenidos"
 }
 
-start_powerfin() {
-    echo -n "PowerFin (8080)... "
-    python3.11 tools/powerfin_server.py --port 8080 &
-    sleep 2
-    if curl -s http://localhost:8080/api/pos/config > /dev/null 2>&1; then
-        echo "✓"
-    else
-        echo "✗ Error al iniciar"
-    fi
+start_backend() {
+    echo -n "POS Backend (8080)... "
+    cd pos_backend
+    source venv/bin/activate
+    nohup uvicorn app.main:app --host 0.0.0.0 --port 8080 --log-level warning > /tmp/pos_backend.log 2>&1 &
+    cd ..
+    for i in $(seq 1 5); do
+        sleep 1
+        if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+            echo "✓"
+            return
+        fi
+    done
+    echo "✗ Error al iniciar"
 }
 
 start_bridge() {
@@ -78,7 +84,12 @@ case "${1:-all}" in
         status
         ;;
     powerfin)
-        start_powerfin
+        echo "⚠️  'powerfin' es obsoleto — usa 'backend'"
+        start_backend
+        status
+        ;;
+    backend)
+        start_backend
         status
         ;;
     bridge)
@@ -92,7 +103,7 @@ case "${1:-all}" in
     all)
         stop_all 2>/dev/null
         echo "Arrancando todos los servicios..."
-        start_powerfin
+        start_backend
         start_pos
         # FusionBridge arranca aparte (tarda más)
         echo ""

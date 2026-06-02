@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-01)
+## Estado actual (2026-06-02)
 
 ### ✅ Fases completadas
 
@@ -18,6 +18,7 @@
 | 6.3 | `v0.8.1` | Fix customer_name cross-device |
 | 6.4 | `v0.8.2` | Cambio de facturación post-despacho |
 | 6.5 | `v0.8.3` | Eliminación Consumidor Final + offline detection + fixes varios |
+| **7** | **—** | **POS Backend — FastAPI + PostgreSQL (HOY)** |
 
 ### 📊 Tests
 
@@ -25,63 +26,126 @@
 # FusionBridge — 72 tests
 cd fusion-bridge && ./mvnw test   # BUILD SUCCESS
 
+# POS Backend — 71 tests (NUEVO)
+cd pos_backend && source venv/bin/activate && pytest   # 71 passed
+
 # POS — 41 tests (Vitest)
 cd pos && npm run test            # 41 passed
 
-# Total: 113 tests pasando
+# Total: 184 tests pasando
 ```
 
 ---
 
-## Logros de la sesión 2026-06-01
+## Logros de la sesión 2026-06-02
 
-### 1. Sincronización multi-dispositivo (v0.8.0) ✅
+### 1. POS Backend — Aplicativo real con PostgreSQL ✅
 
-**4 capas de protección:** SSE `NEW_TRANSACTION` (<1s), reconciliación PowerFin (3s), verificación bajo demanda al hacer clic (~300ms), botón refresco manual.
+Se construyó `pos_backend/` desde cero, reemplazando el simulador Python
+(`tools/powerfin_server.py`) por un backend real con base de datos.
 
-### 2. Botón cancelación manual (v0.8.0) ✅
+**Stack:** Python 3.10+ / FastAPI / SQLAlchemy 2.0 (async) / asyncpg / Alembic / bcrypt + PyJWT
 
-Cancelar autorización sin esperar ATO 180s. Solo en AUTHORIZED/CALLING/STARTING, solo para el usuario que autorizó, con diálogo de confirmación.
+**Arquitectura:**
+- **26 tablas** en PostgreSQL modelando todo el negocio: usuarios, roles, personas,
+  vehículos, dispensadores, mangueras, productos, categorías, impuestos, listas de
+  precios, métodos de pago, contratos de crédito, turnos, despachos, detalles,
+  pagos mixtos, movimientos de caja, transferencias, puntos de emisión SRI.
+- **38 endpoints REST** cubriendo: auth, config, vehicles, customers, persons,
+  prices, shifts, dispatches (CRUD + complete/collect/cancel/billing/invoice),
+  cash movements, transfers, credit contracts, products, dispatch types,
+  identity lookup.
+- **3 servicios core**: auth (bcrypt+JWT), sequential (SRI atómico FOR UPDATE),
+  credit (validación contratos, cupo disponible).
+- **71 tests unitarios y de integración** — 100% pasando.
 
-### 3. Bugfix: CLEAR_PRESET al pump correcto (v0.8.0) ✅
+### 2. Identity API — Búsqueda externa de personas ✅
 
-`cancelDispenser` ahora envía `fusionPumpId` del hose (config) en vez del `dispenserId` del armario.
+Integración con APIs externas para auto-llenar datos de clientes:
 
-### 4. Bugfix: `authorized_by` por usuario real (v0.8.0) ✅
+| Fuente | Tipo | Endpoint | Latencia |
+|---|---|---|---|
+| Sercobaco | CED | `GET /v1/info/ALL/sercobaco/{cedula}` | ~500ms |
+| SRI | RUC | `GET /v1/info/ALL/sri/{ruc}` | ~2.8s |
 
-`SaleWizard` envía `$currentUser.name` en vez de `$shift.user_name`. `handleOpenShift` envía `user_name`. Servidor Python usa `body.get("authorized_by", ...)`.
+**Endpoint unificado:** `GET /api/pos/persons/lookup?id_type=&id_number=`
+- Primero busca en PostgreSQL local
+- Si no encuentra, consulta API externa (timeout 5s)
+- Si nada funciona, retorna `found: false` → POS muestra formulario manual
 
-### 5. Bugfix: PowerFin COMPLETED vía SSE (v0.8.0) ✅
+Extracción de email y teléfono del API Sercobaco (formato `||` delimitado).
 
-`NEW_TRANSACTION` ahora llama `powerfin.completeDispatch()` (fire-and-forget) para que otros dispositivos vean COMPLETED al reconciliar.
+### 3. Contratos de Crédito ✅
 
-### 6. Bugfix: verificación consulta todos los pumps (v0.8.0) ✅
+- Tablas: `credit_contracts`, `credit_contract_vehicles`, `credit_contract_products`
+- Tipos: INDEFINIDO (cupo − no facturados) / NO_INDEFINIDO (cupo − todo)
+- Tipos SERCOP: Ínfima Cuantía, Adjudicación, Contratación Directa, No Definido
+- Validación completa: vehículo en contrato activo + producto asignado + cupo disponible
+- Endpoint: `GET /api/pos/credit-contracts/{id}/available` (cupo en tiempo real)
 
-`handleSideClick` usa `pollDispensers()` (todos los pumps) en vez de `getDispenser(id)` (un solo pump).
+### 4. Decimal → Float Middleware ✅
 
-### 7. Fix customer_name cross-device (v0.8.1) ✅
+Pydantic v2 serializa `Decimal` como strings (`"2.9500"`). El POS llama `.toFixed()`
+sobre estos valores, causando `TypeError`. Se implementó un middleware ASGI que
+convierte strings numéricos con decimales a números reales en las respuestas JSON,
+preservando strings reales como códigos (`"001"`, `"DIESEL"`).
 
-`SaleWizard` envía `customer_name` en `createDispatch()`. PowerFin lo almacena. Reconciliación lo muestra en todos los dispositivos.
+### 5. start.sh actualizado ✅
 
-### 8. Cambio de facturación post-despacho (v0.8.2) ✅
+Nuevo comando `./start.sh backend` para iniciar el POS Backend. El comando
+`powerfin` ahora redirige a `backend`. Stop actualizado para incluir uvicorn.
 
-En modo cobro, cambiar destinatario de factura por cédula/RUC. La placa no cambia. Nuevo endpoint `POST /api/pos/dispatches/{id}/billing`.
+### 6. Documentación ✅
 
-### 9. Eliminación Consumidor Final (v0.8.3) ✅
+- `docs/POS_BACKEND.md` — schema completo, reglas de negocio, seed data
+- `docs/IDENTITY_API.md` — APIs externas, credenciales, mapeo de campos
+- `AGENTS.md` — actualizado con el 4to sistema y nueva estructura
 
-Por regulación SRI, todas las ventas requieren cliente identificado. Eliminados: `handleSkipPlate()`, botón "Sin identificar", `handleChangeToConsumer()`, botón "Facturar a Consumidor Final". Fallbacks cambiados a `'Sin nombre'`.
+### 7. Synergy — Verificación de pumps ✅
 
-### 10. Sincronización formas de pago (v0.8.3) ✅
+Conectividad confirmada con pumps 3, 4, 7, 8. Todos responden IDLE.
 
-Servidor Python ahora tiene 7 métodos: EFECTIVO, TARJETA, QR, CREDITO, DEUNA, JEPFAST, SIPY.
+---
 
-### 11. Detección de Synergy offline (v0.8.3) ✅
+## Pendiente para mañana (2026-06-03)
 
-Al perder conexión TCP con Synergy, todos los dispensadores se marcan `connected=false` (opacidad 50% + "offline"). Fix en `convertToDispenserState` + `setFusionConnected`.
+### 🔴 Prioridad 1 — Mapear nuevo surtidor en BD
 
-### 12. API_CONTRACT.md actualizado ✅
+```
+☐ Agregar dispensador 2 a la BD (pumps 3 y 4, o 7 y 8)
+☐ Definir: código, nombre, combustible, punto de emisión
+☐ Agregar hoses correspondientes
+☐ Actualizar seed_data.py con el nuevo dispensador
+☐ Verificar que GET /api/pos/config devuelve ambos dispensadores
+```
 
-Documentadas todas las APIs nuevas: billing, collect, payment-lock/clear/unlock, SSE events, arquitectura multi-dispositivo, flujos de cancelación y cambio de facturación.
+### 🔴 Prioridad 2 — Pruebas end-to-end con POS Backend
+
+```
+☐ Iniciar pos_backend en :8080
+☐ Iniciar FusionBridge en :8090 (si hay Synergy)
+☐ Iniciar POS en :5173
+☐ Probar flujo completo:
+    login → abrir turno → buscar cliente → autorizar despacho →
+    completar → cobrar (con pagos mixtos) → cerrar turno
+☐ Probar multi-dispositivo: abrir POS en 2 navegadores
+☐ Probar contratos de crédito desde el POS
+```
+
+### 🟡 Prioridad 3 — Integrar persons/lookup en el POS
+
+```
+☐ POS: reemplazar búsqueda de cliente actual por GET /api/pos/persons/lookup
+☐ POS: mostrar datos del API externo cuando no hay cliente local
+☐ POS: permitir registrar cliente nuevo con datos del API
+```
+
+### 🟡 Prioridad 4 — Documentar y commitear
+
+```
+☐ Hacer commit de todos los cambios de hoy
+☐ Tag: v0.9.0 — POS Backend
+```
 
 ---
 
@@ -90,141 +154,49 @@ Documentadas todas las APIs nuevas: billing, collect, payment-lock/clear/unlock,
 | Dato | Valor |
 |------|-------|
 | Estación | NEOGAS |
-| Surtidores | 1 físico (DIESEL, 2 lados) → 2 pumps lógicos en Synergy |
+| Surtidores Synergy | 8 pumps: 1,2 (DIESEL dual), 3,4,7,8 (disponibles), 5,6 (closed) |
 | Combustible | DIESEL (Grade 3, P3) |
 | Precio | $3.103/galón |
 | Pump 1 → Side A | Fusion hose 1 |
 | Pump 2 → Side B | Fusion hose 1 |
-| ATO | 180s |
+| ATO | 0s (requiere ajuste a 180s) |
 | Moneda | DÓLARES ($) |
 | Firmware | Rel-5.19.1 |
-| Formas de pago | EFECTIVO, TARJETA, QR, CREDITO, DEUNA, JEPFAST, SIPY |
+| Formas de pago | EFECTIVO, TARJETA, QR, CREDITO, DEUNA, JEPFAST, SIPY, YALOBOX |
 | Cliente requerido | Sí (cédula o RUC obligatorio — sin Consumidor Final) |
 
----
+## Base de datos
+
+| Dato | Valor |
+|------|-------|
+| Host | localhost:5433 |
+| Database | powerfin_gas |
+| Test DB | powerfin_gas_test |
+| User | postgres |
+| Password | 1234abcd |
 
 ## Cómo arrancar todo
 
 ```bash
 cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
 
-# Limpiar estado viejo (primera vez o después de cambios en powerfin_server.py)
+# Limpiar estado viejo
 ./start.sh stop
-rm -f tools/powerfin_state.json
 
 # Arrancar
-./start.sh powerfin  # PowerFin mock :8080
-./start.sh bridge    # FusionBridge :8090 (tarda ~15s)
-./start.sh pos       # POS :5173
+./start.sh backend  # POS Backend :8080 (tarda ~3s)
+./start.sh bridge   # FusionBridge :8090 (tarda ~15s)
+./start.sh pos      # POS :5173
 
 # Control:
-./start.sh stop      # Detener todo
-./start.sh status    # Ver estado
+./start.sh stop     # Detener todo
+./start.sh status   # Ver estado
 
 # Diagnosticar Synergy:
 python3 tools/info_fusion.py
 ```
 
 Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234` o `maria` / `1234`
-
----
-
-## Pendiente para la próxima sesión
-
-### 🔥 Prioridad 0 — Integración con PowerFin ERP real (MAÑANA)
-
-El PowerFin ERP real (OpenXava/Java 8/PostgreSQL/:8080) está disponible.
-El POS ya está listo — solo hay que agregar los endpoints `/api/pos/*` al ERP.
-
-```
-☐ Agregar endpoints al PowerFin ERP (21 endpoints en API_CONTRACT.md)
-☐ POST /api/pos/auth/login
-☐ GET  /api/pos/config
-☐ GET  /api/pos/vehicles?plate=
-☐ GET  /api/pos/customers?q=
-☐ GET  /api/pos/customers/by-id?id_type=&id_number=
-☐ POST /api/pos/customers
-☐ GET  /api/pos/prices?customerId=&gradeId=
-☐ POST /api/pos/shifts/open
-☐ GET  /api/pos/shifts/current
-☐ POST /api/pos/shifts/{id}/close
-☐ POST /api/pos/dispatches
-☐ POST /api/pos/dispatches/{id}/complete
-☐ POST /api/pos/dispatches/{id}/collect
-☐ POST /api/pos/dispatches/{id}/cancel
-☐ POST /api/pos/dispatches/{id}/billing
-☐ GET  /api/pos/shifts/{id}/dispatches
-☐ POST /api/pos/cash-movements
-☐ GET  /api/pos/shifts/{id}/cash-movements
-☐ GET  /api/pos/shifts/{id}/cash-summary
-☐ GET  /api/pos/users/online
-☐ POST /api/pos/transfers
-☐ Conectar POS al ERP → cambiar URL en vite.config.ts
-☐ Quitar powerfin_server.py (ya no es necesario)
-☐ Probar flujo completo: login → turno → venta → cobro → cierre turno
-☐ Probar multi-dispositivo (2 tablets)
-```
-
-### 🔴 Prioridad 1 — Despachos a crédito, calibraciones y pruebas
-
-Actualmente solo existe venta de combustible normal. Se necesita:
-
-```
-☐ Despachos a crédito (empresas con cupo)
-   - El sistema debe verificar saldo disponible antes de autorizar
-   - No se cobra en el momento — se registra como crédito
-   - Posible integración con módulo de crédito de PowerFin ERP
-
-☐ Salidas por calibración
-   - Despachos sin cliente ni factura (consumo interno)
-   - Deben quedar registrados como "CALIBRACION" para trazabilidad
-   - No afectan caja ni facturación
-
-☐ Salidas por pruebas
-   - Similar a calibración pero con categoría "PRUEBA"
-   - Puede requerir selección de motivo
-```
-
-### 🟠 Prioridad 2 — Venta de productos adicionales
-
-```
-☐ Registrar venta de: ambientales, aditivos, aceites, etc.
-☐ Factura independiente (no mezclada con combustible)
-☐ Flujo rápido: seleccionar producto → cantidad → cobrar
-☐ Catálogo de productos configurable desde PowerFin
-☐ Afecta caja e inventario
-```
-
-### 🟡 Prioridad 3 — Lecturas cronometradas de dispensadores
-
-```
-☐ Registrar periódicamente las métricas del dispensador
-   - Totalizadores (volumen acumulado, monto acumulado)
-   - Lecturas por turno, diarias, semanales
-☐ Almacenar en PowerFin para reportes del ente regulador (ARCH)
-☐ Posible automatización: cada N minutos consultar métricas vía Fusion
-☐ Interfaz para visualizar historial de lecturas
-```
-
-### 🟢 Prioridad 4 — Bug: validación de input numérico (montos/galones)
-
-```
-☐ Revisar el parseo de valores decimales en el input de monto/galones
-☐ El error puede estar en:
-   - Separador decimal (coma vs punto) según locale
-   - Cantidad de decimales permitidos
-   - Valores negativos o cero
-☐ Agregar validación antes de enviar a autorizar
-☐ Mostrar mensaje claro si el valor no es válido
-```
-
-### 🔵 Prioridad 5 — Pendientes anteriores
-
-```
-☐ Prueba de impresión térmica en 192.168.1.31:9100
-☐ Prueba de topologías de dispensadores (2+ físicos, multi-manguera)
-☐ Integración con PowerFin ERP real
-```
 
 ---
 
@@ -239,3 +211,5 @@ Actualmente solo existe venta de combustible normal. Se necesita:
 - `localStorage` es caché local, NO source of truth. PowerFin vía reconciliación cada 3s es la autoridad.
 - Al reiniciar `powerfin_server.py`, borrar `tools/powerfin_state.json` para evitar datos inconsistentes.
 - **No existe Consumidor Final** — toda venta requiere cliente con cédula o RUC.
+- El POS Backend reemplaza al mock Python. `powerfin_server.py` queda como legacy.
+- **ATO en 0 segundos** — los presets expiran instantáneamente. Ajustar en consola a 180s.

@@ -1,0 +1,28 @@
+# Python virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Alembic
+alembic/versions/*.py
+!alembic/versions/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# Environment (keep .env.example only)
+.env
+!.env.example
+
+# Test cache
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS
+.DS_Store
+Thumbs.db

@@ -22,9 +22,11 @@ Tests obligatorios antes de cada versión git.
 | **5** | Impresión                   | 1       | Tickets en impresora térmica de red ✅     |
 | **6** | Funcionalidades adicionales | 1       | Caja, historial, usuarios en línea ✅     |
 | **7** | Pruebas con hardware real   | 1       | Validación en GASOLINERA con dispensadores |
-| **8** | Go-live                     | 1       | Deploy final, capacitación, producción     |
+| **8** | POS Backend real            | 1       | FastAPI + PostgreSQL (reemplaza mock) ✅   |
+| **9** | Integración y hardening     | 1       | POS ↔ Backend real ↔ FusionBridge          |
+| **10**| Go-live                     | 1       | Deploy final, capacitación, producción     |
 
-**Duración total estimada: 9 semanas**
+**Duración total estimada: 10 semanas**
 
 ---
 
@@ -361,7 +363,65 @@ Validar todo con el Synergy conectado a los dispensadores físicos en la GASOLIN
 
 ---
 
-## FASE 8 — Go-live (Semana 9)
+## FASE 8 — POS Backend real (Semana 9) ✅ COMPLETADA
+
+### Objetivo
+
+Reemplazar el simulador Python por un backend real con PostgreSQL.
+
+### Tareas
+
+```
+[x] Diseño de schema: 26 tablas (POS_BACKEND.md)
+[x] Proyecto FastAPI + SQLAlchemy 2.0 + asyncpg + Alembic
+[x] Modelos SQLAlchemy para las 26 tablas
+[x] Esquemas Pydantic (50+ request/response models)
+[x] Servicios: auth (bcrypt+JWT), sequential (SRI atómico), credit (contratos)
+[x] 38 endpoints REST (auth, config, vehicles, customers, persons, prices,
+    shifts, dispatches CRUD, cash, transfers, credit contracts, products,
+    dispatch types, identity lookup)
+[x] Identity API: Sercobaco (CED) + SRI (RUC) con fallback local
+[x] Contratos de crédito: INDEFINIDO/NO_INDEFINIDO, SERCOP, cupo disponible
+[x] Decimal→float middleware para compatibilidad con POS
+[x] Seed data: 4 usuarios, 6 productos, 8 métodos pago, 1 contrato
+[x] 71 tests unitarios + integración — 100% pasando
+[x] start.sh actualizado con comando "backend"
+[x] Documentación: POS_BACKEND.md, IDENTITY_API.md, AGENTS.md actualizado
+```
+
+### Criterio de completitud
+
+```
+✅ 71/71 tests pasando
+✅ Todos los endpoints del mock migrados a PostgreSQL real
+✅ Identity API funcional con fallback
+✅ Contratos de crédito con validación completa
+✅ POS puede conectarse directamente (mismos formatos de respuesta)
+✅ git tag v0.9.0 -m "Fase 8: POS Backend real"
+```
+
+---
+
+## FASE 9 — Integración y hardening (Semana 10)
+
+### Objetivo
+
+Conectar el POS frontend al backend real y validar el sistema completo.
+
+```
+☐ Mapear nuevo dispensador (pumps 3, 4, 7, 8) en BD
+☐ Prueba end-to-end: POS → pos_backend → FusionBridge → Synergy
+☐ Integrar GET /api/pos/persons/lookup en el flujo de búsqueda del POS
+☐ Probar multi-dispositivo con backend real
+☐ Probar flujo de crédito desde el POS
+☐ Ajustar ATO en consola Wayne de 0 → 180s
+☐ Prueba de impresión térmica física (192.168.1.31:9100)
+☐ Pruebas de carga y concurrencia
+```
+
+---
+
+## FASE 10 — Go-live (Semana 11)
 
 ```
 ☐ Deploy definitivo en servidor Debian de producción
@@ -400,9 +460,17 @@ Validar todo con el Synergy conectado a los dispensadores físicos en la GASOLIN
 **Fases 3-6 (Powerfin POS):**
 
 ```
-1. POWERFIN_POS.md          ← arquitectura SvelteKit
+1. POWERFIN_POS.md      ← arquitectura SvelteKit
 2. API_CONTRACT.md      ← endpoints que consume
 3. FLUJOS_OPERATIVOS.md ← pantallas y flujos
+```
+
+**Fase 8 (POS Backend):**
+
+```
+1. POS_BACKEND.md       ← schema, APIs, reglas de negocio
+2. IDENTITY_API.md      ← integración Sercobaco/SRI
+3. API_CONTRACT.md      ← contratos de endpoints
 ```
 
 ---
@@ -418,4 +486,6 @@ Validar todo con el Synergy conectado a los dispensadores físicos en la GASOLIN
 | Fase 5       | `v0.5.0` | Impresión ✅                       |
 | Fase 6       | `v0.6.0` | Caja + historial + usuarios ✅     |
 | Fase 7       | `v0.7.0` | Pruebas hardware real              |
-| Fase 8       | `v1.0.0` | Producción GASOLINERA              |
+| Fase 8       | `v0.9.0` | POS Backend real (FastAPI+PG) ✅   |
+| Fase 9       | `v0.10.0`| Integración y hardening            |
+| Fase 10      | `v1.0.0` | Producción GASOLINERA              |
