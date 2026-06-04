@@ -119,7 +119,8 @@ async def close_shift(
     cash_method_id = cash_method.scalar_one_or_none()
     cash_method_id = cash_method_id.payment_method_id if cash_method_id else None
 
-    # Sum sales paid in cash
+    # Sum sales paid in cash — all COLLECTED dispatches in this shift
+    # (shift_id is updated to collector's shift at collection time)
     sales_cash = await db.scalar(
         select(func.coalesce(func.sum(Dispatch.total), 0)).where(
             Dispatch.shift_id == shift_id,
@@ -200,6 +201,17 @@ async def get_shift_dispatches(
         for det in details_result.scalars():
             detail_map[det.dispatch_id] = det
 
+    # Build person lookup for customer_name
+    person_ids = [d.person_id for d in dispatches if d.person_id]
+    person_map = {}
+    if person_ids:
+        from app.models import Person as PersonModel
+        persons_result = await db.execute(
+            select(PersonModel).where(PersonModel.person_id.in_(person_ids))
+        )
+        for p in persons_result.scalars():
+            person_map[p.person_id] = p
+
     return [
         {
             "order_id": d.order_id,
@@ -213,12 +225,12 @@ async def get_shift_dispatches(
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
             "customer_id": None,
-            "customer_name": d.customer_name,
+            "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
             "plate": None,
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
-            "authorized_by": d.authorized_by,
+            "authorized_by_user_id": d.authorized_by_user_id,
             "final_amount": d.subtotal if d.subtotal else d.total,
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
             "invoice_number": None,

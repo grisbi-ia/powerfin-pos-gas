@@ -170,7 +170,6 @@
 				unit_price: 3.103,
 				payment_method: 'EFECTIVO',
 				customer_id: dispatchOwner?.customer_id,
-				customer_name: dispatchOwner?.name,
 				plate: plate
 			});
 

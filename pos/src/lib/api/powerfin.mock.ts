@@ -290,12 +290,11 @@ export async function createDispatch(
 		unit_price: (data as Record<string, number>).unit_price ?? 1.500,
 		payment_method: (data.payment_method as string) ?? 'EFECTIVO',
 		customer_id: data.customer_id as string | undefined,
-		customer_name: data.customer_name as string | undefined,
 		plate: data.plate as string | undefined,
 		status: 'AUTHORIZED',
 		created_at: new Date().toISOString(),
 		shift_id: mockShift?.shift_id ?? 0,
-		authorized_by: (data.authorized_by as string) || mockShift?.user_name
+		authorized_by_user_id: mockShift?.user_id
 	};
 	mockOrders.push(order);
 	saveMockOrders();

@@ -14,9 +14,12 @@ from app.models import (
     DispatchDetail,
     DispatchPayment,
     DispatchType,
+    Dispenser,
     EmissionPoint,
     PaymentMethod,
+    Person,
     Shift,
+    Vehicle,
 )
 from app.models.user import User
 from app.schemas import (
@@ -70,7 +73,6 @@ async def create_dispatch(
     if body.dispatch_type_code == "CREDIT":
         # If credit_contract_id not provided, try to find one for the vehicle
         if not credit_contract_id and body.plate:
-            from app.models import Vehicle
             from app.services.credit_service import find_active_contract_for_vehicle
             v = (await db.execute(
                 select(Vehicle).where(Vehicle.plate == body.plate.upper().replace(" ", ""))
@@ -95,13 +97,22 @@ async def create_dispatch(
                     )
                 credit_status = "PENDING_INVOICE"
 
-    # Consume sequential for SALE/CREDIT
+    # Consume sequential for SALE/CREDIT — each dispenser has its own emission point
     sequential_number = None
+    ep = None
     if dispatch_type.affects_cash or dispatch_type.code == "CREDIT":
-        emission_result = await db.execute(
-            select(EmissionPoint).where(EmissionPoint.is_active == True).limit(1)
+        dispenser_result = await db.execute(
+            select(Dispenser).where(Dispenser.dispenser_id == body.dispenser_id)
         )
-        ep = emission_result.scalar_one_or_none()
+        dispenser_obj = dispenser_result.scalar_one_or_none()
+        if dispenser_obj and dispenser_obj.emission_point_id:
+            ep_result = await db.execute(
+                select(EmissionPoint).where(
+                    EmissionPoint.emission_point_id == dispenser_obj.emission_point_id,
+                    EmissionPoint.is_active == True,
+                )
+            )
+            ep = ep_result.scalar_one_or_none()
         if ep:
             try:
                 sequential_number = await consume_sequential(db, ep.emission_point_id)
@@ -144,6 +155,33 @@ async def create_dispatch(
                         if tax_obj:
                             tax_rate = tax_obj.rate
 
+    # Resolve customer_id (id_number) → person_id
+    person_id = None
+    if body.customer_id:
+        person_result = await db.execute(
+            select(Person).where(
+                Person.id_number == body.customer_id,
+                Person.is_active == True,
+            )
+        )
+        person = person_result.scalar_one_or_none()
+        if person:
+            person_id = person.person_id
+
+    # Resolve plate → vehicle_id
+    vehicle_id = None
+    if body.plate:
+        cleaned_plate = body.plate.upper().replace(" ", "").replace("-", "")
+        vehicle_result = await db.execute(
+            select(Vehicle).where(Vehicle.plate == cleaned_plate)
+        )
+        vehicle = vehicle_result.scalar_one_or_none()
+        if vehicle:
+            vehicle_id = vehicle.vehicle_id
+            # Also link person if not already set
+            if not person_id and vehicle.person_id:
+                person_id = vehicle.person_id
+
     dispatch = Dispatch(
         order_id=order_id,
         shift_id=shift.shift_id,
@@ -151,9 +189,9 @@ async def create_dispatch(
         emission_point_id=ep.emission_point_id if ep else None,
         sequential_number=sequential_number,
         dispatch_type_id=dispatch_type.dispatch_type_id,
-        person_id=None,
-        customer_name=body.customer_name,
-        authorized_by=body.authorized_by or current_user.name,
+        person_id=person_id,
+        vehicle_id=vehicle_id,
+        authorized_by_user_id=current_user.user_id,
         total=0,
         subtotal=0,
         tax_amount=0,
@@ -316,6 +354,7 @@ async def collect_dispatch(
         raise HTTPException(status_code=409, detail="Orden ya cobrada")
 
     dispatch.status = "COLLECTED"
+    dispatch.shift_id = body.collected_by_shift_id  # cash belongs to collector's shift
 
     # Record payments
     if body.payments:
@@ -393,15 +432,18 @@ async def change_billing(
         raise HTTPException(status_code=404, detail="Orden no encontrada")
 
     if body.customer_id:
-        from app.models import Person
         person = (await db.execute(
-            select(Person).where(Person.id_number == body.customer_id)
+            select(Person).where(
+                Person.id_number == body.customer_id,
+                Person.is_active == True,
+            )
         )).scalar_one_or_none()
-        if person:
-            dispatch.person_id = person.person_id
-
-    if body.customer_name is not None:
-        dispatch.customer_name = body.customer_name
+        if not person:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Persona no encontrada: {body.customer_id}",
+            )
+        dispatch.person_id = person.person_id
 
     await db.commit()
     return {"status": "ok"}
@@ -470,6 +512,17 @@ async def get_active_dispatches(
         for det in details_result.scalars():
             detail_map[det.dispatch_id] = det
 
+    # Build person lookup for customer_name
+    person_ids = [d.person_id for d in dispatches if d.person_id]
+    person_map = {}
+    if person_ids:
+        from app.models import Person as PersonModel
+        persons_result = await db.execute(
+            select(PersonModel).where(PersonModel.person_id.in_(person_ids))
+        )
+        for p in persons_result.scalars():
+            person_map[p.person_id] = p
+
     return [
         {
             "order_id": d.order_id,
@@ -483,12 +536,12 @@ async def get_active_dispatches(
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
             "customer_id": None,
-            "customer_name": d.customer_name,
+            "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
             "plate": None,
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
-            "authorized_by": d.authorized_by,
+            "authorized_by_user_id": d.authorized_by_user_id,
             "final_amount": d.subtotal if d.subtotal else d.total,
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
             "invoice_number": None,

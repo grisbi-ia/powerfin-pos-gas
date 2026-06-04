@@ -28,8 +28,9 @@
 		}
 	}
 
-	function formatCurrency(value: number): string {
-		return '$ ' + value.toFixed(2);
+	function formatCurrency(value: number | string): string {
+		const num = typeof value === 'number' ? value : parseFloat(value || '0');
+		return '$ ' + num.toFixed(2);
 	}
 
 	function movementIcon(type: string): string {

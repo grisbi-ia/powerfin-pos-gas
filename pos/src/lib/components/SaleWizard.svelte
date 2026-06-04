@@ -23,11 +23,11 @@
 	$: sideHoses = (dispenserConfig?.sides?.[side] ?? []) as HoseConfig[];
 
 	type Step =
-		| 'hose' | 'plate' | 'billing' | 'incomplete' | 'idLookup'
+		| 'plate' | 'product' | 'billing' | 'incomplete' | 'idLookup'
 		| 'registration' | 'presetType' | 'presetValue' | 'authorizing'
 		| 'summary' | 'payment' | 'printing' | 'done' | 'changeBilling';
 
-	let step: Step = 'hose';
+	let step: Step = 'plate';
 	let selectedHose: HoseConfig | null = null;
 	let plate = 'ABC1234';
 	let vehicleResult: VehicleResult | null = null;
@@ -88,10 +88,8 @@
 			: (finalAmount / (collectOrder.unitPrice || 1.5)).toFixed(3))
 		: '0';
 
-	$: if (mode === 'sale' && sideHoses.length === 1) {
-		selectedHose = sideHoses[0];
-		unitPrice = sideHoses[0].unit_price || 3.103;
-		step = 'plate';
+	$: if (mode === 'sale' && sideHoses.length === 1 && step === 'product') {
+		selectHose(sideHoses[0]);
 	}
 	$: if (mode === 'collect') {
 		step = 'summary';
@@ -105,7 +103,22 @@
 	function submitIncomplete() { if (vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
 	function submitRegistration() { if (regIdNumber && regName && regEmail) { handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName, email: regEmail, plate }); } }
 
-	function selectHose(hose: HoseConfig) { selectedHose = hose; unitPrice = hose.unit_price || 3.103; step = 'plate'; }
+	async function selectHose(hose: HoseConfig) {
+		selectedHose = hose;
+		step = 'billing';  // advance immediately to prevent reactive re-fire
+
+		let price = hose.unit_price || 3.103;
+		const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
+		const priceList = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
+		const customerId = owner?.customer_id ?? owner?.id_number;
+		if (hose.grade_id && customerId && priceList !== 'STANDARD') {
+			try {
+				const priceInfo = await powerfin.getCustomerPrice(token(), customerId, hose.grade_id, vehicleResult?.plate);
+				if (priceInfo.unit_price > 0) price = priceInfo.unit_price;
+			} catch { /* keep hose default */ }
+		}
+		unitPrice = price;
+	}
 
 	async function handlePlateSearch() {
 		if (plate.length < 3) return;
@@ -115,12 +128,16 @@
 			vehicleResult = result; plate = result.plate;
 			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
 			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
-			else { confirmedOwner = result.owner; step = 'billing'; }
+			else { confirmedOwner = result.owner; step = 'product'; }
 		} catch { error = 'Error al buscar placa'; }
 		finally { loading = false; }
 	}
 
-	function handleBillingConfirm() { if (vehicleResult?.owner) confirmedOwner = vehicleResult.owner; step = 'presetType'; }
+	function handleBillingConfirm() {
+		const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
+		if (owner) confirmedOwner = owner;
+		step = 'presetType';
+	}
 	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
 
 	async function handleIncompleteSubmit(formData: CustomerFormData) {
@@ -128,7 +145,7 @@
 		try {
 			await powerfin.registerCustomer(token(), formData);
 			if (vehicleResult) { vehicleResult.incomplete_fields = []; if (vehicleResult.owner) vehicleResult.owner.email = formData.email; confirmedOwner = vehicleResult.owner; }
-			step = 'billing';
+			step = 'product';
 		} catch { error = 'Error al actualizar datos'; }
 		finally { loading = false; }
 	}
@@ -139,7 +156,7 @@
 		loading = true; idLookupError = '';
 		try {
 			const customer = await powerfin.getCustomerById(token(), idType, idNumber, true);
-			if (customer) { billingCustomer = customer; step = 'billing'; }
+			if (customer) { billingCustomer = customer; step = 'product'; }
 			else { step = 'registration'; }
 		} catch { idLookupError = 'Error al buscar'; }
 		finally { loading = false; }
@@ -152,7 +169,7 @@
 			await powerfin.registerCustomer(token(), formData);
 			plate = formData.plate;
 			vehicleResult = { plate: formData.plate, vehicle_found: true, incomplete_fields: [], owner: { customer_id: formData.id_number, id_type: formData.id_type, id_number: formData.id_number, name: formData.name, email: formData.email, phone: null }, price_list: 'STANDARD', price_list_name: 'Precio Normal' };
-			confirmedOwner = vehicleResult.owner; step = 'billing';
+			confirmedOwner = vehicleResult.owner; step = 'product';
 		} catch { error = 'Error al registrar'; }
 		finally { loading = false; }
 	}
@@ -167,18 +184,19 @@
 		try {
 			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
 			const hose = selectedHose!;
-			const pl = vehicleResult?.price_list ?? 'STANDARD';
+			const pl = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
-			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, customer_name: customerName, plate, authorized_by: $currentUser?.name });
+			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
 			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
+			const authorizedByUserId = $currentUser?.user_id;
 			const authorizedBy = $currentUser?.name ?? '';
 			pendingOrders.addOrder({
 				orderId: orderResult.order_id, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
-				customerName, plate,
+				customerId: owner?.customer_id, customerName, plate,
 				presetAmount: presetType === 'MONEY' ? val : presetType === 'FULL' ? 0 : (val * unitPrice),
 				finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl,
 				status: 'FUELLING', createdAt: new Date().toISOString(),
-				authorizedBy
+				authorizedBy, authorizedByUserId
 			});
 			step = 'done';
 			// Auto-redirect to dashboard after 1.5s so user sees live state transitions
@@ -295,14 +313,29 @@
 		{:else}
 		{#if mode === 'sale'}
 			<div class="flex items-center gap-1 mb-4 text-xs text-gray-400">
-				<span class={step === 'hose' ? 'text-primary font-medium' : ''}>Pistola</span><span>→</span>
 				<span class={step === 'plate' || step === 'idLookup' || step === 'registration' ? 'text-primary font-medium' : ''}>Placa</span><span>→</span>
+				<span class={step === 'product' ? 'text-primary font-medium' : ''}>Producto</span><span>→</span>
 				<span class={step === 'billing' || step === 'incomplete' ? 'text-primary font-medium' : ''}>Cliente</span><span>→</span>
 				<span class={step === 'presetType' || step === 'presetValue' ? 'text-primary font-medium' : ''}>Monto</span><span>→</span>
 				<span class={step === 'authorizing' || step === 'done' ? 'text-primary font-medium' : ''}>Autorizar</span>
 			</div>
 
-			{#if step === 'hose'}
+			{#if step === 'plate'}
+				<div class="card p-4 mb-4">
+					<h3 class="text-sm font-semibold text-gray-700 mb-3">Placa del vehículo</h3>
+					<div class="flex gap-2 mb-3">
+						<input type="text" bind:value={plate} placeholder="ABC1234"
+							class="flex-1 min-w-0 rounded-xl border border-gray-200 px-3 py-3 text-base uppercase focus:border-primary focus:outline-none"
+							on:keydown={(e) => e.key === 'Enter' && handlePlateSearch()} />
+						<button class="touch-btn bg-primary text-white rounded-xl px-6 py-3 font-semibold disabled:opacity-50"
+							on:click={handlePlateSearch} disabled={plate.length < 3 || loading}>
+							{loading ? '...' : 'Buscar'}
+						</button>
+					</div>
+				</div>
+			{/if}
+
+			{#if step === 'product'}
 				<div class="card p-4 mb-4">
 					<h3 class="text-sm font-semibold text-gray-700 mb-3">Seleccione el combustible:</h3>
 					<div class="grid gap-2">
@@ -313,25 +346,6 @@
 								<div class="text-xs text-gray-500">${hose.unit_price.toFixed(3)}/{unitAbbr}</div>
 							</button>
 						{/each}
-					</div>
-				</div>
-			{/if}
-
-			{#if step === 'plate'}
-				<div class="card p-4 mb-4">
-					<h3 class="text-sm font-semibold text-gray-700 mb-3">Placa del vehículo</h3>
-					<div class="bg-gray-50 rounded-xl p-3 mb-3 flex items-center gap-2">
-						<span class="text-xs text-gray-500">⛽</span>
-						<span class="text-sm font-medium">{selectedHose?.grade_name ?? ''}</span>
-					</div>
-					<div class="flex gap-2 mb-3">
-						<input type="text" bind:value={plate} placeholder="ABC1234"
-							class="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-lg uppercase focus:border-primary focus:outline-none"
-							on:keydown={(e) => e.key === 'Enter' && handlePlateSearch()} />
-						<button class="touch-btn bg-primary text-white rounded-xl px-6 py-3 font-semibold disabled:opacity-50"
-							on:click={handlePlateSearch} disabled={plate.length < 3 || loading}>
-							{loading ? '...' : 'Buscar'}
-						</button>
 					</div>
 				</div>
 			{/if}

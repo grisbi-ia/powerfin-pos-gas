@@ -8,6 +8,7 @@ export interface PendingOrder {
 	fusionHoseId: number;
 	hoseId: number;
 	side: 'A' | 'B';
+	customerId?: string;
 	customerName: string;
 	plate: string;
 	presetAmount: number;
@@ -18,6 +19,7 @@ export interface PendingOrder {
 	status: 'FUELLING' | 'COMPLETED';
 	createdAt: string;
 	authorizedBy?: string;
+	authorizedByUserId?: number;
 	invoiceNumber?: string;
 }
 
@@ -120,7 +122,9 @@ function createPendingOrdersStore() {
 
 		/** Update billing info on an existing order (post-dispatch). */
 		updateOrderBilling(orderId: string, customerName: string, plate: string, customerId?: string) {
-			this.updateOrder(orderId, { customerName, plate });
+			const updates: Partial<PendingOrder> = { customerName, plate };
+			if (customerId !== undefined) updates.customerId = customerId;
+			this.updateOrder(orderId, updates);
 		},
 
 		/** Reload from localStorage explicitly (e.g. after a page refresh
@@ -189,7 +193,8 @@ function createPendingOrdersStore() {
 						priceList: 'STANDARD',
 						status: localStatus,
 						createdAt: server.created_at,
-						authorizedBy: server.authorized_by,
+						authorizedBy: server.authorized_by_user_id != null ? String(server.authorized_by_user_id) : undefined,
+						authorizedByUserId: server.authorized_by_user_id,
 						invoiceNumber: server.invoice_number
 					};
 

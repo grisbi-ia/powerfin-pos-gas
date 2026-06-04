@@ -176,7 +176,7 @@
 				{@const cancelOrder = info.primaryHose ? $orderByHose.get(dispenser.dispenserId + '-' + info.primaryHose.hoseId) : null}
 				{@const canCancel = ['AUTHORIZED', 'CALLING', 'STARTING'].includes(info.primaryHose?.status ?? '') &&
 					cancelOrder != null &&
-					cancelOrder.authorizedBy === $currentUser?.name &&
+					cancelOrder.authorizedByUserId === $currentUser?.user_id &&
 					$shift != null}
 				{#if canCancel}
 					<button

@@ -117,7 +117,8 @@ async def get_cash_summary(
     ) or 0.0
     sales_cash = await db.scalar(
         select(func.coalesce(func.sum(Dispatch.total), 0)).where(
-            Dispatch.shift_id == shift_id, Dispatch.status == "COLLECTED"
+            Dispatch.shift_id == shift_id,
+            Dispatch.status == "COLLECTED",
         )
     ) or 0.0
 

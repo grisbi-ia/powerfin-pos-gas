@@ -172,7 +172,7 @@ export interface DispatchOrder {
 	status: 'PENDING' | 'AUTHORIZED' | 'FUELLING' | 'COMPLETED' | 'CANCELLED' | 'COLLECTED';
 	created_at: string;
 	shift_id: number;
-	authorized_by?: string;
+	authorized_by_user_id?: number;
 	final_amount?: number;
 	final_volume?: string;
 	invoice_number?: string;
@@ -187,9 +187,7 @@ export interface CreateDispatchRequest {
 	unit_price: number;
 	payment_method: string;
 	customer_id?: string;
-	customer_name?: string;
 	plate?: string;
-	authorized_by?: string;
 }
 
 export interface CreateDispatchResponse {

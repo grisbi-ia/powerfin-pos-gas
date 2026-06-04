@@ -49,13 +49,13 @@ export async function searchCustomers(token: string, query: string): Promise<Cus
 }
 
 export async function getCustomerPrice(
-	token: string, customerId: string, gradeId: string
+	token: string, customerId: string, gradeId: string,
+	vehicleId?: string
 ): Promise<PriceInfo> {
 	if (USE_MOCKS_POWERFIN) return mock.getCustomerPrice(token, customerId, gradeId);
-	const res = await fetch(
-		powerfinUrl(`/api/pos/prices?customerId=${customerId}&gradeId=${gradeId}`),
-		{ headers: { Authorization: `Bearer ${token}` } }
-	);
+	let url = powerfinUrl(`/api/pos/prices?customerId=${customerId}&gradeId=${gradeId}`);
+	if (vehicleId) url += `&vehicleId=${encodeURIComponent(vehicleId)}`;
+	const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 	if (!res.ok) throw new Error('Error obteniendo precio');
 	return res.json();
 }

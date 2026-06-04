@@ -19,7 +19,7 @@
 | 6.4 | `v0.8.2` | Cambio de facturación post-despacho |
 | 6.5 | `v0.8.3` | Eliminación Consumidor Final + offline detection + fixes varios |
 | 7 | `v0.9.0` | POS Backend — FastAPI + PostgreSQL (26 tablas, 38 endpoints, 71 tests) |
-| **8** | **—** | **Phase 9 — Integración & hardening (HOY)** |
+| **8** | **v0.10.0** | **Phase 9 — Integración & hardening (HOY, sesión 2)** |
 
 ### 📊 Tests
 
@@ -38,101 +38,174 @@ cd pos && npm run test            # 41 passed
 
 ---
 
-## Logros de la sesión 2026-06-04
+## Logros de la sesión anterior (2026-06-04, mañana)
 
-### 1. Mapeo de dispensadores — Synergy real ✅
+### 1–10. Ver NEXT_SESSION.md previo
 
-Se consultó el Synergy vía `REQ_FCRT_PUMPS_CONFIG` y se mapearon los 8 pumps lógicos
-a 4 dispensadores físicos en el POS Backend:
+Mapeo de dispensadores, tokens hardcodeados, POST customers, pantalla cliente,
+unit_price en config, precios correctos, dispatch_details, pantalla cobro,
+reconciliación multi-device, sort_order.
 
-| Dispenser | Pumps Synergy | Productos | Estado |
-|-----------|--------------|-----------|--------|
-| SURT-01 GASOLINA | 001 + 002 | A: SUPER+ECO_PAIS, B: SUPER+ECO_PAIS | 🟢 IDLE |
-| SURT-02 EXTRA-ECO | 003 + 004 | EXTRA-ECO ambos lados | ⚫ CLOSED |
-| SURT-03 DIESEL 1 | 005 + 006 | DIESEL ambos lados | ⚫ CLOSED |
-| SURT-04 DIESEL 2 | 007 + 008 | DIESEL ambos lados | ⚫ CLOSED |
+---
 
-**Validación física:** Se levantaron las 4 pistolas del SURT-01, confirmando:
-- Lado A: hose 1 = SUPER, hose 2 = ECO_PAIS
-- Lado B: hose 1 = SUPER, hose 2 = ECO_PAIS
-- El Synergy reporta hose 2 para ECO_PAIS y hose 1 para SUPER (contrario al config label)
-- ATO ajustado a 180s
+## Logros de esta sesión (2026-06-04, tarde)
 
-### 2. Token hardcodeado → auth store ✅
+### 11. Precios por lista de cliente (VIP, EMPLOYEE, FAMILY) ✅
 
-`SaleWizard.svelte` y `PlateInput.svelte` usaban strings `'token'` y `'mock-token'`
-en vez del JWT real del auth store. Se corrigieron 8 llamados en SaleWizard y 1 en PlateInput.
-También se arregló `new-dispatch/+page.svelte` (importaba bridge.mock en vez del real).
+**Bug:** Al seleccionar cliente con lista VIP, el PRESET al Synergy siempre enviaba
+el precio STANDARD. $1.00 de SUPER daba 0.222 gal tanto para STANDARD como VIP.
 
-### 3. POST /customers acepta actualizaciones ✅
+**Fix:** `handleBillingConfirm()` ahora llama a `GET /api/pos/prices` con el
+`customerId` y `gradeId` para obtener el `unit_price` real de la lista del cliente.
+También se actualizó `powerfin.getCustomerPrice()` para aceptar `vehicleId` opcional.
 
-El endpoint `POST /api/pos/customers` ahora actualiza campos (email, phone, address)
-cuando el cliente ya existe, en vez de devolver 409 Conflict. Permite completar
-datos faltantes en el flujo de venta.
+**Archivos:** `pos/src/lib/api/powerfin.ts`, `pos/src/lib/components/SaleWizard.svelte`
 
-### 4. Pantalla de cliente — datos completos ✅
+### 12. Reordenamiento del Wizard: Placa → Producto → Cliente ✅
 
-La pantalla de confirmación de cliente muestra: nombre, ID, email, teléfono,
-y lista de precios. El precio NO se muestra en esta pantalla (se mantiene en
-memoria para el preset a Synergy).
+**Antes:** Pistola → Placa → Cliente → Monto → Autorizar
+**Ahora:** Placa → Producto → Cliente → Monto → Autorizar
 
-### 5. Campo `unit_price` en el config ✅
+El despachador copia la placa primero (un solo viaje al vehículo), luego selecciona
+el producto. La lógica de auto-select (1 sola pistola) se movió al paso `product`.
 
-Cada manguera en `GET /api/pos/config` ahora incluye `unit_price` desde la
-lista de precios STANDARD. El POS usa este valor al seleccionar pistola.
-Se eliminaron todos los hardcodes de precios (`3.103`, `2.950`) en SaleWizard.
+**Archivos:** `pos/src/lib/components/SaleWizard.svelte`
 
-### 6. Precios correctos por producto ✅
+### 13. Input de placa — tamaño reducido ✅
 
-Corregidos en BD: SUPER=$4.50, ECO_PAIS=$2.90, DIESEL=$3.103 (estaban intercambiados).
-Eliminadas leyendas de precio en pantallas de monto/galones.
+`text-lg` → `text-base`, `px-4` → `px-3`, agregado `min-w-0` para evitar
+que el botón "Buscar" se salga del margen en dispositivos móviles.
 
-### 7. `dispatch_details` ahora se usa correctamente ✅
+### 14. Fix Decimal → string en módulo de Caja ✅
 
-- **Al crear:** Se crea una línea con `product_id`, `unit_price`, `tax_rate`, `quantity=0`
-- **Al completar:** Se actualiza `quantity` con galones reales y se recalculan totales
-- **Endpoints:** `unit_price` y `quantity` se leen de `dispatch_details`, no del campo `total`
-- `dispatches.total/subtotal/tax_amount` ahora son totales reales calculados desde details
+`formatCurrency()` en `cash/+page.svelte` ahora acepta `number | string`.
+`Decimal("0")` se serializaba como `"0"` (sin punto decimal), el middleware
+solo convertía strings con punto (`"0.00"`), y `.toFixed()` tronaba.
 
-### 8. Pantalla de cobro — campo "Recibido" y modal de confirmación ✅
+**Archivos:** `pos/src/routes/(pos)/cash/+page.svelte`
 
-- Campo "Recibido $" solo visible cuando se selecciona EFECTIVO
-- Vuelto = recibido − totalAPagar (no preset − despachado)
-- Modal de confirmación antes de procesar el cobro
-- Eliminada la sección de "Vuelto" automático de la pantalla "Despacho Completado"
+### 15. Puntos de emisión por dispensador ✅
 
-### 9. Reconciliación multi-dispositivo con fuente única ✅
+**Antes:** 1 solo emission point (001-001) compartido entre los 4 surtidores.
+**Ahora:** 4 emission points (001-001 a 001-004), cada dispensador con su secuencial.
 
-- Nuevo endpoint `GET /api/pos/dispatches/active` — devuelve todos los despachos
-  activos (AUTHORIZED + COMPLETED) de **todos** los turnos abiertos
-- La reconciliación ya no requiere turno abierto — cualquier despachador ve
-  todos los despachos pendientes de cobro
-- `maria` ve los despachos de `carlos` y viceversa
+**DB:** +3 emission points, `dispensers.emission_point_id` poblado.
+**Backend:** `create_dispatch` busca EP vía `dispenser.emission_point_id` (no `LIMIT 1`).
 
-### 10. Orden de dispensadores estable ✅
+**Archivos:** `pos_backend/app/api/dispatches.py`, datos en DB
 
-Campo `sort_order` en tabla `dispensers`. El endpoint devuelve `ORDER BY sort_order`.
-El orden no cambia al renombrar o modificar dispensadores.
+### 16. `vehicle_id` y `person_id` en dispatch ✅
+
+**Antes:** `person_id=None` hardcodeado, `vehicle_id` nunca seteado.
+**Ahora:** `customer_id` → `person_id` (FK persons), `plate` → `vehicle_id` (FK vehicles).
+Si el vehículo tiene persona y no se envió `customer_id`, se hereda.
+
+**Archivos:** `pos_backend/app/api/dispatches.py`
+
+### 17. `authorized_by_user_id` (FK → users) ✅
+
+Agregado `authorized_by_user_id` al modelo `Dispatch`. Se puebla desde
+`current_user.user_id` en `create_dispatch`.
+
+### 18. Simplificación de columnas en `dispatches` ✅
+
+**Eliminadas (4):**
+| Columna | Motivo |
+|---------|--------|
+| `authorized_by` VARCHAR | Redundante — `authorized_by_user_id` FK |
+| `customer_name` VARCHAR | Redundante — `person_id` FK → `persons.name` |
+| `collected_by_user_id` | Ya no se necesita (ver #19) |
+| `collected_by_shift_id` | Ya no se necesita (ver #19) |
+
+**Conservadas (2 FKs):**
+| Columna | Significado |
+|---------|-------------|
+| `shift_id` | Turno del autorizador → se actualiza al del cobrador |
+| `authorized_by_user_id` | Quién autorizó (FK users) |
+
+### 19. `shift_id` se actualiza al cobrar ✅
+
+**Lógica:** Al crear el dispatch, `shift_id` = turno del autorizador.
+Al cobrar (`collect_dispatch`), `shift_id` se actualiza al turno del cobrador.
+
+Esto simplifica el cuadre de caja: `WHERE shift_id = mi_turno AND status = 'COLLECTED'`
+basta para obtener todo el efectivo en caja, sin importar quién autorizó.
+
+### 20. `customer_name` resuelto vía JOIN en API ✅
+
+`get_shift_dispatches` y `get_active_dispatches` ahora resuelven `customer_name`
+haciendo lookup de `person_id` → `persons.name`.
+
+### 21. `change_billing` — error si persona no existe ✅
+
+`POST /api/pos/dispatches/{id}/billing` ahora devuelve 404 si el `customer_id`
+no corresponde a una persona activa. Antes fallaba silenciosamente.
+
+### 22. Store `pendingOrders` — `customerId` y `authorizedByUserId` ✅
+
+- `PendingOrder` ahora tiene `customerId?: string` y `authorizedByUserId?: number`
+- `addOrder` incluye ambos campos
+- `updateOrderBilling` ahora pasa `customerId`
+- `DispenserCard` compara `authorizedByUserId === currentUser.user_id` (no nombres)
+
+---
+
+## Archivos modificados en esta sesión
+
+```
+pos_backend/app/api/dispatches.py     ← emission points, vehicle_id, person_id,
+                                        authorized_by_user_id, shift_id en collect,
+                                        customer_name vía JOIN, change_billing 404
+pos_backend/app/api/shifts.py         ← close_shift simplificado, customer_name JOIN
+pos_backend/app/api/cash.py           ← cash_summary simplificado
+pos_backend/app/models/dispatch.py    ← +authorized_by_user_id, -4 columnas
+pos_backend/app/main.py               ← (revertido) Decimal middleware sin cambios
+
+pos/src/lib/api/powerfin.ts           ← getCustomerPrice acepta vehicleId
+pos/src/lib/api/powerfin.mock.ts      ← mock actualizado a nueva estructura
+pos/src/lib/api/types.ts              ← DispatchOrder, CreateDispatchRequest limpios
+pos/src/lib/components/SaleWizard.svelte ← reorden wizard, precio x lista, UI placa
+pos/src/lib/components/DispenserCard.svelte ← cancel compara user_id
+pos/src/lib/stores/pendingOrders.ts   ← customerId, authorizedByUserId
+pos/src/routes/(pos)/cash/+page.svelte ← formatCurrency number|string
+pos/src/routes/(pos)/new-dispatch/+page.svelte ← limpio customer_name, authorized_by
+```
 
 ---
 
 ## Pendiente para próxima sesión
 
-### 🔴 Prioridad 1 — Testear venta completa end-to-end
+### 🔴 Prioridad 1 — Cuadre de caja y transferencias
+
+```
+☐ Revisar close_shift: verificar que opening_cash, sales_cash, income, expense,
+   transfers_in, transfers_out, safe_drops cuadren correctamente
+☐ Revisar transferencias entre usuarios: cuando A transfiere a B, el movimiento
+   de B debe reflejarse como ingreso en su turno (o al menos en su balance)
+☐ Probar cierre de turno con ventas cross-user (A autoriza, B cobra)
+☐ Verificar que el saldo en caja (current_balance) sea correcto después de
+   transferencias entre usuarios
+☐ Revisar SAFE_DROP: el depósito a caja fuerte debe reducir el balance del
+   turno pero NO afectar el cuadre de ventas
+```
+
+### 🟡 Prioridad 2 — Testear venta completa end-to-end
 
 ```
 ☐ Login como carlos → abrir turno
-☐ Seleccionar SURT-01 lado A → ECO_PAIS (hose 2) o SUPER (hose 1)
-☐ Buscar placa → ver datos del cliente → confirmar
+☐ Placa → buscar → seleccionar producto → confirmar cliente
 ☐ Seleccionar monto → autorizar despacho
 ☐ Levantar pistola física → ver progreso en dashboard
 ☐ Colgar → ver "Cobrar" en dashboard
 ☐ Entrar a cobrar → seleccionar EFECTIVO → ingresar recibido → confirmar
 ☐ Verificar que el despacho pasa a COLLECTED en BD
+☐ Verificar vehicle_id y person_id poblados
+☐ Verificar emission_point correcto según dispensador
 ☐ Repetir desde otro dispositivo (maria) → verificar sync multi-dispositivo
+☐ Cerrar turno y verificar cuadre
 ```
 
-### 🟡 Prioridad 2 — Integrar persons/lookup en el POS
+### 🟡 Prioridad 3 — Integrar persons/lookup en el POS
 
 ```
 ☐ POS: reemplazar búsqueda de cliente actual por GET /api/pos/persons/lookup
@@ -140,7 +213,7 @@ El orden no cambia al renombrar o modificar dispensadores.
 ☐ POS: permitir registrar cliente nuevo con datos del API externo
 ```
 
-### 🟡 Prioridad 3 — Pruebas de stress y edge cases
+### 🟡 Prioridad 4 — Edge cases
 
 ```
 ☐ Despacho cancelado a mitad del flujo
@@ -149,13 +222,13 @@ El orden no cambia al renombrar o modificar dispensadores.
 ☐ Múltiples despachos simultáneos (ambos lados del SURT-01)
 ```
 
-### 🟢 Prioridad 4 — Deuda técnica
+### 🟢 Prioridad 5 — Deuda técnica
 
 ```
-☐ Remover hardcode plate='ABC1234' si aún existe
-☐ Precios VIP/EMPLOYEE/FAMILY dinámicos (no hardcodeados)
-☐ Migración Alembic para cambios de schema (hose_id, grade_id, sort_order en dispatches y dispensers)
-☐ El dispatch_details actual no guarda correctamente quantity=0 inicial (debería ser NULL)
+☐ Remover hardcode plate='ABC1234' en SaleWizard.svelte:28
+☐ Precios VIP/EMPLOYEE/FAMILY dinámicos desde BD (ya se consultan, verificar)
+☐ Migración Alembic para cambios de schema acumulados
+☐ Revisar si dispatch_details.quantity=0 inicial debe ser NULL
 ```
 
 ---
@@ -165,13 +238,26 @@ El orden no cambia al renombrar o modificar dispensadores.
 | Dato | Valor |
 |------|-------|
 | Estación | NEOGAS |
-| Surtidores Synergy | 8 pumps: 1,2 (GASOLINA dual), 3-8 (CLOSED) |
-| SURT-01 | GASOLINA: SUPER ($4.50) + ECO_PAIS ($2.90) |
+| Surtidores | 4: SURT-01 (SUPER+ECO), SURT-02 (ECO), SURT-03 (DIESEL1), SURT-04 (DIESEL2) |
+| Puntos emisión | 001-001 a 001-004 (uno por dispensador) |
+| SURT-01 activo | SUPER ($4.50) + ECO_PAIS ($2.90) |
+| Listas precio | STANDARD, VIP (SUPER $4.25, ECO $2.30), EMPLOYEE, FAMILY |
 | ATO | 180s |
 | Moneda | DÓLARES ($) |
 | Firmware | Rel-5.19.1 |
 | Formas de pago | EFECTIVO, TARJETA, QR, CREDITO, DEUNA, JEPFAST, SIPY, YALOBOX |
 | Cliente requerido | Sí (cédula o RUC obligatorio — sin Consumidor Final) |
+
+## Estructura final de `dispatches` (columnas clave)
+
+| Columna | Tipo | Referencia |
+|---------|------|-----------|
+| `shift_id` | FK shifts | Turno del autorizador → actualizado al cobrar |
+| `authorized_by_user_id` | FK users | Quién autorizó |
+| `person_id` | FK persons | Cliente (facturación) |
+| `vehicle_id` | FK vehicles | Vehículo despachado |
+| `dispenser_id` | FK dispensers | Surtidor |
+| `emission_point_id` | FK emission_points | Punto emisión SRI |
 
 ## Base de datos
 
@@ -213,14 +299,15 @@ Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234` o `maria` / `1
 
 ## NOTAS
 
-- `plate = 'ABC1234'` está hardcodeado en `SaleWizard.svelte:28` para pruebas. Remover ANTES de producción.
-- El dispensador físico requiere **palanca manual** además de levantar la pistola (equipo antiguo)
-- `SUBSCRIBE|ALL` es necesario en firmware Rel-5.19.1 (suscripciones individuales no funcionan)
-- El cambio de precio por protocolo requiere aprobación manual en consola (módulo "Price Change Add In")
-- **NO usar `LID` ni `LM` en PRESET** — firmware Rel-5.19.1 crea locks permanentes
+- `plate = 'ABC1234'` está hardcodeado en `SaleWizard.svelte` para pruebas. Remover ANTES de producción.
+- El dispensador físico requiere **palanca manual** además de levantar la pistola (equipo antiguo).
+- `SUBSCRIBE|ALL` es necesario en firmware Rel-5.19.1 (suscripciones individuales no funcionan).
+- El cambio de precio por protocolo requiere aprobación manual en consola (módulo "Price Change Add In").
+- **NO usar `LID` ni `LM` en PRESET** — firmware Rel-5.19.1 crea locks permanentes.
 - `localStorage` es caché local, NO source of truth. PowerFin vía reconciliación cada 3s es la autoridad.
-- Al reiniciar `powerfin_server.py`, borrar `tools/powerfin_state.json` para evitar datos inconsistentes.
 - **No existe Consumidor Final** — toda venta requiere cliente con cédula o RUC.
 - El POS Backend reemplaza al mock Python. `powerfin_server.py` queda como legacy.
 - **ATO en 180 segundos** — los presets expiran después de 3 minutos sin levantar pistola.
 - `dispatch_details.quantity` empieza en 0 (no NULL) — se actualiza al completar el despacho.
+- **`shift_id` cambia de dueño al cobrar**: AUTHORIZED/COMPLETED → shift del autorizador; COLLECTED → shift del cobrador.
+- **Cuadre de caja simplificado**: `WHERE shift_id = mi_turno AND status = 'COLLECTED'` cubre todos los casos.

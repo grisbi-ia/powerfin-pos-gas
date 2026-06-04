@@ -70,8 +70,9 @@ class Dispatch(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    authorized_by: Mapped[str | None] = mapped_column(String(150))
-    customer_name: Mapped[str | None] = mapped_column(String(200))
+    authorized_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.user_id")
+    )
     hose_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("hoses.hose_id")
     )
