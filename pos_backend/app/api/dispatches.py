@@ -110,6 +110,40 @@ async def create_dispatch(
                 pass
 
     order_id = _build_order_id()
+
+    # Resolve hose → grade → product → tax for dispatch detail
+    hose_id = None
+    grade_id = None
+    product_id = None
+    tax_rate = Decimal("0")
+    if body.hose_id:
+        from app.models.dispenser import Hose
+        from app.models.product import Grade as GradeModel, Product as ProductModel
+        from app.models import TaxType
+        hose_result = await db.execute(
+            select(Hose).where(Hose.hose_id == body.hose_id)
+        )
+        hose = hose_result.scalar_one_or_none()
+        if hose:
+            hose_id = hose.hose_id
+            grade_id = hose.grade_id
+            # Resolve product and tax rate from grade
+            grade_obj = (await db.execute(
+                select(GradeModel).where(GradeModel.code == hose.grade_id)
+            )).scalar_one_or_none()
+            if grade_obj:
+                product_obj = (await db.execute(
+                    select(ProductModel).where(ProductModel.product_id == grade_obj.product_id)
+                )).scalar_one_or_none()
+                if product_obj:
+                    product_id = product_obj.product_id
+                    if product_obj.tax_type_id:
+                        tax_obj = (await db.execute(
+                            select(TaxType).where(TaxType.tax_type_id == product_obj.tax_type_id)
+                        )).scalar_one_or_none()
+                        if tax_obj:
+                            tax_rate = tax_obj.rate
+
     dispatch = Dispatch(
         order_id=order_id,
         shift_id=shift.shift_id,
@@ -120,40 +154,66 @@ async def create_dispatch(
         person_id=None,
         customer_name=body.customer_name,
         authorized_by=body.authorized_by or current_user.name,
-        total=float(body.unit_price),
+        total=0,
+        subtotal=0,
+        tax_amount=0,
         credit_contract_id=credit_contract_id,
         credit_status=credit_status,
+        hose_id=hose_id,
+        grade_id=grade_id,
     )
     db.add(dispatch)
     await db.flush()
 
-    # Create dispatch details from items
-    for item in body.items:
+    # Create dispatch detail line with product info (quantity=0 until completed)
+    if product_id:
+        unit_price_dec = Decimal(str(body.unit_price))
         detail = DispatchDetail(
             dispatch_id=dispatch.dispatch_id,
-            product_id=item.product_id,
-            quantity=float(item.quantity),
-            unit_price=float(item.unit_price),
-            tax_rate=float(item.tax_rate),
-            tax_amount=float(item.quantity * item.unit_price * item.tax_rate),
-            subtotal=float(item.quantity * item.unit_price),
-            total=float(item.quantity * item.unit_price * (1 + item.tax_rate)),
+            product_id=product_id,
+            quantity=0,
+            unit_price=float(unit_price_dec),
+            tax_rate=float(tax_rate),
+            subtotal=0,
+            tax_amount=0,
+            total=0,
         )
         db.add(detail)
+        await db.flush()
 
-    # Update totals
-    from sqlalchemy import func as sa_func
-    totals = await db.execute(
-        select(
-            sa_func.sum(DispatchDetail.subtotal),
-            sa_func.sum(DispatchDetail.tax_amount),
-            sa_func.sum(DispatchDetail.total),
-        ).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
-    )
-    sub, tax, tot = totals.one()
-    dispatch.subtotal = float(sub or 0)
-    dispatch.tax_amount = float(tax or 0)
-    dispatch.total = float(tot or body.unit_price)
+        # Update dispatch totals from detail (subtotal will be 0 until completed)
+        dispatch.subtotal = 0
+        dispatch.tax_amount = 0
+        dispatch.total = 0
+
+    # Fallback: if items were sent explicitly, use them
+    if body.items:
+        for item in body.items:
+            detail = DispatchDetail(
+                dispatch_id=dispatch.dispatch_id,
+                product_id=item.product_id,
+                quantity=float(item.quantity),
+                unit_price=float(item.unit_price),
+                tax_rate=float(item.tax_rate),
+                tax_amount=float(item.quantity * item.unit_price * item.tax_rate),
+                subtotal=float(item.quantity * item.unit_price),
+                total=float(item.quantity * item.unit_price * (1 + item.tax_rate)),
+            )
+            db.add(detail)
+
+        # Update totals from items
+        from sqlalchemy import func as sa_func
+        totals = await db.execute(
+            select(
+                sa_func.sum(DispatchDetail.subtotal),
+                sa_func.sum(DispatchDetail.tax_amount),
+                sa_func.sum(DispatchDetail.total),
+            ).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
+        )
+        sub, tax, tot = totals.one()
+        dispatch.subtotal = float(sub or 0)
+        dispatch.tax_amount = float(tax or 0)
+        dispatch.total = float(tot or 0)
 
     await db.commit()
 
@@ -181,8 +241,48 @@ async def complete_dispatch(
         return {"status": "ok"}
 
     dispatch.status = "COMPLETED"
-    dispatch.total = float(body.amount)
     dispatch.completed_at = datetime.now(timezone.utc)
+
+    # Update dispatch details with actual volume and recalculate totals
+    amount_dec = Decimal(str(body.amount))
+    volume_dec = Decimal(str(body.volume)) if body.volume and body.volume != "0" else Decimal("0")
+    
+    detail_result = await db.execute(
+        select(DispatchDetail).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
+    )
+    details = detail_result.scalars().all()
+    if details:
+        # Use first detail's unit_price and tax_rate for calculations
+        first_detail = details[0]
+        unit_price_dec = Decimal(str(first_detail.unit_price))
+        tax_rate_dec = Decimal(str(first_detail.tax_rate))
+        
+        if float(volume_dec) > 0:
+            # Distribute volume across details (usually just 1)
+            vol_per_detail = float(volume_dec) / len(details)
+            for det in details:
+                det.quantity = vol_per_detail
+        
+        # Recalculate from Fusion amount
+        subtotal_dec = amount_dec
+        tax_dec = subtotal_dec - (subtotal_dec / (1 + tax_rate_dec))
+        
+        # Update each detail proportionally
+        for i, det in enumerate(details):
+            share = Decimal("1") / len(details) if len(details) > 0 else Decimal("1")
+            det.subtotal = float(subtotal_dec * share)
+            det.tax_amount = float(tax_dec * share)
+            det.total = float(subtotal_dec * share)
+        
+        # Update dispatch totals
+        dispatch.subtotal = float(subtotal_dec)
+        dispatch.tax_amount = float(tax_dec)
+        dispatch.total = float(subtotal_dec)
+    else:
+        # Fallback: no detail exists yet (legacy dispatch)
+        dispatch.total = float(amount_dec)
+        dispatch.subtotal = float(amount_dec)
+        dispatch.tax_amount = 0
 
     # Update credit balance if applicable
     if dispatch.credit_contract_id:
@@ -328,3 +428,72 @@ async def invoice_dispatch(
     dispatch.credit_status = "INVOICED"
     await db.commit()
     return {"status": "ok"}
+
+
+@router.get("/active")
+async def get_active_dispatches(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get all active dispatches across ALL open shifts.
+    Used for multi-device sync: every dispatcher sees all pending orders
+    regardless of who created them."""
+    from app.models.dispenser import Hose
+
+    # Get all active (non-collected, non-cancelled) dispatches from open shifts
+    result = await db.execute(
+        select(Dispatch)
+        .join(Shift, Dispatch.shift_id == Shift.shift_id)
+        .where(
+            Shift.status == "OPEN",
+            Dispatch.status.in_(["AUTHORIZED", "COMPLETED"]),
+        )
+        .order_by(Dispatch.created_at.desc())
+    )
+    dispatches = result.scalars().all()
+
+    # Build hose lookup
+    hose_ids = [d.hose_id for d in dispatches if d.hose_id]
+    hose_map = {}
+    if hose_ids:
+        hoses_result = await db.execute(select(Hose).where(Hose.hose_id.in_(hose_ids)))
+        for h in hoses_result.scalars():
+            hose_map[h.hose_id] = h
+
+    # Build detail lookup for unit_price and quantity
+    dispatch_ids = [d.dispatch_id for d in dispatches]
+    detail_map = {}
+    if dispatch_ids:
+        details_result = await db.execute(
+            select(DispatchDetail).where(DispatchDetail.dispatch_id.in_(dispatch_ids))
+        )
+        for det in details_result.scalars():
+            detail_map[det.dispatch_id] = det
+
+    return [
+        {
+            "order_id": d.order_id,
+            "dispenser_id": d.dispenser_id,
+            "hose_id": d.hose_id or 1,
+            "side": hose_map[d.hose_id].side if d.hose_id and d.hose_id in hose_map else "A",
+            "grade": d.grade_id or "UNKNOWN",
+            "preset_type": "MONEY",
+            "preset_value": "0",
+            "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
+            "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
+            "payment_method": "EFECTIVO",
+            "customer_id": None,
+            "customer_name": d.customer_name,
+            "plate": None,
+            "status": d.status,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "shift_id": d.shift_id,
+            "authorized_by": d.authorized_by,
+            "final_amount": d.subtotal if d.subtotal else d.total,
+            "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
+            "invoice_number": None,
+            "credit_contract_id": d.credit_contract_id,
+            "credit_status": d.credit_status,
+        }
+        for d in dispatches
+    ]

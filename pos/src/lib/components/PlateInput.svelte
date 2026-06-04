@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { VehicleResult } from '$lib/api/types';
 	import * as powerfin from '$lib/api/powerfin';
+	import { auth } from '$lib/stores/auth';
+	import { get } from 'svelte/store';
 
 	export let onResult: (result: VehicleResult) => void;
 	export let disabled = false;
@@ -19,7 +21,9 @@
 		searching = true;
 		error = '';
 		try {
-			const result = await powerfin.lookupVehicle('mock-token', normalizePlate(plate));
+			const token = get(auth).token;
+			if (!token) { error = 'No hay sesión activa'; return; }
+			const result = await powerfin.lookupVehicle(token, normalizePlate(plate));
 			onResult(result);
 		} catch {
 			error = 'Error al buscar vehículo';

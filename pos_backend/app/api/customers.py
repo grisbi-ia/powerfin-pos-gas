@@ -167,13 +167,39 @@ async def create_customer(
     )).scalar_one_or_none()
 
     if existing:
-        raise HTTPException(status_code=409, detail="El cliente ya existe")
+        # Update fields if provided (for incomplete-fields flow)
+        if body.name:
+            existing.name = body.name
+        if body.email:
+            existing.email = body.email
+        if body.phone:
+            existing.phone = body.phone
+        if body.address:
+            existing.address = body.address
+        
+        # Create vehicle if plate provided and doesn't exist
+        if body.plate:
+            cleaned = body.plate.upper().replace(" ", "").replace("-", "")
+            existing_vehicle = (await db.execute(
+                select(Vehicle).where(Vehicle.plate == cleaned)
+            )).scalar_one_or_none()
+            if not existing_vehicle:
+                v = Vehicle(plate=cleaned, person_id=existing.person_id)
+                db.add(v)
+        
+        await db.commit()
+        return CreateCustomerResponse(
+            customer_id=existing.id_number,
+            price_list="STANDARD",
+        )
 
     person = Person(
         id_type=body.id_type,
         id_number=body.id_number,
         name=body.name,
         email=body.email,
+        phone=body.phone,
+        address=body.address,
     )
     db.add(person)
     await db.flush()

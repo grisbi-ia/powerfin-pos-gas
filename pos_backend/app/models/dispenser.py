@@ -18,6 +18,7 @@ class Dispenser(Base):
     fusion_pump_id: Mapped[int] = mapped_column(Integer, nullable=False)
     printer_ip: Mapped[str | None] = mapped_column(String(45))
     printer_port: Mapped[int] = mapped_column(Integer, default=9100)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     hoses: Mapped[list["Hose"]] = relationship(back_populates="dispenser")

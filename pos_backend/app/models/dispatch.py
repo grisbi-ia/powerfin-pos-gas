@@ -72,6 +72,10 @@ class Dispatch(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     authorized_by: Mapped[str | None] = mapped_column(String(150))
     customer_name: Mapped[str | None] = mapped_column(String(200))
+    hose_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hoses.hose_id")
+    )
+    grade_id: Mapped[str | None] = mapped_column(String(20))
 
 
 class DispatchDetail(Base):

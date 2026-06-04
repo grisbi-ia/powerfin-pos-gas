@@ -145,6 +145,18 @@ export async function getShiftDispatches(
 	return res.json();
 }
 
+/** Get ALL active dispatches across all open shifts (multi-device sync). */
+export async function getActiveDispatches(
+	token: string
+): Promise<import('./types').DispatchOrder[]> {
+	if (USE_MOCKS_POWERFIN) return [];
+	const res = await fetch(powerfinUrl('/api/pos/dispatches/active'), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error obteniendo despachos activos');
+	return res.json();
+}
+
 // ── Vehicles ────────────────────────────────────────────────
 
 export async function lookupVehicle(

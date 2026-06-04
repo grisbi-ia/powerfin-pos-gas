@@ -174,21 +174,43 @@ async def get_shift_dispatches(
     _user: User = Depends(get_current_user),
 ):
     """Get all dispatches for a shift (used for multi-device reconciliation)."""
+    from app.models.dispenser import Hose
+    from app.models.dispatch import DispatchDetail
+    
     result = await db.execute(
         select(Dispatch).where(Dispatch.shift_id == shift_id).order_by(Dispatch.created_at.desc())
     )
     dispatches = result.scalars().all()
 
+    # Build hose lookup for side resolution
+    hose_ids = [d.hose_id for d in dispatches if d.hose_id]
+    hose_map = {}
+    if hose_ids:
+        hoses_result = await db.execute(select(Hose).where(Hose.hose_id.in_(hose_ids)))
+        for h in hoses_result.scalars():
+            hose_map[h.hose_id] = h
+
+    # Build detail lookup for unit_price and quantity
+    dispatch_ids = [d.dispatch_id for d in dispatches]
+    detail_map = {}
+    if dispatch_ids:
+        details_result = await db.execute(
+            select(DispatchDetail).where(DispatchDetail.dispatch_id.in_(dispatch_ids))
+        )
+        for det in details_result.scalars():
+            detail_map[det.dispatch_id] = det
+
     return [
         {
             "order_id": d.order_id,
             "dispenser_id": d.dispenser_id,
-            "hose_id": 1,
-            "side": "A",
-            "grade": "DIESEL",
+            "hose_id": d.hose_id or 1,
+            "side": hose_map[d.hose_id].side if d.hose_id and d.hose_id in hose_map else "A",
+            "grade": d.grade_id or "DIESEL",
             "preset_type": "MONEY",
-            "preset_value": str(d.total),
-            "unit_price": d.total or 0,
+            "preset_value": "0",
+            "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
+            "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
             "customer_id": None,
             "customer_name": d.customer_name,
@@ -197,8 +219,8 @@ async def get_shift_dispatches(
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
             "authorized_by": d.authorized_by,
-            "final_amount": d.total,
-            "final_volume": None,
+            "final_amount": d.subtotal if d.subtotal else d.total,
+            "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
             "invoice_number": None,
             "credit_contract_id": d.credit_contract_id,
             "credit_status": d.credit_status,

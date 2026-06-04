@@ -44,6 +44,7 @@ class HoseResponse(BaseModel):
     fusion_hose_id: int
     grade_id: str
     grade_name: str
+    unit_price: float = 0
 
 
 class DispenserConfigResponse(BaseModel):
@@ -126,6 +127,8 @@ class CreateCustomerRequest(BaseModel):
     id_number: str
     name: str
     email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
     plate: Optional[str] = None
 
 

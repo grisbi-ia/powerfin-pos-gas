@@ -56,6 +56,7 @@ export interface HoseConfig {
 	fusion_pump_id: number;
 	grade_id: string;
 	grade_name: string;
+	unit_price: number;
 }
 
 export interface GradeConfig {
@@ -104,6 +105,8 @@ export interface CustomerFormData {
 	id_number: string;
 	name: string;
 	email: string;
+	phone?: string;
+	address?: string;
 	plate: string;
 }
 
@@ -181,6 +184,7 @@ export interface CreateDispatchRequest {
 	side: 'A' | 'B';
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
+	unit_price: number;
 	payment_method: string;
 	customer_id?: string;
 	customer_name?: string;

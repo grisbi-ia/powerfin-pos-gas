@@ -33,10 +33,10 @@ const MOCK_CONFIG: AppConfig = {
 			printer_island: 1,
 			sides: {
 				A: [
-					{ hose_id: 1, fusion_pump_id: 1, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel' }
+					{ hose_id: 1, fusion_pump_id: 1, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel', unit_price: 3.103 }
 				],
 				B: [
-					{ hose_id: 2, fusion_pump_id: 2, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel' }
+					{ hose_id: 2, fusion_pump_id: 2, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel', unit_price: 3.103 }
 				]
 			}
 		}

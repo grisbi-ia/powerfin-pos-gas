@@ -52,8 +52,8 @@
 	// ── Reconciliation with PowerFin (every 3s) ────────────
 	async function reconcileWithPowerFin() {
 		try {
-			if (!get(shift) || !get(auth).token) return;
-			const serverOrders = await powerfin.getShiftDispatches(get(auth).token!, get(shift)!.shift_id);
+			if (!get(auth).token) return;
+			const serverOrders = await powerfin.getActiveDispatches(get(auth).token!);
 			const changes = pendingOrders.reconcile(serverOrders);
 			if (changes > 0) {
 				console.log(`[pendingOrders] Reconciled: ${changes} change(s) from PowerFin`);
@@ -108,8 +108,8 @@
 			}
 		}
 
-		// 3. Reconcile with PowerFin immediately on mount (authoritative source)
-		if (get(shift)) await reconcileWithPowerFin();
+		// 3. Reconcile with PowerFin immediately on mount (source of truth)
+		await reconcileWithPowerFin();
 
 		await pollDispensers();
 

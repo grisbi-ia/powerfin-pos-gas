@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { createEventDispatcher, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { config } from '$lib/stores/config';
 	import { shift } from '$lib/stores/shift';
-	import { currentUser } from '$lib/stores/auth';
+	import { currentUser, auth } from '$lib/stores/auth';
 	import { pendingOrders } from '$lib/stores/pendingOrders';
 	import type { HoseConfig, VehicleResult, CustomerFormData, Customer, PresetType } from '$lib/api/types';
 	import type { PendingOrder } from '$lib/stores/pendingOrders';
@@ -10,6 +11,8 @@
 	import * as bridge from '$lib/api/bridge';
 
 	const dispatch = createEventDispatcher();
+
+	function token() { return get(auth).token || ''; }
 
 	export let dispenserId: number;
 	export let side: 'A' | 'B';
@@ -43,6 +46,8 @@
 
 	// Collection state
 	let paymentMethod = '';
+	let receivedAmount = '';
+	let confirmingPayment = false;
 	let referenceCode = '';
 	let confirmed = false;
 	let printing = false;
@@ -63,6 +68,8 @@
 
 	// Form fields
 	let incompleteEmail = '';
+	let incompletePhone = '';
+	let incompleteAddress = '';
 	let regIdNumber = '';
 	let regName = '';
 	let regEmail = '';
@@ -80,11 +87,10 @@
 			? collectOrder.finalVolume
 			: (finalAmount / (collectOrder.unitPrice || 1.5)).toFixed(3))
 		: '0';
-	$: changeAmount = Math.max(0, (collectOrder?.presetAmount ?? 0) - finalAmount);
 
 	$: if (mode === 'sale' && sideHoses.length === 1) {
 		selectedHose = sideHoses[0];
-		unitPrice = 3.103;
+		unitPrice = sideHoses[0].unit_price || 3.103;
 		step = 'plate';
 	}
 	$: if (mode === 'collect') {
@@ -96,20 +102,20 @@
 		try { const result = await bridge.getPrintPolicy(); printPolicy = result.policy as 'ALWAYS' | 'ASK' | 'NEVER'; } catch { /* */ }
 	}
 
-	function submitIncomplete() { if (incompleteEmail && vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail, plate }); } }
+	function submitIncomplete() { if (vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
 	function submitRegistration() { if (regIdNumber && regName && regEmail) { handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName, email: regEmail, plate }); } }
 
-	function selectHose(hose: HoseConfig) { selectedHose = hose; unitPrice = 3.103; step = 'plate'; }
+	function selectHose(hose: HoseConfig) { selectedHose = hose; unitPrice = hose.unit_price || 3.103; step = 'plate'; }
 
 	async function handlePlateSearch() {
 		if (plate.length < 3) return;
 		loading = true; error = '';
 		try {
-			const result = await powerfin.lookupVehicle('token', plate);
+			const result = await powerfin.lookupVehicle(token(), plate);
 			vehicleResult = result; plate = result.plate;
 			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
 			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
-			else { confirmedOwner = result.owner; unitPrice = result.price_list === 'VIP' ? 2.950 : 3.103; step = 'billing'; }
+			else { confirmedOwner = result.owner; step = 'billing'; }
 		} catch { error = 'Error al buscar placa'; }
 		finally { loading = false; }
 	}
@@ -120,7 +126,7 @@
 	async function handleIncompleteSubmit(formData: CustomerFormData) {
 		loading = true;
 		try {
-			await powerfin.registerCustomer('token', formData);
+			await powerfin.registerCustomer(token(), formData);
 			if (vehicleResult) { vehicleResult.incomplete_fields = []; if (vehicleResult.owner) vehicleResult.owner.email = formData.email; confirmedOwner = vehicleResult.owner; }
 			step = 'billing';
 		} catch { error = 'Error al actualizar datos'; }
@@ -132,8 +138,8 @@
 		if (idNumber.length < 5) return;
 		loading = true; idLookupError = '';
 		try {
-			const customer = await powerfin.getCustomerById('token', idType, idNumber, true);
-			if (customer) { billingCustomer = customer; unitPrice = customer.price_list === 'VIP' ? 2.950 : 3.103; step = 'billing'; }
+			const customer = await powerfin.getCustomerById(token(), idType, idNumber, true);
+			if (customer) { billingCustomer = customer; step = 'billing'; }
 			else { step = 'registration'; }
 		} catch { idLookupError = 'Error al buscar'; }
 		finally { loading = false; }
@@ -143,10 +149,10 @@
 	async function handleRegistrationSubmit(formData: CustomerFormData) {
 		loading = true; error = '';
 		try {
-			await powerfin.registerCustomer('token', formData);
+			await powerfin.registerCustomer(token(), formData);
 			plate = formData.plate;
 			vehicleResult = { plate: formData.plate, vehicle_found: true, incomplete_fields: [], owner: { customer_id: formData.id_number, id_type: formData.id_type, id_number: formData.id_number, name: formData.name, email: formData.email, phone: null }, price_list: 'STANDARD', price_list_name: 'Precio Normal' };
-			confirmedOwner = vehicleResult.owner; unitPrice = 3.103; step = 'billing';
+			confirmedOwner = vehicleResult.owner; step = 'billing';
 		} catch { error = 'Error al registrar'; }
 		finally { loading = false; }
 	}
@@ -163,8 +169,8 @@
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
-			const orderResult = await powerfin.createDispatch('token', { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, customer_name: customerName, plate, authorized_by: $currentUser?.name });
-			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : presetValue, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
+			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, customer_name: customerName, plate, authorized_by: $currentUser?.name });
+			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 			const authorizedBy = $currentUser?.name ?? '';
 			pendingOrders.addOrder({
 				orderId: orderResult.order_id, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
@@ -190,7 +196,9 @@
 		error = '';
 		try {
 			const shiftId = $shift?.shift_id ?? 0;
-			await powerfin.collectDispatch('token', collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: changeAmount, reference_code: referenceCode || undefined });
+			const received = paymentMethod === 'EFECTIVO' ? (parseFloat(receivedAmount) || 0) : 0;
+			const realChange = Math.max(0, received - finalAmount);
+			await powerfin.collectDispatch(token(), collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: realChange, reference_code: referenceCode || undefined });
 			// Note: do NOT removeOrder here — it would nullify collectOrder reactively
 			// and destroy the collect UI before the user sees the print/confirmation.
 			// The order is removed in handleNewSale() when the user clicks "Nueva Venta".
@@ -229,7 +237,7 @@
 		changeBillingLoading = true;
 		changeBillingError = '';
 		try {
-			const customer = await powerfin.getCustomerById('token', changeBillingIdType, changeBillingIdNumber);
+			const customer = await powerfin.getCustomerById(token(), changeBillingIdType, changeBillingIdNumber);
 			if (customer) {
 				await applyBillingChange(customer.customer_id, customer.name);
 			} else {
@@ -245,7 +253,7 @@
 	async function applyBillingChange(customerId: string | undefined, customerName: string) {
 		if (!collectOrder) return;
 		try {
-			await powerfin.updateDispatchBilling('token', collectOrder.orderId, {
+			await powerfin.updateDispatchBilling(token(), collectOrder.orderId, {
 				customer_id: customerId,
 				customer_name: customerName
 			});
@@ -302,7 +310,7 @@
 							<button class="touch-btn w-full p-4 rounded-xl border-2 border-gray-200 hover:border-primary text-left"
 								on:click={() => selectHose(hose)}>
 								<div class="font-semibold text-gray-800">Pistola {hose.hose_id} · ⛽ {hose.grade_name}</div>
-								<div class="text-xs text-gray-500">${unitPrice.toFixed(3)}/{unitAbbr}</div>
+								<div class="text-xs text-gray-500">${hose.unit_price.toFixed(3)}/{unitAbbr}</div>
 							</button>
 						{/each}
 					</div>
@@ -329,12 +337,19 @@
 			{/if}
 
 			{#if step === 'billing' && (vehicleResult || billingCustomer)}
+				{@const owner = billingCustomer ?? vehicleResult?.owner}
 				<div class="card p-4 mb-4">
-					<h3 class="text-sm font-semibold text-gray-700 mb-3">¿Facturar al dueño del vehículo?</h3>
+					<h3 class="text-sm font-semibold text-gray-700 mb-3">¿Facturar a este cliente?</h3>
 					<div class="bg-green-50 rounded-xl p-4 mb-3">
-						<div class="font-semibold text-gray-800">{(billingCustomer ?? vehicleResult?.owner)?.name}</div>
-						<div class="text-sm text-gray-500">{(billingCustomer ?? vehicleResult?.owner)?.id_type}: {(billingCustomer ?? vehicleResult?.owner)?.id_number}</div>
-						<div class="text-sm text-purple-600 font-medium mt-1">{vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? ''} · ${unitPrice.toFixed(3)}/{unitAbbr}</div>
+						<div class="font-semibold text-gray-800">{owner?.name}</div>
+						<div class="text-sm text-gray-500">{owner?.id_type}: {owner?.id_number}</div>
+						{#if owner?.email}
+							<div class="text-sm text-gray-500">✉️ {owner?.email}</div>
+						{/if}
+						{#if owner?.phone}
+							<div class="text-sm text-gray-500">📞 {owner?.phone}</div>
+						{/if}
+						<div class="text-sm text-purple-600 font-medium mt-1">Lista: {vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? 'STANDARD'}</div>
 					</div>
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold" on:click={handleBillingConfirm}>✓ Correcto</button>
@@ -346,12 +361,22 @@
 			{#if step === 'incomplete'}
 				<div class="card p-4 mb-4">
 					<h3 class="text-sm font-semibold text-gray-700 mb-3">⚠️ Datos faltantes</h3>
-					<p class="text-sm text-gray-500 mb-3">El cliente no tiene email registrado. Es necesario para la factura.</p>
+					<p class="text-sm text-gray-500 mb-3">Completa los datos del cliente. Falta: {vehicleResult?.incomplete_fields?.join(', ') || 'datos'}</p>
 					{#if vehicleResult?.owner}
 						<div class="bg-gray-50 rounded-xl p-3 mb-3 text-sm text-gray-600">{vehicleResult.owner.name} · {vehicleResult.owner.id_number}</div>
 					{/if}
-					<input type="email" bind:value={incompleteEmail} placeholder="Correo electrónico"
-						class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none" />
+					{#if vehicleResult?.incomplete_fields?.includes('email')}
+						<input type="email" bind:value={incompleteEmail} placeholder="Correo electrónico"
+							class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none" />
+					{/if}
+					{#if vehicleResult?.incomplete_fields?.includes('phone')}
+						<input type="tel" bind:value={incompletePhone} placeholder="Teléfono"
+							class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none" />
+					{/if}
+					{#if vehicleResult?.incomplete_fields?.includes('address')}
+						<input type="text" bind:value={incompleteAddress} placeholder="Dirección"
+							class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none" />
+					{/if}
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50"
 							on:click={submitIncomplete}
@@ -426,8 +451,7 @@
 			{#if step === 'presetValue'}
 				<div class="card p-4 mb-4">
 					{#if presetType === 'MONEY'}
-						<h3 class="text-sm font-semibold text-gray-700 mb-1">Monto a despachar</h3>
-						<div class="text-xs text-gray-500 mb-3">Precio: ${unitPrice.toFixed(3)}/{unitAbbr}</div>
+						<h3 class="text-sm font-semibold text-gray-700 mb-3">Monto a despachar</h3>
 						<input type="number" bind:value={presetValue} placeholder="0.00" step="0.01" min="1"
 							class="w-full rounded-xl border border-gray-200 px-4 py-3 text-2xl text-center font-bold focus:border-primary focus:outline-none mb-3" />
 						<div class="flex flex-wrap gap-2 mb-3">
@@ -435,10 +459,8 @@
 								<button class="touch-btn px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200" on:click={() => setQuickAmount(btn)}>${btn}</button>
 							{/each}
 						</div>
-						{#if estimatedLiters}<div class="text-sm text-gray-500 text-center">≈ {estimatedLiters} {gradeUnit.toLowerCase()}</div>{/if}
 					{:else if presetType === 'VOLUME'}
-						<h3 class="text-sm font-semibold text-gray-700 mb-1">Galones a despachar</h3>
-						<div class="text-xs text-gray-500 mb-3">Precio: ${unitPrice.toFixed(3)}/{unitAbbr}</div>
+						<h3 class="text-sm font-semibold text-gray-700 mb-3">Galones a despachar</h3>
 						<input type="number" bind:value={presetValue} placeholder="0.00" step="0.01" min="0.1"
 							class="w-full rounded-xl border border-gray-200 px-4 py-3 text-2xl text-center font-bold focus:border-primary focus:outline-none mb-3" />
 						<div class="flex flex-wrap gap-2 mb-3">
@@ -446,7 +468,6 @@
 								<button class="touch-btn px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200" on:click={() => setQuickAmount(btn)}>{btn} gal</button>
 							{/each}
 						</div>
-						{#if estimatedTotal}<div class="text-sm text-gray-500 text-center">≈ ${estimatedTotal}</div>{/if}
 					{:else}
 						<h3 class="text-sm font-semibold text-gray-700 mb-3">Llenar tanque</h3>
 						<p class="text-sm text-gray-500 mb-3">El despacho continuará hasta que el tanque esté lleno.</p>
@@ -497,12 +518,6 @@
 						<div class="flex justify-between text-lg font-bold"><span>TOTAL</span><span class="text-primary">${finalAmount.toFixed(2)}</span></div>
 					</div>
 				</div>
-				{#if changeAmount > 0}
-					<div class="card p-4 mb-4 bg-green-50 border-green-200">
-						<div class="flex justify-between items-center"><span class="text-sm text-green-700">Vuelto</span><span class="text-xl font-bold text-green-700">${changeAmount.toFixed(2)}</span></div>
-						<div class="text-xs text-green-600 mt-1">Preset: ${collectOrder.presetAmount.toFixed(2)} — Despachado: ${finalAmount.toFixed(2)}</div>
-					</div>
-				{/if}
 				<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold" on:click={() => step = 'payment'}>Cobrar Venta</button>
 				<button class="touch-btn w-full mt-2 py-2 text-sm text-gray-400 hover:text-gray-600" on:click={startChangeBilling}>
 					Cambiar facturación →
@@ -538,6 +553,8 @@
 			{/if}
 
 			{#if step === 'payment' && !confirmed}
+				{@const received = parseFloat(receivedAmount) || 0}
+				{@const realChange = Math.max(0, received - finalAmount)}
 				<div class="card p-4 mb-4">
 					<h3 class="text-sm font-semibold text-gray-700 mb-3">Forma de pago</h3>
 					<div class="grid grid-cols-2 gap-2 mb-3">
@@ -549,9 +566,46 @@
 					{#if needsReference}
 						<input type="text" bind:value={referenceCode} placeholder="Nro. de transacción / voucher" class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm mb-3 focus:border-primary focus:outline-none" />
 					{/if}
+					<div class="bg-gray-50 rounded-xl p-3 mb-3">
+						<div class="flex justify-between text-sm mb-2"><span class="text-gray-500">Total a cobrar</span><span class="font-bold">${finalAmount.toFixed(2)}</span></div>
+						{#if paymentMethod === 'EFECTIVO'}
+							<div class="flex items-center gap-2">
+								<span class="text-sm text-gray-500">Recibido</span>
+								<span class="text-lg">$</span>
+								<input type="number" bind:value={receivedAmount} placeholder="0.00" step="0.01" min="0"
+									class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-right font-bold focus:border-primary focus:outline-none" />
+							</div>
+							{#if realChange > 0}
+								<div class="flex justify-between text-sm mt-2 pt-2 border-t border-gray-200"><span class="text-green-600">Vuelto</span><span class="font-bold text-green-600">${realChange.toFixed(2)}</span></div>
+							{/if}
+						{/if}
+					</div>
 					{#if error}<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-3">{error}</div>{/if}
 					<button class="touch-btn w-full bg-green-500 hover:bg-green-600 text-white rounded-xl py-4 text-lg font-bold disabled:opacity-50"
-						on:click={handleCollect} disabled={!canConfirmPayment || loading}>Confirmar — Cobrar ${finalAmount.toFixed(2)}</button>
+						on:click={() => confirmingPayment = true} disabled={!canConfirmPayment || loading}>Confirmar — Cobrar ${finalAmount.toFixed(2)}</button>
+				</div>
+			{/if}
+
+			{#if confirmingPayment}
+				<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click={() => confirmingPayment = false}>
+					<div class="bg-white rounded-2xl p-6 m-4 max-w-sm w-full shadow-xl" on:click|stopPropagation>
+						<h3 class="text-lg font-semibold text-gray-800 mb-2">¿Confirmar cobro?</h3>
+						<div class="text-sm text-gray-500 mb-4">
+							<div class="flex justify-between"><span>Total</span><span class="font-bold">${finalAmount.toFixed(2)}</span></div>
+							<div class="flex justify-between"><span>Método</span><span>{selectedPaymentMethod?.name}</span></div>
+							{#if paymentMethod === 'EFECTIVO' && parseFloat(receivedAmount) > 0}
+								<div class="flex justify-between"><span>Recibido</span><span>${parseFloat(receivedAmount).toFixed(2)}</span></div>
+								{#if Math.max(0, parseFloat(receivedAmount) - finalAmount) > 0}
+									<div class="flex justify-between text-green-600"><span>Vuelto</span><span class="font-bold">${Math.max(0, parseFloat(receivedAmount) - finalAmount).toFixed(2)}</span></div>
+								{/if}
+							{/if}
+						</div>
+						<div class="grid grid-cols-2 gap-2">
+							<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={() => confirmingPayment = false}>Cancelar</button>
+							<button class="touch-btn bg-green-500 text-white rounded-xl py-3 font-semibold"
+								on:click={() => { confirmingPayment = false; handleCollect(); }}>Sí, Cobrar</button>
+						</div>
+					</div>
 				</div>
 			{/if}
 

@@ -185,17 +185,59 @@ async def seed():
         await db.flush()
 
         # ── Dispensers ──
+        # 4 physical dispensers → 8 logical pumps in Synergy
+        # Each physical dispenser = 2 sides (A/B) = 2 logical pumps
+        #
+        # SURT-01: BI-PRODUCTO (pumps 1+2, loop COM40) 🟢 IDLE
+        #   Side A (pump 1): ECO_PAIS hose 1 + SUPER hose 2
+        #   Side B (pump 2): ECO_PAIS hose 1 + SUPER hose 2
         d1 = Dispenser(
-            emission_point_id=1, code="SURT-01", name="Surtidor DIESEL",
-            fusion_pump_id=1, printer_ip="192.168.1.31", printer_port=9100,
+            emission_point_id=1, code="SURT-01", name="Surtidor GASOLINA",
+            fusion_pump_id=1, printer_ip="192.168.1.31", printer_port=9100, sort_order=1,
         )
-        db.add(d1)
+        # SURT-02: MONO-PRODUCTO (pumps 3+4, loop COM41) ⚫ CLOSED
+        #   Side A (pump 3): EXTRA-ECO, Side B (pump 4): EXTRA-ECO
+        d2 = Dispenser(
+            emission_point_id=1, code="SURT-02", name="Surtidor EXTRA-ECO",
+            fusion_pump_id=3, printer_ip=None, printer_port=9100, sort_order=2,
+        )
+        # SURT-03: MONO-PRODUCTO (pumps 5+6, loop COM42) ⚫ CLOSED
+        #   Side A (pump 5): DIESEL, Side B (pump 6): DIESEL
+        d3 = Dispenser(
+            emission_point_id=1, code="SURT-03", name="Surtidor DIESEL 1",
+            fusion_pump_id=5, printer_ip=None, printer_port=9100, sort_order=3,
+        )
+        # SURT-04: MONO-PRODUCTO (pumps 7+8, loop COM43) ⚫ CLOSED
+        #   Side A (pump 7): DIESEL, Side B (pump 8): DIESEL
+        d4 = Dispenser(
+            emission_point_id=1, code="SURT-04", name="Surtidor DIESEL 2",
+            fusion_pump_id=7, printer_ip=None, printer_port=9100, sort_order=4,
+        )
+        db.add_all([d1, d2, d3, d4])
         await db.flush()
 
         # ── Hoses ──
+        # Validated by physical test (2026-06-04):
+        #   Lifting ECO_PAIS nozzle → Synergy reports hose=2
+        #   Therefore: hose 1 = SUPER, hose 2 = ECO_PAIS
+        #   Synergy config labels (P001H1GRADE=2 EXTRA-ECO, P001H2GRADE=1 SUPER)
+        #   do NOT match physical nozzle positions.
         hoses = [
-            Hose(dispenser_id=1, side="A", fusion_pump_id=1, fusion_hose_id=1, grade_id="DIESEL"),
-            Hose(dispenser_id=1, side="B", fusion_pump_id=2, fusion_hose_id=1, grade_id="DIESEL"),
+            # SURT-01 side A (pump 1): hose 1 = SUPER, hose 2 = ECO_PAIS
+            Hose(dispenser_id=1, side="A", fusion_pump_id=1, fusion_hose_id=1, grade_id="SUPER"),
+            Hose(dispenser_id=1, side="A", fusion_pump_id=1, fusion_hose_id=2, grade_id="ECO_PAIS"),
+            # SURT-01 side B (pump 2): hose 1 = SUPER, hose 2 = ECO_PAIS
+            Hose(dispenser_id=1, side="B", fusion_pump_id=2, fusion_hose_id=1, grade_id="SUPER"),
+            Hose(dispenser_id=1, side="B", fusion_pump_id=2, fusion_hose_id=2, grade_id="ECO_PAIS"),
+            # SURT-02: mono-producto (CLOSED)
+            Hose(dispenser_id=2, side="A", fusion_pump_id=3, fusion_hose_id=1, grade_id="ECO_PAIS"),
+            Hose(dispenser_id=2, side="B", fusion_pump_id=4, fusion_hose_id=1, grade_id="ECO_PAIS"),
+            # SURT-03: mono-producto DIESEL (CLOSED)
+            Hose(dispenser_id=3, side="A", fusion_pump_id=5, fusion_hose_id=1, grade_id="DIESEL"),
+            Hose(dispenser_id=3, side="B", fusion_pump_id=6, fusion_hose_id=1, grade_id="DIESEL"),
+            # SURT-04: mono-producto DIESEL (CLOSED)
+            Hose(dispenser_id=4, side="A", fusion_pump_id=7, fusion_hose_id=1, grade_id="DIESEL"),
+            Hose(dispenser_id=4, side="B", fusion_pump_id=8, fusion_hose_id=1, grade_id="DIESEL"),
         ]
         db.add_all(hoses)
 
@@ -238,7 +280,11 @@ async def seed():
     print("✅ Seed data inserted successfully!")
     print(f"   Users: admin/1234, carlos/1234, maria/1234, pedro/1234")
     print(f"   Contract: CT-2026-001 (INDEFINIDO, $5,000 cupo)")
-    print(f"   Dispenser: SURT-01 with 2 hoses (A/B)")
+    print(f"   Dispensers (4 físicos, 8 pumps lógicos, 10 hoses):")
+    print(f"     SURT-01 (pumps 1+2): GASOLINA bi-producto  🟢 IDLE")
+    print(f"     SURT-02 (pumps 3+4): EXTRA-ECO mono-prod  ⚫ CLOSED")
+    print(f"     SURT-03 (pumps 5+6): DIESEL mono-prod     ⚫ CLOSED")
+    print(f"     SURT-04 (pumps 7+8): DIESEL mono-prod     ⚫ CLOSED")
 
 
 if __name__ == "__main__":

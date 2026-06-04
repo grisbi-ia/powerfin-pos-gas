@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { config } from '$lib/stores/config';
 	import Header from '$lib/components/Header.svelte';
@@ -9,7 +10,8 @@
 	import AmountInput from '$lib/components/AmountInput.svelte';
 	import type { VehicleResult, CustomerFormData, Customer, HoseConfig } from '$lib/api/types';
 	import * as powerfin from '$lib/api/powerfin';
-	import * as bridge from '$lib/api/bridge.mock';
+	import * as bridge from '$lib/api/bridge';
+	import { auth } from '$lib/stores/auth';
 	import { pendingOrders } from '$lib/stores/pendingOrders';
 
 	let dispenserId = 0;
@@ -159,14 +161,16 @@
 		try {
 			const dispatchOwner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
 
-			const orderResult = await powerfin.createDispatch('mock-token', {
+			const orderResult = await powerfin.createDispatch(get(auth).token || '', {
 				dispenser_id: dispenserId,
 				hose_id: selectedHoseId,
 				side: side,
 				preset_type: 'MONEY',
 				preset_value: amount,
+				unit_price: 3.103,
 				payment_method: 'EFECTIVO',
 				customer_id: dispatchOwner?.customer_id,
+				customer_name: dispatchOwner?.name,
 				plate: plate
 			});
 

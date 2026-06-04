@@ -17,6 +17,7 @@ from app.models import (
     SystemConfig,
 )
 from app.models.product import Product
+from app.models.pricing import PriceListItem
 from app.models.user import User
 from app.schemas import (
     ConfigResponse,
@@ -51,24 +52,61 @@ async def get_config(
     result = await db.execute(
         select(Dispenser)
         .where(Dispenser.is_active == True)
+        .order_by(Dispenser.sort_order, Dispenser.dispenser_id)
         .options(selectinload(Dispenser.hoses))
     )
     dispensers_raw = result.scalars().all()
 
-    # Product lookup for grade names
+    # Product lookup for grade names and default prices
     products = (await db.execute(select(Product))).scalars().all()
     product_map = {p.code: p.name for p in products}
+    
+    # Default price list items (STANDARD prices for each product)
+    from app.models.pricing import PriceListItem
+    default_pl = (await db.execute(
+        select(PriceList).where(PriceList.is_default == True)
+    )).scalar_one_or_none()
+    default_prices = {}
+    if default_pl:
+        pl_items = (await db.execute(
+            select(PriceListItem).where(PriceListItem.price_list_id == default_pl.price_list_id)
+        )).scalars().all()
+        for item in pl_items:
+            # Map product_id → unit_price
+            for p in products:
+                if p.product_id == item.product_id:
+                    default_prices[p.code] = float(item.unit_price)
+    
+    # Map grade code → product code
+    grades_result = (await db.execute(select(Grade))).scalars().all()
+    grade_product_map = {}
+    for g in grades_result:
+        for p in products:
+            if p.product_id == g.product_id:
+                grade_product_map[g.code] = p.code
+    
+    # Also collect grades list
+    grades = [
+        GradeResponse(
+            grade_id=g.code,
+            name=g.name,
+            unit="GAL",
+        )
+        for g in grades_result
+    ]
 
     dispensers = []
     for d in dispensers_raw:
         sides: dict[str, list] = {"A": [], "B": []}
         for h in d.hoses:
+            product_code = grade_product_map.get(h.grade_id, h.grade_id)
             hose_data = HoseResponse(
                 hose_id=h.hose_id,
                 fusion_pump_id=h.fusion_pump_id,
                 fusion_hose_id=h.fusion_hose_id,
                 grade_id=h.grade_id,
                 grade_name=product_map.get(h.grade_id, h.grade_id),
+                unit_price=default_prices.get(product_code, 0),
             )
             sides[h.side].append(hose_data)
         dispensers.append(
@@ -80,17 +118,6 @@ async def get_config(
                 sides={k: v for k, v in sides.items() if v},
             )
         )
-
-    # Grades
-    grades_result = (await db.execute(select(Grade))).scalars().all()
-    grades = [
-        GradeResponse(
-            grade_id=g.code,
-            name=g.name,
-            unit="GAL",
-        )
-        for g in grades_result
-    ]
 
     # Price lists
     pl_result = (await db.execute(select(PriceList))).scalars().all()
