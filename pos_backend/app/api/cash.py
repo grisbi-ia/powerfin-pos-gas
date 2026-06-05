@@ -115,6 +115,22 @@ async def get_cash_summary(
             CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE"
         )
     ) or 0.0
+    transfers_out = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_OUT"
+        )
+    ) or 0.0
+    safe_drops = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP"
+        )
+    ) or 0.0
+    transfers_received = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "INCOME",
+            CashMovement.related_user_id.isnot(None)
+        )
+    ) or 0.0
     sales_cash = await db.scalar(
         select(func.coalesce(func.sum(Dispatch.total), 0)).where(
             Dispatch.shift_id == shift_id,
@@ -123,7 +139,8 @@ async def get_cash_summary(
     ) or 0.0
 
     opening = float(shift.opening_cash)
-    balance = opening + float(income or 0) + float(sales_cash or 0) - float(expense or 0)
+    # Cast all to float — Numeric columns return Decimal from asyncpg
+    balance = opening + float(income or 0) + float(sales_cash or 0) - float(expense or 0) - float(transfers_out or 0) - float(safe_drops or 0)
 
     return CashSummaryResponse(
         shift_id=shift_id,
@@ -132,6 +149,9 @@ async def get_cash_summary(
         total_income=round(income, 2),
         total_expense=round(expense, 2),
         total_sales_cash=round(sales_cash, 2),
+        total_transfers_received=round(transfers_received, 2),
+        total_transfers_sent=round(transfers_out, 2),
+        total_safe_drops=round(safe_drops, 2),
     )
 
 
@@ -188,6 +208,38 @@ async def create_transfer(
         running_balance=last_balance - float(body.amount),
     )
     db.add(mv)
+
+    # Create INCOME movement for receiver (user-to-user only, not SAFE_DROP)
+    if body.to_user_id != 0:
+        to_shift_result = await db.execute(
+            select(Shift).where(
+                Shift.user_id == body.to_user_id,
+                Shift.status == "OPEN",
+            )
+        )
+        to_shift = to_shift_result.scalar_one_or_none()
+        if to_shift:
+            # Calculate receiver's running balance
+            to_last = await db.execute(
+                select(CashMovement)
+                .where(CashMovement.shift_id == to_shift.shift_id)
+                .order_by(CashMovement.movement_id.desc())
+                .limit(1)
+            )
+            to_last_mv = to_last.scalar_one_or_none()
+            to_last_balance = float(to_last_mv.running_balance) if to_last_mv else 0.0
+
+            to_mv = CashMovement(
+                shift_id=to_shift.shift_id,
+                type="INCOME",
+                amount=float(body.amount),
+                observation=f"Transferencia recibida de {from_shift.user_id}",
+                related_user_id=from_shift.user_id,
+                related_user_name=str(from_shift.user_id),
+                running_balance=to_last_balance + float(body.amount),
+            )
+            db.add(to_mv)
+
     await db.commit()
     await db.refresh(transfer)
 

@@ -29,10 +29,16 @@
 
 	let step: Step = 'plate';
 	let selectedHose: HoseConfig | null = null;
-	let plate = 'ABC1234';
+	let plate = '';
 	let vehicleResult: VehicleResult | null = null;
-	let confirmedOwner: VehicleResult['owner'] = null;
+	let confirmedOwner: VehicleResult['owner'] | Customer | null = null;
 	let billingCustomer: Customer | null = null;
+	let billingPersonId: number | null = null;  // person_id from lookupPerson, for saving preference
+	let editingCustomer = false;
+	let editName = '';
+	let editEmail = '';
+	let editPhone = '';
+	let editAddress = '';
 	let presetType: PresetType = 'MONEY';
 	let presetValue = '';
 	let unitPrice = 3.103;
@@ -43,6 +49,9 @@
 	let idType: 'CED' | 'RUC' = 'CED';
 	let idNumber = '';
 	let idLookupError = '';
+	let idLookupFrom: 'plate' | 'billing' = 'plate';  // track where we came from
+
+	$: idValid = idType === 'CED' ? idNumber.length === 10 : idNumber.length === 13;
 
 	// Collection state
 	let paymentMethod = '';
@@ -61,6 +70,9 @@
 	let changeBillingIdNumber = '';
 	let changeBillingLoading = false;
 	let changeBillingError = '';
+	let saveBillingPreferential = false;
+
+	$: changeBillingValid = changeBillingIdType === 'CED' ? changeBillingIdNumber.length === 10 : changeBillingIdNumber.length === 13;
 
 	onDestroy(() => {
 		if (autoReturnTimer) clearTimeout(autoReturnTimer);
@@ -73,6 +85,10 @@
 	let regIdNumber = '';
 	let regName = '';
 	let regEmail = '';
+	let regPhone = '';
+	let regAddress = '';
+
+	$: regValid = regIdNumber.length > 0 && regName.trim().length > 0 && regEmail.trim().length > 0;
 
 	$: paymentMethods = $config?.payment_methods ?? [];
 	$: selectedPaymentMethod = paymentMethods.find(m => m.code === paymentMethod);
@@ -88,9 +104,9 @@
 			: (finalAmount / (collectOrder.unitPrice || 1.5)).toFixed(3))
 		: '0';
 
-	$: if (mode === 'sale' && sideHoses.length === 1 && step === 'product') {
-		selectHose(sideHoses[0]);
-	}
+	// Product selection — always shown, regardless of hose count.
+	// User explicitly selects the hose before proceeding.
+
 	$: if (mode === 'collect') {
 		step = 'summary';
 		loadPrintPolicy();
@@ -101,14 +117,14 @@
 	}
 
 	function submitIncomplete() { if (vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
-	function submitRegistration() { if (regIdNumber && regName && regEmail) { handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName, email: regEmail, plate }); } }
+	function submitRegistration() { if (!regValid) return; handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName.trim(), email: regEmail.trim(), phone: regPhone.trim(), address: regAddress.trim(), plate }); }
 
 	async function selectHose(hose: HoseConfig) {
 		selectedHose = hose;
 		step = 'billing';  // advance immediately to prevent reactive re-fire
 
 		let price = hose.unit_price || 3.103;
-		const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
+		const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
 		const priceList = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 		const customerId = owner?.customer_id ?? owner?.id_number;
 		if (hose.grade_id && customerId && priceList !== 'STANDARD') {
@@ -126,7 +142,8 @@
 		try {
 			const result = await powerfin.lookupVehicle(token(), plate);
 			vehicleResult = result; plate = result.plate;
-			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
+			billingCustomer = null;  // Reset billing override on new plate search
+			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'plate'; }
 			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
 			else { confirmedOwner = result.owner; step = 'product'; }
 		} catch { error = 'Error al buscar placa'; }
@@ -134,11 +151,19 @@
 	}
 
 	function handleBillingConfirm() {
-		const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
+		// Prefer billing_person (persistent) over owner, unless billingCustomer is set (manual override)
+		const owner = billingCustomer ?? (vehicleResult?.billing_person ?? confirmedOwner ?? vehicleResult?.owner);
 		if (owner) confirmedOwner = owner;
+
+		// Save as preferential billing person if checkbox is checked
+		if (saveBillingPreferential && billingPersonId && vehicleResult?.vehicle_id) {
+			powerfin.setVehicleBillingPerson(token(), vehicleResult.vehicle_id, billingPersonId)
+				.catch(() => {});  // fire-and-forget, non-blocking
+		}
+
 		step = 'presetType';
 	}
-	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; }
+	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'billing'; saveBillingPreferential = false; }
 
 	async function handleIncompleteSubmit(formData: CustomerFormData) {
 		loading = true;
@@ -149,31 +174,107 @@
 		} catch { error = 'Error al actualizar datos'; }
 		finally { loading = false; }
 	}
-	function handleIncompleteCancel() { step = 'plate'; vehicleResult = null; plate = ''; }
+	function handleIncompleteCancel() { step = 'plate'; vehicleResult = null; billingCustomer = null; plate = ''; }
 
 	async function handleIdLookup() {
-		if (idNumber.length < 5) return;
+		if (!idValid) { idLookupError = idType === 'CED' ? 'La cédula debe tener 10 dígitos' : 'El RUC debe tener 13 dígitos'; return; }
 		loading = true; idLookupError = '';
 		try {
-			const customer = await powerfin.getCustomerById(token(), idType, idNumber, true);
-			if (customer) { billingCustomer = customer; step = 'product'; }
-			else { step = 'registration'; }
+			const result = await powerfin.lookupPerson(token(), idType, idNumber);
+			if (result.found && result.data) {
+				billingPersonId = result.data.person_id ?? null;
+				billingCustomer = {
+					person_id: result.data.person_id,
+					customer_id: result.data.id_number,
+					id_type: result.data.id_type,
+					id_number: result.data.id_number,
+					name: result.data.name,
+					email: result.data.email,
+					phone: result.data.phone,
+					price_list: result.data.price_list,
+					price_list_name: result.data.price_list_name,
+					credit_active: false,
+					credit_balance: 0,
+					plates: result.data.plates
+				};
+				step = 'product';
+			} else {
+				regIdNumber = idNumber;
+				regName = '';
+				regEmail = '';
+				regPhone = '';
+				regAddress = '';
+				step = 'registration';
+			}
 		} catch { idLookupError = 'Error al buscar'; }
 		finally { loading = false; }
 	}
-	function handleIdLookupBack() { step = 'plate'; vehicleResult = null; plate = ''; }
+	function handleIdLookupBack() {
+		if (idLookupFrom === 'billing') {
+			step = 'billing';
+		} else {
+			step = 'plate'; vehicleResult = null; plate = '';
+		}
+		billingCustomer = null; billingPersonId = null; saveBillingPreferential = false;
+	}
 
 	async function handleRegistrationSubmit(formData: CustomerFormData) {
 		loading = true; error = '';
 		try {
 			await powerfin.registerCustomer(token(), formData);
 			plate = formData.plate;
-			vehicleResult = { plate: formData.plate, vehicle_found: true, incomplete_fields: [], owner: { customer_id: formData.id_number, id_type: formData.id_type, id_number: formData.id_number, name: formData.name, email: formData.email, phone: null }, price_list: 'STANDARD', price_list_name: 'Precio Normal' };
-			confirmedOwner = vehicleResult.owner; step = 'product';
+			vehicleResult = { vehicle_id: 0, plate: formData.plate, vehicle_found: true, incomplete_fields: [], owner: { person_id: null, customer_id: formData.id_number, id_type: formData.id_type, id_number: formData.id_number, name: formData.name, address: formData.address || null, email: formData.email, phone: formData.phone || null }, billing_person: null, price_list: 'STANDARD', price_list_name: 'Precio Normal' };
+			billingCustomer = { person_id: null, customer_id: formData.id_number, id_type: formData.id_type, id_number: formData.id_number, name: formData.name, address: formData.address || null, email: formData.email, phone: formData.phone || null, price_list: 'STANDARD', price_list_name: 'Precio Normal', credit_active: false, credit_balance: 0, plates: [formData.plate] };
+			confirmedOwner = vehicleResult.owner; step = 'billing';
 		} catch { error = 'Error al registrar'; }
 		finally { loading = false; }
 	}
-	function handleRegistrationCancel() { step = 'idLookup'; }
+	function handleRegistrationCancel() { regName = ''; regEmail = ''; regPhone = ''; regAddress = ''; step = 'idLookup'; }
+
+	function handleProductBack() { step = 'plate'; }
+	function handleBillingBack() { step = 'product'; }
+	function handlePresetTypeBack() { step = 'billing'; }
+	function handlePresetValueBack() { step = 'presetType'; }
+
+	function startEditCustomer() {
+		const p = billingCustomer ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
+		if (!p) return;
+		editName = p.name;
+		editEmail = p.email ?? '';
+		editPhone = p.phone ?? '';
+		editAddress = (p as any).address ?? '';
+		editingCustomer = true;
+	}
+
+	async function saveEditCustomer() {
+		const personId = billingPersonId ?? vehicleResult?.billing_person?.person_id ?? vehicleResult?.owner?.person_id;
+		if (!personId) return;
+		try {
+			await powerfin.updatePerson(token(), personId, {
+				name: editName || undefined,
+				email: editEmail || undefined,
+				phone: editPhone || undefined,
+				address: editAddress || undefined
+			});
+			// Refresh displayed data
+			if (billingCustomer) {
+				billingCustomer.name = editName;
+				billingCustomer.email = editEmail || null;
+				billingCustomer.phone = editPhone || null;
+			}
+			if (vehicleResult?.owner && personId === vehicleResult.owner.person_id) {
+				vehicleResult.owner.name = editName;
+				vehicleResult.owner.email = editEmail || null;
+				vehicleResult.owner.phone = editPhone || null;
+			}
+			if (vehicleResult?.billing_person && personId === vehicleResult.billing_person.person_id) {
+				vehicleResult.billing_person.name = editName;
+				vehicleResult.billing_person.email = editEmail || null;
+				vehicleResult.billing_person.phone = editPhone || null;
+			}
+			editingCustomer = false;
+		} catch { /* silently fail, non-critical */ }
+	}
 
 	function selectPresetType(type: PresetType) { presetType = type; presetValue = ''; step = 'presetValue'; }
 
@@ -182,7 +283,7 @@
 		if (presetType !== 'FULL' && (!val || val <= 0)) { error = presetType === 'MONEY' ? 'Ingrese un monto válido' : 'Ingrese galones válidos'; return; }
 		loading = true; error = ''; step = 'authorizing';
 		try {
-			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
+			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
@@ -243,6 +344,22 @@
 		dispatch('done');
 	}
 
+	/** Start a new sale keeping the current plate and vehicle data. */
+	function handleNewSaleSamePlate() {
+		if (autoReturnTimer) clearTimeout(autoReturnTimer);
+		// Clear sale-specific state, keep plate + vehicle data
+		selectedHose = null;
+		billingCustomer = null;
+		billingPersonId = null;
+		saveBillingPreferential = false;
+		confirmedOwner = vehicleResult?.owner ?? null;
+		presetType = 'MONEY';
+		presetValue = '';
+		unitPrice = 3.103;
+		error = '';
+		step = 'product';
+	}
+
 	// ── Change billing (collect mode) ──────────────────────
 	function startChangeBilling() {
 		changeBillingIdNumber = '';
@@ -251,13 +368,13 @@
 	}
 
 	async function handleChangeBillingSearch() {
-		if (changeBillingIdNumber.length < 5) return;
+		if (!changeBillingValid) { changeBillingError = changeBillingIdType === 'CED' ? 'La cédula debe tener 10 dígitos' : 'El RUC debe tener 13 dígitos'; return; }
 		changeBillingLoading = true;
 		changeBillingError = '';
 		try {
-			const customer = await powerfin.getCustomerById(token(), changeBillingIdType, changeBillingIdNumber);
-			if (customer) {
-				await applyBillingChange(customer.customer_id, customer.name);
+			const result = await powerfin.lookupPerson(token(), changeBillingIdType, changeBillingIdNumber);
+			if (result.found && result.data) {
+				await applyBillingChange(result.data.id_number, result.data.name);
 			} else {
 				changeBillingError = 'Cliente no encontrado';
 			}
@@ -347,29 +464,63 @@
 							</button>
 						{/each}
 					</div>
+					<button class="touch-btn w-full mt-3 bg-gray-100 text-gray-500 rounded-xl py-2 text-sm" on:click={handleProductBack}>← Volver</button>
 				</div>
 			{/if}
 
 			{#if step === 'billing' && (vehicleResult || billingCustomer)}
-				{@const owner = billingCustomer ?? vehicleResult?.owner}
+				{@const effectiveOwner = billingCustomer ?? vehicleResult?.billing_person ?? vehicleResult?.owner}
+				{@const isPreferential = !!vehicleResult?.billing_person && !billingCustomer}
+				{#if editingCustomer}
+				<div class="card p-4 mb-4">
+					<h3 class="text-sm font-semibold text-gray-700 mb-3">✏️ Editar datos del cliente</h3>
+					<input type="text" bind:value={editName} placeholder="Nombre"
+						class="w-full rounded-xl border border-gray-200 px-4 py-2 mb-2 text-sm focus:border-primary focus:outline-none" />
+					<input type="email" bind:value={editEmail} placeholder="Correo electrónico"
+						class="w-full rounded-xl border border-gray-200 px-4 py-2 mb-2 text-sm focus:border-primary focus:outline-none" />
+					<input type="tel" bind:value={editPhone} placeholder="Teléfono"
+						class="w-full rounded-xl border border-gray-200 px-4 py-2 mb-2 text-sm focus:border-primary focus:outline-none" />
+					<input type="text" bind:value={editAddress} placeholder="Dirección"
+						class="w-full rounded-xl border border-gray-200 px-4 py-2 mb-3 text-sm focus:border-primary focus:outline-none" />
+					<div class="grid grid-cols-2 gap-2">
+						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-2 text-sm" on:click={() => editingCustomer = false}>Cancelar</button>
+						<button class="touch-btn bg-primary text-white rounded-xl py-2 text-sm font-semibold" on:click={saveEditCustomer}>Guardar</button>
+					</div>
+				</div>
+				{:else}
 				<div class="card p-4 mb-4">
 					<h3 class="text-sm font-semibold text-gray-700 mb-3">¿Facturar a este cliente?</h3>
 					<div class="bg-green-50 rounded-xl p-4 mb-3">
-						<div class="font-semibold text-gray-800">{owner?.name}</div>
-						<div class="text-sm text-gray-500">{owner?.id_type}: {owner?.id_number}</div>
-						{#if owner?.email}
-							<div class="text-sm text-gray-500">✉️ {owner?.email}</div>
+						{#if isPreferential}
+							<div class="text-xs text-amber-600 font-semibold mb-1">⭐ Facturación preferencial</div>
+							<div class="text-xs text-gray-400 mb-2">Titular: {vehicleResult?.owner?.name}</div>
 						{/if}
-						{#if owner?.phone}
-							<div class="text-sm text-gray-500">📞 {owner?.phone}</div>
+						<div class="font-semibold text-gray-800">{effectiveOwner?.name}</div>
+						<div class="text-sm text-gray-500">{effectiveOwner?.id_type}: {effectiveOwner?.id_number}</div>
+						{#if effectiveOwner?.email}
+							<div class="text-sm text-gray-500">✉️ {effectiveOwner?.email}</div>
+						{/if}
+						{#if effectiveOwner?.phone}
+							<div class="text-sm text-gray-500">📞 {effectiveOwner?.phone}</div>
 						{/if}
 						<div class="text-sm text-purple-600 font-medium mt-1">Lista: {vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? 'STANDARD'}</div>
+						<button class="touch-btn mt-2 w-full bg-gray-100 text-gray-500 rounded-xl py-1.5 text-xs" on:click={startEditCustomer}>✏️ Editar datos</button>
 					</div>
+					{#if billingCustomer && billingPersonId && vehicleResult?.vehicle_id}
+						<label class="flex items-center gap-2 mb-3 p-2 bg-amber-50 rounded-xl cursor-pointer">
+							<input type="checkbox" bind:checked={saveBillingPreferential} class="w-4 h-4 text-primary rounded" />
+							<span class="text-xs text-amber-700">Guardar como facturación preferencial para este vehículo</span>
+						</label>
+					{/if}
 					<div class="grid grid-cols-2 gap-2">
+						<button class="touch-btn bg-gray-100 text-gray-500 rounded-xl py-3 font-medium" on:click={handleBillingBack}>← Volver</button>
 						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold" on:click={handleBillingConfirm}>✓ Correcto</button>
-						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={handleBillingChange}>Cambiar</button>
+					</div>
+					<div class="mt-2">
+						<button class="touch-btn w-full bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={handleBillingChange}>Cambiar</button>
 					</div>
 				</div>
+			{/if}
 			{/if}
 
 			{#if step === 'incomplete'}
@@ -411,13 +562,14 @@
 						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'CED' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'CED'}>Cédula</button>
 						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'RUC'}>RUC</button>
 					</div>
-					<input type="text" bind:value={idNumber} placeholder={idType === 'CED' ? '0912345678' : '1790012345001'}
+					<input type="text" inputmode="numeric" bind:value={idNumber} maxlength={idType === 'CED' ? 10 : 13}
+						placeholder={idType === 'CED' ? '0912345678' : '1790012345001'}
 						class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none"
 						on:keydown={(e) => e.key === 'Enter' && handleIdLookup()} />
 					{#if idLookupError}<div class="text-red-500 text-xs text-center mb-3">{idLookupError}</div>{/if}
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={handleIdLookupBack}>Volver</button>
-						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50" on:click={handleIdLookup} disabled={loading || idNumber.length < 5}>{loading ? 'Buscando...' : 'Buscar'}</button>
+						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50" on:click={handleIdLookup} disabled={loading || !idValid}>{loading ? 'Buscando...' : 'Buscar'}</button>
 					</div>
 				</div>
 			{/if}
@@ -430,14 +582,16 @@
 						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'RUC'}>RUC</button>
 					</div>
 					{#if plate}<div class="bg-gray-50 rounded-xl p-3 mb-3 text-center"><span class="text-xs text-gray-500">Placa: </span><span class="font-mono font-bold text-gray-700">{plate}</span></div>{/if}
-					<input type="text" bind:value={regIdNumber} placeholder="Número de identificación" class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />
-					<input type="text" bind:value={regName} placeholder="Nombre completo" class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />
-					<input type="email" bind:value={regEmail} placeholder="Correo electrónico" class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none text-sm" />
+					<input type="text" bind:value={regIdNumber} placeholder="Número de identificación" readonly class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 bg-gray-50 text-gray-600 focus:outline-none text-sm" />
+					<input type="text" bind:value={regName} placeholder="Nombre completo *" required class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />
+					<input type="email" bind:value={regEmail} placeholder="Correo electrónico *" required class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />
+					<input type="tel" bind:value={regPhone} placeholder="Teléfono" class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />
+					<input type="text" bind:value={regAddress} placeholder="Dirección" class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none text-sm" />
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={handleRegistrationCancel}>Cancelar</button>
 						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50"
 							on:click={submitRegistration}
-							disabled={loading}>{loading ? 'Registrando...' : 'Continuar'}</button>
+							disabled={loading || !regValid}>{loading ? 'Registrando...' : 'Continuar'}</button>
 					</div>
 				</div>
 			{/if}
@@ -459,6 +613,7 @@
 							<div class="text-xs text-gray-500">Sin límite, hasta que se llene</div>
 						</button>
 					</div>
+					<button class="touch-btn w-full mt-2 bg-gray-100 text-gray-500 rounded-xl py-2 text-sm" on:click={handlePresetTypeBack}>← Volver</button>
 				</div>
 			{/if}
 
@@ -489,11 +644,14 @@
 
 					{#if error}<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-3">{error}</div>{/if}
 
-					<button class="touch-btn w-full bg-green-500 hover:bg-green-600 text-white rounded-xl py-4 text-lg font-bold disabled:opacity-50"
-						on:click={handleAuthorize}
-						disabled={loading || (presetType !== 'FULL' && (!presetValue || parseFloat(presetValue) <= 0))}>
-						{loading ? 'Autorizando...' : 'Autorizar Despacho'}
-					</button>
+					<div class="grid grid-cols-2 gap-2">
+						<button class="touch-btn bg-gray-100 text-gray-500 rounded-xl py-3 font-medium" on:click={handlePresetValueBack}>← Volver</button>
+						<button class="touch-btn bg-green-500 hover:bg-green-600 text-white rounded-xl py-3 text-lg font-bold disabled:opacity-50"
+							on:click={handleAuthorize}
+							disabled={loading || (presetType !== 'FULL' && (!presetValue || parseFloat(presetValue) <= 0))}>
+							{loading ? 'Autorizando...' : 'Autorizar'}
+						</button>
+					</div>
 				</div>
 			{/if}
 
@@ -507,9 +665,12 @@
 			{#if step === 'done'}
 				<div class="text-center py-8">
 					<div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><span class="text-3xl">✅</span></div>
-			<h3 class="text-lg font-semibold text-gray-800 mb-1">Despacho Autorizado</h3>
+					<h3 class="text-lg font-semibold text-gray-800 mb-1">Despacho Autorizado</h3>
 					<p class="text-sm text-gray-500 mb-4">El cliente puede cargar combustible.<br />Redirigiendo al inicio en 1.5s...</p>
-					<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold" on:click={handleBackToDashboard}>Volver al Inicio</button>
+					<div class="grid grid-cols-2 gap-2">
+						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-4 font-medium" on:click={handleBackToDashboard}>Volver al Inicio</button>
+						<button class="touch-btn bg-primary text-white rounded-xl py-4 font-semibold" on:click={handleNewSaleSamePlate}>Nueva Venta<br /><span class="text-xs opacity-80">misma placa</span></button>
+					</div>
 				</div>
 			{/if}
 		{/if}
@@ -547,11 +708,12 @@
 						<button class="flex-1 py-2 rounded-lg text-sm font-medium {changeBillingIdType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => changeBillingIdType = 'RUC'}>RUC</button>
 					</div>
 					<div class="flex gap-2 mb-3">
-						<input type="text" bind:value={changeBillingIdNumber} placeholder={changeBillingIdType === 'CED' ? '0912345678' : '1790012345001'}
+						<input type="text" inputmode="numeric" bind:value={changeBillingIdNumber} maxlength={changeBillingIdType === 'CED' ? 10 : 13}
+							placeholder={changeBillingIdType === 'CED' ? '0912345678' : '1790012345001'}
 							class="flex-1 rounded-xl border border-gray-200 px-4 py-3 focus:border-primary focus:outline-none"
 							on:keydown={(e) => e.key === 'Enter' && handleChangeBillingSearch()} />
 						<button class="touch-btn bg-primary text-white rounded-xl px-6 py-3 font-semibold disabled:opacity-50"
-							on:click={handleChangeBillingSearch} disabled={changeBillingIdNumber.length < 5 || changeBillingLoading}>
+							on:click={handleChangeBillingSearch} disabled={!changeBillingValid || changeBillingLoading}>
 							{changeBillingLoading ? '...' : 'Buscar'}
 						</button>
 					</div>

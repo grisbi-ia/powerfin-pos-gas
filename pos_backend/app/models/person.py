@@ -34,6 +34,11 @@ class Vehicle(Base):
     price_list_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("price_lists.price_list_id")
     )
+    billing_person_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("persons.person_id"), nullable=True,
+        comment="Preferred billing person. NULL = use owner (person_id)."
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    person: Mapped["Person"] = relationship(lazy="selectin")
+    person: Mapped["Person"] = relationship(lazy="selectin", foreign_keys=[person_id])
+    billing_person: Mapped["Person | None"] = relationship(lazy="selectin", foreign_keys=[billing_person_id])

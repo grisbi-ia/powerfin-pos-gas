@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { get } from 'svelte/store';
+	import { auth } from '$lib/stores/auth';
 	import type { Customer } from '$lib/api/types';
 
 	export let onSelect: (customer: Customer | null) => void;
@@ -28,7 +30,7 @@
 		debounceTimer = setTimeout(async () => {
 			searching = true;
 			try {
-				results = await powerfin.searchCustomers('mock-token', query);
+				results = await powerfin.searchCustomers(get(auth).token || '', query);
 				showResults = true;
 			} catch {
 				results = [];

@@ -89,21 +89,30 @@ class ConfigResponse(BaseModel):
 # ── Vehicles ─────────────────────────────────────────────────────
 
 class VehicleOwner(BaseModel):
+    person_id: Optional[int] = None
     customer_id: str
     id_type: str
     id_number: str
     name: str
+    address: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
 
 
 class VehicleResponse(BaseModel):
+    vehicle_id: int
     plate: str
     vehicle_found: bool
     incomplete_fields: list[str] = []
     owner: Optional[VehicleOwner] = None
+    billing_person: Optional[VehicleOwner] = None
     price_list: str = "STANDARD"
     price_list_name: str = "Precio Normal"
+
+
+class SetBillingPersonRequest(BaseModel):
+    """Set or clear the preferred billing person for a vehicle."""
+    person_id: Optional[int] = None  # None = clear, use owner
 
 
 # ── Customers / Persons ──────────────────────────────────────────

@@ -170,6 +170,36 @@ export async function lookupVehicle(
 	return res.json();
 }
 
+/** Set or clear the preferred billing person for a vehicle. */
+export async function setVehicleBillingPerson(
+	token: string,
+	vehicleId: number,
+	personId: number | null
+): Promise<void> {
+	if (USE_MOCKS_POWERFIN) return mock.setVehicleBillingPerson(token, vehicleId, personId);
+	const res = await fetch(powerfinUrl(`/api/pos/vehicles/${vehicleId}/billing-person`), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify({ person_id: personId })
+	});
+	if (!res.ok) throw new Error('Error actualizando persona de facturación');
+}
+
+/** Update a person's contact fields (email, phone, address, name). */
+export async function updatePerson(
+	token: string,
+	personId: number,
+	data: { name?: string; email?: string; phone?: string; address?: string }
+): Promise<void> {
+	if (USE_MOCKS_POWERFIN) return mock.updatePerson(token, personId, data);
+	const res = await fetch(powerfinUrl(`/api/pos/persons/${personId}`), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error actualizando persona');
+}
+
 // ── Customer by ID ──────────────────────────────────────────
 
 export async function getCustomerById(
@@ -181,6 +211,21 @@ export async function getCustomerById(
 	if (USE_MOCKS_POWERFIN) return mock.getCustomerById(token, idType, idNumber, _updateBilling);
 	const results = await searchCustomers(token, idNumber);
 	return results.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
+}
+
+/** Unified person lookup: local DB first, then external identity API (Sercobaco/SRI). */
+export async function lookupPerson(
+	token: string,
+	idType: string,
+	idNumber: string
+): Promise<import('./types').PersonLookupResult> {
+	if (USE_MOCKS_POWERFIN) return mock.lookupPerson(token, idType, idNumber);
+	const res = await fetch(
+		powerfinUrl(`/api/pos/persons/lookup?id_type=${encodeURIComponent(idType)}&id_number=${encodeURIComponent(idNumber)}`),
+		{ headers: { Authorization: `Bearer ${token}` } }
+	);
+	if (!res.ok) throw new Error('Error buscando persona');
+	return res.json();
 }
 
 // ── Register customer ───────────────────────────────────────

@@ -128,7 +128,7 @@ async def close_shift(
         )
     ) or 0.0
 
-    # Cash movements
+    # Cash movements — income, expense, transfers, safe drops
     income = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
             CashMovement.shift_id == shift_id,
@@ -141,8 +141,22 @@ async def close_shift(
             CashMovement.type == "EXPENSE",
         )
     ) or 0.0
+    transfers_out = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id,
+            CashMovement.type == "TRANSFER_OUT",
+        )
+    ) or 0.0
+    safe_drops = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id,
+            CashMovement.type == "SAFE_DROP",
+        )
+    ) or 0.0
 
-    expected = float(shift.opening_cash) + income + sales_cash - expense
+    # Income already includes transfers received (created as INCOME for receiver)
+    # Cast all to float — Numeric columns return Decimal from asyncpg
+    expected = float(shift.opening_cash) + float(income) + float(sales_cash) - float(expense) - float(transfers_out) - float(safe_drops)
     diff = float(body.closing_cash) - expected
 
     # System config for branch code

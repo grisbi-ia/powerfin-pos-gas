@@ -8,6 +8,7 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models import Person, Vehicle
 from app.models.user import User
+from app.schemas import UpdatePersonRequest
 from app.services.identity_service import IdentityLookupError, lookup_person
 
 router = APIRouter(prefix="/api/pos/persons", tags=["persons"])
@@ -67,6 +68,7 @@ async def person_lookup(
             "local": True,
             "source": "database",
             "data": {
+                "person_id": person.person_id,
                 "name": person.name,
                 "id_type": person.id_type,
                 "id_number": person.id_number,
@@ -93,11 +95,44 @@ async def person_lookup(
             "data": None,
         }
 
+    # ═══════════════════════════════════════════════
+    # Step 2.5: Auto-save external result locally
+    # Avoids future API calls for the same person.
+    # Uses INSERT … ON CONFLICT DO NOTHING to prevent
+    # duplicates from concurrent requests.
+    # ═══════════════════════════════════════════════
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    stmt = pg_insert(Person).values(
+        id_type=external.id_type,
+        id_number=external.id_number,
+        name=external.name,
+        address=external.address,
+        email=external.email,
+        phone=external.phone,
+        is_active=True,
+        price_list_id=None,
+    ).on_conflict_do_nothing(
+        constraint="persons_id_type_id_number_key"
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+    # Re-fetch to get the person_id (may have been inserted by concurrent request)
+    saved = await db.execute(
+        select(Person).where(
+            Person.id_type == id_type,
+            Person.id_number == id_number,
+        )
+    )
+    saved_person_id = saved.scalar_one().person_id if saved else None
+
     return {
         "found": True,
-        "local": False,
+        "local": True,
         "source": "identity_api",
         "data": {
+            "person_id": saved_person_id,
             "name": external.name,
             "id_type": external.id_type,
             "id_number": external.id_number,
@@ -114,14 +149,11 @@ async def person_lookup(
 @router.put("/{person_id}")
 async def update_person(
     person_id: int,
-    body: "UpdatePersonRequest",
+    body: UpdatePersonRequest,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Update a person's fields (yalobox_wallet, price_list, etc.)."""
-    from app.schemas import UpdatePersonRequest as _Schema  # avoid circular import
-
-    _body = body  # noqa
+    """Update a person's fields (name, address, phone, email, etc.)."""
     result = await db.execute(
         select(Person).where(Person.person_id == person_id)
     )

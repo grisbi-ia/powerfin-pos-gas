@@ -72,9 +72,11 @@ export interface PriceListConfig {
 
 export interface Customer {
 	customer_id: string;
+	person_id?: number | null;
 	id_type: string;
 	id_number: string;
 	name: string;
+	address?: string | null;
 	email: string | null;
 	phone: string | null;
 	price_list: string;
@@ -85,14 +87,28 @@ export interface Customer {
 }
 
 export interface VehicleResult {
+	vehicle_id: number;
 	plate: string;
 	vehicle_found: boolean;
 	incomplete_fields: string[];
 	owner: {
+		person_id: number | null;
 		customer_id: string;
 		id_type: string;
 		id_number: string;
 		name: string;
+		address: string | null;
+		email: string | null;
+		phone: string | null;
+	} | null;
+	/** Preferred billing person (set via PUT /vehicles/{id}/billing-person). Null = use owner. */
+	billing_person: {
+		person_id: number | null;
+		customer_id: string;
+		id_type: string;
+		id_number: string;
+		name: string;
+		address: string | null;
 		email: string | null;
 		phone: string | null;
 	} | null;
@@ -108,6 +124,27 @@ export interface CustomerFormData {
 	phone?: string;
 	address?: string;
 	plate: string;
+}
+
+/** Unified person lookup via /api/pos/persons/lookup */
+export interface PersonLookupData {
+	person_id: number | null;
+	name: string;
+	id_type: string;
+	id_number: string;
+	address: string | null;
+	email: string | null;
+	phone: string | null;
+	plates: string[];
+	price_list: string;
+	price_list_name: string;
+}
+
+export interface PersonLookupResult {
+	found: boolean;
+	local: boolean;
+	source: string | null;
+	data: PersonLookupData | null;
 }
 
 export interface RegisterCustomerResponse {

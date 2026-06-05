@@ -44,6 +44,8 @@
 	let idType: 'CED' | 'RUC' = 'CED';
 	let idNumber = '';
 
+	$: idValid = idType === 'CED' ? idNumber.length === 10 : idNumber.length === 13;
+
 	function selectHose(hose: HoseConfig) {
 		selectedHoseId = hose.hose_id;
 		selectedFusionHoseId = hose.fusion_hose_id;
@@ -86,21 +88,36 @@
 	}
 
 	async function handleIdLookup() {
-		if (idNumber.length < 5) return;
+		if (!idValid) { idLookupError = idType === 'CED' ? 'La cédula debe tener 10 dígitos' : 'El RUC debe tener 13 dígitos'; return; }
 		loading = true;
 		idLookupError = '';
 		try {
-			const customer = await powerfin.getCustomerById('mock-token', idType, idNumber, true);
-			if (customer) {
-				billingCustomer = customer;
-				unitPrice = customer.price_list === 'VIP' ? 1.100 : 1.500;
+			const result = await powerfin.lookupPerson(get(auth).token || '', idType, idNumber);
+			if (result.found && result.data) {
+				billingCustomer = {
+					person_id: result.data.person_id,
+					customer_id: result.data.id_number,
+					id_type: result.data.id_type,
+					id_number: result.data.id_number,
+					name: result.data.name,
+					email: result.data.email,
+					phone: result.data.phone,
+					price_list: result.data.price_list,
+					price_list_name: result.data.price_list_name,
+					credit_active: false,
+					credit_balance: 0,
+					plates: result.data.plates
+				};
+				unitPrice = result.data.price_list === 'VIP' ? 1.100 : 1.500;
 				currentStep = 'billing';
 			} else {
 				vehicleResult = {
+					vehicle_id: 0,
 					plate: plate,
 					vehicle_found: false,
 					incomplete_fields: [],
 					owner: null,
+					billing_person: null,
 					price_list: 'STANDARD',
 					price_list_name: 'Precio Normal'
 				};
@@ -117,20 +134,24 @@
 		loading = true;
 		error = '';
 		try {
-			await powerfin.registerCustomer('mock-token', formData);
+			await powerfin.registerCustomer(get(auth).token || '', formData);
 			plate = formData.plate;
 			vehicleResult = {
+				vehicle_id: 0,
 				plate: formData.plate,
 				vehicle_found: true,
 				incomplete_fields: [],
 				owner: {
+					person_id: null,
 					customer_id: formData.id_number,
 					id_type: formData.id_type,
 					id_number: formData.id_number,
 					name: formData.name,
+					address: null,
 					email: formData.email,
 					phone: null
 				},
+				billing_person: null,
 				price_list: 'STANDARD',
 				price_list_name: 'Precio Normal'
 			};
@@ -327,7 +348,9 @@
 				<input
 					id="id-lookup"
 					type="text"
+					inputmode="numeric"
 					bind:value={idNumber}
+					maxlength={idType === 'CED' ? 10 : 13}
 					on:keydown={(e) => e.key === 'Enter' && handleIdLookup()}
 					class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm
 						focus:border-primary focus:outline-none"
@@ -353,7 +376,7 @@
 				<button
 					class="touch-btn flex-1 bg-primary hover:bg-primary/90 text-white rounded-xl py-3 font-bold disabled:opacity-50"
 					on:click={handleIdLookup}
-					disabled={loading || idNumber.length < 5}
+					disabled={loading || !idValid}
 				>
 					{loading ? 'Buscando...' : 'Buscar'}
 				</button>

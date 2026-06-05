@@ -107,32 +107,40 @@ const MOCK_CUSTOMERS: Customer[] = [
 
 const MOCK_VEHICLES: Record<string, VehicleResult> = {
 	'ABC1234': {
+		vehicle_id: 1,
 		plate: 'ABC1234',
 		vehicle_found: true,
 		incomplete_fields: [],
 		owner: {
+			person_id: 1,
 			customer_id: '0912345678',
 			id_type: 'CED',
 			id_number: '0912345678',
 			name: 'Juan Carlos Pérez',
+			address: 'Av. Siempre Viva 742',
 			email: 'jperez@email.com',
 			phone: '0991234567'
 		},
+		billing_person: null,
 		price_list: 'STANDARD',
 		price_list_name: 'Precio Normal'
 	},
 	'XYZ5678': {
+		vehicle_id: 2,
 		plate: 'XYZ5678',
 		vehicle_found: true,
 		incomplete_fields: ['email'],
 		owner: {
+			person_id: 2,
 			customer_id: '1790012345001',
 			id_type: 'RUC',
 			id_number: '1790012345001',
 			name: 'Transportes Andinos S.A.',
+			address: null,
 			email: null,
 			phone: '022345678'
 		},
+		billing_person: null,
 		price_list: 'STANDARD',
 		price_list_name: 'Precio Normal'
 	}
@@ -369,16 +377,62 @@ export async function lookupVehicle(_token: string, plate: string): Promise<Vehi
 	const normalized = plate.toUpperCase().replace(/\s+/g, '');
 	const result = MOCK_VEHICLES[normalized];
 	if (result) {
-		return result;
+		// Inject mock billing person if set
+		const billing = _mockVehicleBilling[normalized] ?? null;
+		return { ...result, billing_person: billing };
 	}
 	return {
+		vehicle_id: 0,
 		plate: normalized,
 		vehicle_found: false,
 		incomplete_fields: [],
 		owner: null,
+		billing_person: null,
 		price_list: 'STANDARD',
 		price_list_name: 'Precio Normal'
 	};
+}
+
+const _mockVehicleBilling: Record<string, VehicleResult['billing_person']> = {};
+
+export async function setVehicleBillingPerson(
+	_token: string,
+	_vehicleId: number,
+	personId: number | null
+): Promise<void> {
+	await delay(200);
+	// Mock: use ABC1234 as the only vehicle for testing
+	if (personId !== null) {
+		const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id) === personId);
+		if (person) {
+			_mockVehicleBilling['ABC1234'] = {
+				person_id: personId,
+				customer_id: person.customer_id,
+				id_type: person.id_type,
+				id_number: person.id_number,
+				name: person.name,
+				address: null,
+				email: person.email,
+				phone: person.phone
+			};
+		}
+	} else {
+		delete _mockVehicleBilling['ABC1234'];
+	}
+}
+
+export async function updatePerson(
+	_token: string,
+	personId: number,
+	data: { name?: string; email?: string; phone?: string; address?: string }
+): Promise<void> {
+	await delay(200);
+	const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id) === personId);
+	if (person) {
+		if (data.name) person.name = data.name;
+		if (data.email) person.email = data.email;
+		if (data.phone) person.phone = data.phone;
+	}
 }
 
 export async function getCustomerById(
@@ -389,6 +443,35 @@ export async function getCustomerById(
 ): Promise<Customer | null> {
 	await delay(300);
 	return MOCK_CUSTOMERS.find(c => c.id_type === idType && c.id_number === idNumber) ?? null;
+}
+
+export async function lookupPerson(
+	_token: string,
+	idType: string,
+	idNumber: string
+): Promise<import('./types').PersonLookupResult> {
+	await delay(300);
+	const person = MOCK_CUSTOMERS.find(c => c.id_type === idType && c.id_number === idNumber);
+	if (person) {
+		return {
+			found: true,
+			local: true,
+			source: 'database',
+			data: {
+				person_id: parseInt(person.customer_id) || 0,
+				name: person.name,
+				id_type: person.id_type,
+				id_number: person.id_number,
+				address: null,
+				email: person.email,
+				phone: person.phone,
+				plates: person.plates,
+				price_list: person.price_list,
+				price_list_name: person.price_list_name
+			}
+		};
+	}
+	return { found: false, local: false, source: null, data: null };
 }
 
 export async function getShiftDispatches(_token: string, _shiftId: number): Promise<DispatchOrder[]> {
@@ -417,17 +500,21 @@ export async function registerCustomer(
 	};
 	MOCK_CUSTOMERS.push(newCustomer);
 	MOCK_VEHICLES[data.plate.toUpperCase().replace(/\s+/g, '')] = {
+		vehicle_id: 999,
 		plate: data.plate.toUpperCase().replace(/\s+/g, ''),
 		vehicle_found: true,
 		incomplete_fields: [],
 		owner: {
+			person_id: null,
 			customer_id: newCustomer.customer_id,
 			id_type: newCustomer.id_type,
 			id_number: newCustomer.id_number,
 			name: newCustomer.name,
+			address: null,
 			email: newCustomer.email,
 			phone: newCustomer.phone
 		},
+		billing_person: null,
 		price_list: 'STANDARD',
 		price_list_name: 'Precio Normal'
 	};
