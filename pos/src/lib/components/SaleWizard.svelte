@@ -282,17 +282,19 @@
 		const val = parseFloat(presetValue);
 		if (presetType !== 'FULL' && (!val || val <= 0)) { error = presetType === 'MONEY' ? 'Ingrese un monto válido' : 'Ingrese galones válidos'; return; }
 		loading = true; error = ''; step = 'authorizing';
+		let orderId: string | null = null;  // tracked for rollback on partial failure
 		try {
 			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
 			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
-			await bridge.authorizeDispatch({ order_id: orderResult.order_id, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
+			orderId = orderResult.order_id;
+			await bridge.authorizeDispatch({ order_id: orderId, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 			const authorizedByUserId = $currentUser?.user_id;
 			const authorizedBy = $currentUser?.name ?? '';
 			pendingOrders.addOrder({
-				orderId: orderResult.order_id, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
+				orderId, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
 				customerId: owner?.customer_id, customerName, plate,
 				presetAmount: presetType === 'MONEY' ? val : presetType === 'FULL' ? 0 : (val * unitPrice),
 				finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl,
@@ -304,7 +306,13 @@
 			autoReturnTimer = setTimeout(() => {
 				dispatch('done');
 			}, 1500);
-		} catch { error = 'Error al autorizar'; step = 'presetValue'; }
+		} catch {
+			// Rollback: if dispatch was created but preset failed, cancel the dispatch
+			if (orderId) {
+				try { await powerfin.cancelDispatch(token(), orderId); } catch { /* reconciliation will clean up */ }
+			}
+			error = 'Error al autorizar'; step = 'presetValue';
+		}
 		finally { loading = false; }
 	}
 

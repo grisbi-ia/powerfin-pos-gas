@@ -179,6 +179,7 @@
 		loading = true;
 		error = '';
 
+		let orderId: string | null = null;  // tracked for rollback on partial failure
 		try {
 			const dispatchOwner = billingCustomer ?? confirmedOwner ?? vehicleResult?.owner;
 
@@ -194,7 +195,7 @@
 				plate: plate
 			});
 
-			const orderId = orderResult.order_id;
+			orderId = orderResult.order_id;
 
 			await bridge.authorizeDispatch({
 				order_id: orderId,
@@ -230,6 +231,10 @@
 
 			goto(`/fueling?order=${orderId}&dispenser=${dispenserId}&hose=${selectedHoseId}&side=${side}&amount=${amount}&price=${unitPrice}&customerName=${encodeURIComponent(dispatchOwner?.name ?? '')}&priceList=${vehicleResult?.price_list ?? 'STANDARD'}&plate=${encodeURIComponent(plate)}`);
 		} catch {
+			// Rollback: if dispatch was created but preset failed, cancel the dispatch
+			if (orderId) {
+				try { await powerfin.cancelDispatch(get(auth).token || '', orderId); } catch { /* reconciliation will clean up */ }
+			}
 			error = 'Error al autorizar el despacho';
 		} finally {
 			loading = false;

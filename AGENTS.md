@@ -147,15 +147,34 @@ sync, cancel button, billing change, Consumidor Final removal.
 26 tables, 38 endpoints, 71 tests. Identity API integration. Replaces Python mock.
 Ready for production integration with POS frontend.
 
-**Phase 9 — Integration & hardening (in progress).**
+**Phase 9 — Integration & hardening (completed — v0.12.0).**
 - [x] POS Backend built and tested (71/71 tests passing)
 - [x] Identity API integration (Sercobaco CED + SRI RUC)
 - [x] Credit contracts with cupo disponible
 - [x] Decimal→float middleware for POS compatibility
 - [x] start.sh updated for pos_backend
-- [ ] Map new dispensers (pumps 3, 4, 7, 8) to POS Backend
-- [ ] End-to-end test: POS → pos_backend → FusionBridge → Synergy
-- [ ] POS integration: use persons/lookup endpoint in customer search flow
+- [x] Map new dispensers (pumps 3, 4, 7, 8) to POS Backend
+- [x] End-to-end test: POS → pos_backend → FusionBridge → Synergy
+- [x] POS integration: persons/lookup endpoint in customer search flow
+- [x] Billing preferencial por vehículo + auto-save Sercobaco/SRI
+- [x] Validación CED=10/RUC=13 + registro mejorado
+- [x] Cuadre de caja completo (transfers + safe drops)
+
+**Phase 10a — Edge cases (completed — v0.13.0).**
+- [x] Gap D: rollback dispatch si authorizeDispatch falla + auto-cancel > 5 min
+- [x] Gap A: STOP durante FUELLING con doble barrera anti-bolsillo
+- [x] Celular apagado/offline: completeDispatch en FusionBridge (3 retries)
+- [x] CLEAR_STOP automático antes de PRESET + después de STOP (2s delay)
+- [x] FusionBridge HttpClient para llamadas HTTP al backend
+
+**Phase 10b — Edge cases restantes + impresión + cuadre (next).**
+- [ ] Pago mixto (efectivo + tarjeta)
+- [ ] Reconexión FusionBridge durante despacho activo
+- [ ] Múltiples despachos simultáneos
+- [ ] Prueba de impresión térmica física (192.168.1.31:9100)
+- [ ] Prueba de cuadre de caja end-to-end con hardware real
+- [ ] Ajustar ATO en consola Wayne de 0 → 180s
+- [ ] Migración Alembic para schema acumulado
 
 ## When building
 

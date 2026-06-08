@@ -8,6 +8,7 @@
 	export let dispenser: DispenserState;
 	export let onSideClick: (dispenserId: number, side: 'A' | 'B', hose: HoseState) => void = () => {};
 	export let onCancelClick: (dispenserId: number, side: 'A' | 'B', hose: HoseState) => void = () => {};
+	export let onStopClick: (dispenserId: number, side: 'A' | 'B', hose: HoseState) => void = () => {};
 	export let verifyingSide: 'A' | 'B' | null = null;
 
 	$: isOnline = dispenser.online && dispenser.connected;
@@ -173,10 +174,10 @@
 						</div>
 					{/if}
 				<!-- Cancel button (only pre-fueling + matching attendant via pending order) -->
-				{@const cancelOrder = info.primaryHose ? $orderByHose.get(dispenser.dispenserId + '-' + info.primaryHose.hoseId) : null}
+				{@const pendingOrder = info.primaryHose ? $orderByHose.get(dispenser.dispenserId + '-' + info.primaryHose.hoseId) : null}
 				{@const canCancel = ['AUTHORIZED', 'CALLING', 'STARTING'].includes(info.primaryHose?.status ?? '') &&
-					cancelOrder != null &&
-					cancelOrder.authorizedByUserId === $currentUser?.user_id &&
+					pendingOrder != null &&
+					pendingOrder.authorizedByUserId === $currentUser?.user_id &&
 					$shift != null}
 				{#if canCancel}
 					<button
@@ -185,6 +186,21 @@
 						on:click|stopPropagation={() => { const h = info.primaryHose; if (h) onCancelClick(dispenser.dispenserId, info.side, h); }}
 					>
 						✕ Cancelar
+					</button>
+				{/if}
+				<!-- Stop button (during FUELLING — small icon, deliberate action only) -->
+				{@const canStop = (info.status === 'FUELLING' || info.status === 'STARTING') &&
+					pendingOrder != null &&
+					pendingOrder.authorizedByUserId === $currentUser?.user_id &&
+					$shift != null}
+				{#if canStop}
+					<button
+						class="touch-btn mt-2 ml-auto block w-8 h-8 rounded-full border border-orange-300 text-orange-500 text-xs
+							hover:bg-orange-50 active:bg-orange-100 transition-colors flex items-center justify-center"
+						title="Detener despacho"
+						on:click|stopPropagation={() => { const h = info.primaryHose; if (h) onStopClick(dispenser.dispenserId, info.side, h); }}
+					>
+						⏹
 					</button>
 				{/if}
 				{/if}

@@ -47,6 +47,12 @@ public class DispatchResource {
             String priceList = (String) request.getOrDefault("price_list", "STANDARD");
             String paymentMethod = (String) request.getOrDefault("payment_method", "EFECTIVO");
 
+            // Clear any lingering STOP state before sending preset.
+            // A previous STOP (manual or ATO) can leave the pump with "busy
+            // buffers" that reject new PRESETs with TRANS_ERR_PRESET_STOPPED.
+            String clearStopMsg = FusionMessageBuilder.buildClearStop(dispenserId);
+            tcpClient.sendRaw(clearStopMsg);
+
             String message = FusionMessageBuilder.buildPreset(
                 dispenserId, presetType, presetValue,
                 hoseId, unitPrice, orderId,
@@ -143,6 +149,46 @@ public class DispatchResource {
         }
         return Response.status(503)
             .entity(Map.of("error", "Failed to cancel"))
+            .build();
+    }
+
+    /**
+     * Stop an active dispensing operation (FUELLING state).
+     * Sends REQ_PUMP_STOP to halt fuel flow, then schedules a delayed
+     * CLEAR_STOP to finalize the transaction so the Wayne generates
+     * NEW_TRANSACTION with the partial amount. Without CLEAR_STOP the
+     * pump stays stuck in STOPPED with busy buffers, rejecting new PRESETs.
+     */
+    @POST
+    @Path("/stop")
+    public Response stop(Map<String, Object> request) {
+        if (!tcpClient.isConnected()) {
+            return Response.status(503)
+                .entity(Map.of("error", "No connection to Fusion"))
+                .build();
+        }
+
+        int dispenserId = ((Number) request.getOrDefault("dispenser_id", 1)).intValue();
+        String message = FusionMessageBuilder.buildStop(dispenserId);
+        boolean sent = tcpClient.sendRaw(message);
+
+        if (sent) {
+            Log.infof("Stop sent: dispenser %d", dispenserId);
+
+            // Schedule delayed CLEAR_STOP so the Wayne finalizes the stopped
+            // transaction and generates NEW_TRANSACTION for collection.
+            // 2s delay lets the pump settle. Runs on virtual thread.
+            Thread.startVirtualThread(() -> {
+                try { Thread.sleep(2000); } catch (InterruptedException e) { return; }
+                String clearMsg = FusionMessageBuilder.buildClearStop(dispenserId);
+                tcpClient.sendRaw(clearMsg);
+                Log.infof("Clear-stop sent: dispenser %d", dispenserId);
+            });
+
+            return Response.ok(Map.of("status", "STOPPED")).build();
+        }
+        return Response.status(503)
+            .entity(Map.of("error", "Failed to stop"))
             .build();
     }
 

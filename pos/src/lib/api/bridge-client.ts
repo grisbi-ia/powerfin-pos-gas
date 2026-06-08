@@ -160,6 +160,11 @@ export async function cancelDispenser(fusionPumpId: number, _hoseId: number): Pr
 	return realBridge.cancelDispenser(fusionPumpId);
 }
 
+export async function stopDispenser(fusionPumpId: number): Promise<boolean> {
+	if (USE_MOCKS_BRIDGE) return mockBridge.stopDispenser(fusionPumpId);
+	return realBridge.stopDispenser(fusionPumpId);
+}
+
 export async function getPrintPolicy(): Promise<{ policy: string }> {
 	if (USE_MOCKS_BRIDGE) return mockBridge.getPrintPolicy();
 	return realBridge.getPrintPolicy();

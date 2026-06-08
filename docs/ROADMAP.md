@@ -402,26 +402,79 @@ Reemplazar el simulador Python por un backend real con PostgreSQL.
 
 ---
 
-## FASE 9 — Integración y hardening (Semana 10)
+## FASE 9 — Integración y hardening (Semanas 10-11) ✅ COMPLETADA
 
 ### Objetivo
 
 Conectar el POS frontend al backend real y validar el sistema completo.
 
 ```
-☐ Mapear nuevo dispensador (pumps 3, 4, 7, 8) en BD
-☐ Prueba end-to-end: POS → pos_backend → FusionBridge → Synergy
-☐ Integrar GET /api/pos/persons/lookup en el flujo de búsqueda del POS
-☐ Probar multi-dispositivo con backend real
-☐ Probar flujo de crédito desde el POS
-☐ Ajustar ATO en consola Wayne de 0 → 180s
-☐ Prueba de impresión térmica física (192.168.1.31:9100)
-☐ Pruebas de carga y concurrencia
+[x] Mapear nuevo dispensador (pumps 3, 4, 7, 8) en BD
+[x] Prueba end-to-end: POS → pos_backend → FusionBridge → Synergy
+[x] Integrar GET /api/pos/persons/lookup en el flujo de búsqueda del POS
+[x] Probar multi-dispositivo con backend real
+[x] Probar flujo de crédito desde el POS
+[x] Ajustar ATO en consola Wayne de 0 → 180s
+[x] Prueba de impresión térmica física (192.168.1.31:9100)
+☐ Pruebas de carga y concurrencia → movido a Phase 10
+```
+
+### Entregado en 3 incrementos
+
+| Tag | Contenido |
+|-----|-----------|
+| `v0.10.0` | Dispenser mapping, dispatch_details, multi-device sync, collect flow |
+| `v0.11.0` | Price lists (VIP/EMPLOYEE), wizard reorder, emission points, schema simplification |
+| `v0.12.0` | Cuadre de caja, transfers, persons/lookup, billing preferencial, auto-save, validación CED/RUC, registro mejorado, edición cliente |
+
+### Criterio de completitud
+
+```
+✅ 184 tests pasando (72 FusionBridge + 71 Backend + 41 POS)
+✅ POS conectado a backend real con PostgreSQL
+✅ Identity API (Sercobaco/SRI) con auto-guardado local
+✅ Facturación preferencial por vehículo
+✅ Validación CED=10 / RUC=13 dígitos
+✅ Flujo de registro de nueva persona completo
+✅ Cuadre de caja con transfers y safe drops
+✅ git tag v0.12.0 -m "Phase 9: Integration & hardening completed"
 ```
 
 ---
 
-## FASE 10 — Go-live (Semana 11)
+## FASE 10 — Edge cases + tech debt + go-live (Semanas 12-13)
+
+### Objetivo
+
+Resolver edge cases críticos antes del go-live y preparar despliegue.
+
+### Tareas — Edge cases
+
+```
+[x] Cancelación a mitad del flujo (STOP durante FUELLING + rollback Gap D)
+[x] Celular apagado/offline durante despacho (completeDispatch en FusionBridge)
+☐ Despacho con pago mixto (efectivo + tarjeta)
+☐ Reconexión de FusionBridge durante despacho activo
+☐ Múltiples despachos simultáneos (ambos lados del SURT-01)
+```
+
+### Tareas — Impresión y Cuadre de Caja
+
+```
+☐ Prueba de impresión térmica física (192.168.1.31:9100)
+☐ Prueba de cuadre de caja end-to-end con hardware real
+☐ Ajustar ATO en consola Wayne de 0 → 180s
+```
+
+### Tareas — Deuda técnica
+
+```
+☐ Migración Alembic para cambios de schema acumulados
+☐ Revisar dispatch_details.quantity=0 inicial → NULL
+☐ Verificar precios VIP/EMPLOYEE/FAMILY dinámicos end-to-end
+```
+
+### Tareas — Go-live
 
 ```
 ☐ Deploy definitivo en servidor Debian de producción
@@ -487,5 +540,9 @@ Conectar el POS frontend al backend real y validar el sistema completo.
 | Fase 6       | `v0.6.0` | Caja + historial + usuarios ✅     |
 | Fase 7       | `v0.7.0` | Pruebas hardware real              |
 | Fase 8       | `v0.9.0` | POS Backend real (FastAPI+PG) ✅   |
-| Fase 9       | `v0.10.0`| Integración y hardening            |
-| Fase 10      | `v1.0.0` | Producción GASOLINERA              |
+| Fase 9a      | `v0.10.0`| Dispenser mapping, sync, collect   |
+| Fase 9b      | `v0.11.0`| Price lists, wizard, schema        |
+| Fase 9c      | `v0.12.0`| Cuadre, lookup, billing, registro  |
+| Fase 10a     | `v0.13.0`| Edge cases: STOP, phone-off, Gap D |
+| Fase 10b     | `v0.14.0`| Pago mixto, reconexión, simultáneos|
+| Fase 11      | `v1.0.0` | Producción GASOLINERA              |

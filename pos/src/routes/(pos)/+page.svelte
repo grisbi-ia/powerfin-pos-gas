@@ -34,6 +34,11 @@
 	let cancelConfirm: { dispenserId: number; side: 'A' | 'B'; hoseId: number; fusionPumpId: number; presetAmount: number; orderId?: string } | null = null;
 	let cancelling = false;
 
+	// Stop confirmation state (during FUELLING)
+	let stopConfirm: { dispenserId: number; side: 'A' | 'B'; hoseId: number; fusionPumpId: number; presetAmount: number; orderId?: string } | null = null;
+	let stopping = false;
+	let stopModalTimer: ReturnType<typeof setTimeout> | null = null;
+
 	const RECONCILE_INTERVAL_MS = 3_000;
 
 	// Debounced poll trigger for real-time SSE events (avoids polling flood)
@@ -178,6 +183,7 @@
 		if (pollTimer) clearInterval(pollTimer);
 		if (reconcileTimer) clearInterval(reconcileTimer);
 		if (ssePollDebounce) clearTimeout(ssePollDebounce);
+		if (stopModalTimer) clearTimeout(stopModalTimer);
 		if (sseConnection && 'close' in sseConnection) {
 			(sseConnection as { close(): void }).close();
 		}
@@ -336,6 +342,57 @@
 	function dismissCancel() {
 		cancelConfirm = null;
 	}
+
+	// ── Stop active dispensing (during FUELLING) ────────────
+	function handleStopClick(dispenserId: number, side: 'A' | 'B', hose: HoseState) {
+		const key = `${dispenserId}-${hose.hoseId}`;
+		const pendingOrder = get(orderByHose).get(key);
+
+		const cfg = get(config);
+		const dispCfg = cfg?.dispensers?.find(d => d.dispenser_id === dispenserId);
+		const hoseCfg = dispCfg?.sides[side]?.find(h => h.hose_id === hose.hoseId);
+		const fusionPumpId = hoseCfg?.fusion_pump_id ?? dispCfg?.fusion_pump_id ?? dispenserId;
+
+		stopConfirm = {
+			dispenserId, side, hoseId: hose.hoseId, fusionPumpId,
+			presetAmount: hose.presetAmount,
+			orderId: pendingOrder?.orderId
+		};
+
+		// Auto-dismiss modal after 8s to prevent stale UI
+		if (stopModalTimer) clearTimeout(stopModalTimer);
+		stopModalTimer = setTimeout(() => { stopConfirm = null; }, 8_000);
+	}
+
+	async function executeStop() {
+		if (!stopConfirm) return;
+		stopping = true;
+
+		try {
+			// Send STOP to Wayne via FusionBridge (uses fusionPumpId)
+			const ok = await realBridge.stopDispenser(stopConfirm.fusionPumpId);
+			if (!ok) {
+				console.error('[stop] Failed to stop dispenser');
+			}
+			// Do NOT cancel the dispatch — fuel was partially dispensed.
+			// The pendingOrder stays FUELLING until NEW_TRANSACTION fires
+			// with the partial amount, then flows into normal collection.
+
+			// Refresh dispenser states to see STOPPED status
+			await pollDispensers();
+		} catch (err) {
+			console.error('[stop] Failed:', err);
+		} finally {
+			stopping = false;
+			stopConfirm = null;
+			if (stopModalTimer) { clearTimeout(stopModalTimer); stopModalTimer = null; }
+		}
+	}
+
+	function dismissStop() {
+		stopConfirm = null;
+		if (stopModalTimer) { clearTimeout(stopModalTimer); stopModalTimer = null; }
+	}
 </script>
 
 <Header title="Powerfin POS" onRefresh={handleRefresh} refreshing={refreshingAll} />
@@ -392,7 +449,7 @@
 		<!-- Surtidores (bloqueados visualmente si no hay turno) -->
 		<div class="grid gap-3 {!$shift ? 'opacity-50 pointer-events-none' : ''}">
 			{#each $dispenserList as d (d.dispenserId)}
-				<DispenserCard dispenser={d} onSideClick={handleSideClick} onCancelClick={handleCancelClick} {verifyingSide} />
+				<DispenserCard dispenser={d} onSideClick={handleSideClick} onCancelClick={handleCancelClick} onStopClick={handleStopClick} {verifyingSide} />
 			{:else}
 				<div class="text-center py-12 text-gray-400"><p>No hay surtidores configurados</p></div>
 			{/each}
@@ -450,6 +507,49 @@
 						{cancelling ? 'Cancelando...' : 'Sí, cancelar'}
 					</button>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Stop confirmation modal (during FUELLING — double barrier: large safe button + small deliberate action) -->
+	{#if stopConfirm}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+			<!-- Backdrop -->
+			<div class="absolute inset-0 bg-black/50" role="presentation" on:click={dismissStop} on:keydown={(e) => e.key === 'Escape' && dismissStop()}></div>
+			<!-- Card -->
+			<div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+				<div class="text-center mb-4">
+					<div class="w-12 h-12 mx-auto mb-3 rounded-full bg-orange-100 flex items-center justify-center">
+						<span class="text-2xl">⏹</span>
+					</div>
+					<h3 class="text-lg font-bold text-gray-800">¿Detener despacho?</h3>
+					<p class="text-sm text-gray-500 mt-1">El combustible cargado hasta ahora se cobrará normalmente.</p>
+				</div>
+
+				{#if stopConfirm.presetAmount > 0}
+					<div class="bg-gray-50 rounded-xl p-3 mb-4 text-center">
+						<span class="text-sm text-gray-500">Monto autorizado: </span>
+						<span class="text-lg font-bold text-primary">${stopConfirm.presetAmount.toFixed(2)}</span>
+					</div>
+				{/if}
+
+				<!-- Barrier 1: large, prominent CANCEL (safe default) -->
+				<button
+					class="touch-btn w-full py-4 rounded-xl text-base font-semibold bg-green-500 text-white hover:bg-green-600 mb-3"
+					on:click={dismissStop}
+					disabled={stopping}
+				>
+					CANCELAR — continuar despacho
+				</button>
+
+				<!-- Barrier 2: small, subtle DELIBERATE action -->
+				<button
+					class="touch-btn w-full py-2 text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30"
+					on:click={executeStop}
+					disabled={stopping}
+				>
+					{stopping ? 'Deteniendo...' : 'Detener despacho'}
+				</button>
 			</div>
 		</div>
 	{/if}

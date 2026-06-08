@@ -172,6 +172,28 @@ export async function cancelDispenser(dispenserId: number, hoseId: number): Prom
 	return ok;
 }
 
+export async function stopDispenser(dispenserId: number): Promise<boolean> {
+	await delay(150);
+	// Find FUELLING hose and mark it STOPPED (partial dispense)
+	const disp = dispensers.find(d => d.dispenserId === dispenserId);
+	let stopped = false;
+	if (disp) {
+		for (const sideKey of ['A', 'B'] as const) {
+			const hoses = disp.sides[sideKey];
+			for (const h of hoses) {
+				if (h.status === 'FUELLING') {
+					updateHose(dispenserId, h.fusionHoseId, { status: 'STOPPED', subStatus: '' });
+					emit('HOSE_STATUS', { type: 'HOSE_STATUS', dispenserId, hoseId: h.hoseId,
+						side: h.side, fusionHoseId: h.fusionHoseId,
+						status: 'STOPPED', subStatus: '', presetAmount: h.presetAmount });
+					stopped = true;
+				}
+			}
+		}
+	}
+	return stopped;
+}
+
 export async function getPrintPolicy(): Promise<{ policy: string }> {
 	await delay(100);
 	return { policy: 'ASK' };

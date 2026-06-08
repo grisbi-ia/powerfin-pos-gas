@@ -1,6 +1,6 @@
 """Dispatch management — create, complete, collect, cancel, billing, invoice."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -481,6 +481,22 @@ async def get_active_dispatches(
     Used for multi-device sync: every dispatcher sees all pending orders
     regardless of who created them."""
     from app.models.dispenser import Hose
+
+    # ── Auto-cancel stale AUTHORIZED dispatches (> 5 min old) ──────────
+    # Covers Gap D: dispatch created, preset never reached the dispenser
+    # (FusionBridge down, network timeout, etc.) or ATO expired (180s).
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+    stale_result = await db.execute(
+        select(Dispatch).where(
+            Dispatch.status == "AUTHORIZED",
+            Dispatch.created_at < stale_cutoff
+        )
+    )
+    stale_dispatches = stale_result.scalars().all()
+    for d in stale_dispatches:
+        d.status = "CANCELLED"
+    if stale_dispatches:
+        await db.commit()
 
     # Get all active (non-collected, non-cancelled) dispatches from open shifts
     result = await db.execute(

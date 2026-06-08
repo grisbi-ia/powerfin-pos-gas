@@ -75,6 +75,18 @@ export async function cancelDispenser(fusionPumpId: number): Promise<boolean> {
 	return res.ok;
 }
 
+export async function stopDispenser(fusionPumpId: number): Promise<boolean> {
+	if (USE_MOCKS_BRIDGE) {
+		return mock.stopDispenser(fusionPumpId);
+	}
+	const res = await fetch(bridgeUrl('/api/dispatch/stop'), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ dispenser_id: fusionPumpId })
+	});
+	return res.ok;
+}
+
 export async function getPrintPolicy(): Promise<{ policy: string }> {
 	if (USE_MOCKS_BRIDGE) return mock.getPrintPolicy();
 	const res = await fetch(bridgeUrl('/api/print/policy'));
