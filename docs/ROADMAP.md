@@ -453,6 +453,9 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 ```
 [x] Cancelación a mitad del flujo (STOP durante FUELLING + rollback Gap D)
 [x] Celular apagado/offline durante despacho (completeDispatch en FusionBridge)
+[x] Ticket de impresión completo con datos desde BD
+[x] Clave de acceso SRI (49 dígitos, módulo 11)
+[x] Configuración de impresora desde BD (sin archivos JSON)
 ☐ Despacho con pago mixto (efectivo + tarjeta)
 ☐ Reconexión de FusionBridge durante despacho activo
 ☐ Múltiples despachos simultáneos (ambos lados del SURT-01)
@@ -544,5 +547,6 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 | Fase 9b      | `v0.11.0`| Price lists, wizard, schema        |
 | Fase 9c      | `v0.12.0`| Cuadre, lookup, billing, registro  |
 | Fase 10a     | `v0.13.0`| Edge cases: STOP, phone-off, Gap D |
-| Fase 10b     | `v0.14.0`| Pago mixto, reconexión, simultáneos|
+| Fase 10b     | `v0.14.0`| Impresión, clave SRI, DB config    |
+| Fase 10c     | `v0.15.0`| Pago mixto, reconexión, simultáneos|
 | Fase 11      | `v1.0.0` | Producción GASOLINERA              |

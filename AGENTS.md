@@ -167,11 +167,24 @@ Ready for production integration with POS frontend.
 - [x] CLEAR_STOP automático antes de PRESET + después de STOP (2s delay)
 - [x] FusionBridge HttpClient para llamadas HTTP al backend
 
-**Phase 10b — Edge cases restantes + impresión + cuadre (next).**
+**Phase 10b — Impresión y clave de acceso SRI (completed — v0.14.0).**
+- [x] DB: 10 columnas nuevas (company_info +6, products +1, dispatch_details +2, dispatches +1)
+- [x] Clave de acceso SRI: 49 dígitos con módulo 11 (17 tests)
+- [x] Ticket completo: empresa, cliente, subsidio, IVA 15%, factura, clave
+- [x] Font B (ESC/POS compacto) + espaciado mínimo + sin líneas en blanco
+- [x] Impresora configurada desde BD (printer_ip + printer_port en dispensers)
+- [x] printer_policy desde system_config
+- [x] Template con condicionales anidados, preview mode
+- [x] Config API: LocationResponse, HoseResponse, DispenserConfig extendidos
+- [x] Backend respuestas enriquecidas: customer_id, plate, address, phone, subsidy, access_key
+
+**Phase 10c — Correcciones + edge cases restantes (next).**
+- [ ] Revisión de subtotales y totales en el despacho (total / 1.15)
+- [ ] Mejorar código numérico aleatorio para clave de acceso
+- [ ] Más espacio al final de impresión (líneas en blanco antes del corte)
 - [ ] Pago mixto (efectivo + tarjeta)
 - [ ] Reconexión FusionBridge durante despacho activo
 - [ ] Múltiples despachos simultáneos
-- [ ] Prueba de impresión térmica física (192.168.1.31:9100)
 - [ ] Prueba de cuadre de caja end-to-end con hardware real
 - [ ] Ajustar ATO en consola Wayne de 0 → 180s
 - [ ] Migración Alembic para schema acumulado

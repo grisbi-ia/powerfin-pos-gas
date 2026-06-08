@@ -22,15 +22,95 @@
 | 9a | `v0.10.0` | Phase 9 — dispenser mapping, dispatch_details, multi-device sync, collect flow |
 | 9b | `v0.11.0` | Phase 9 — price lists (VIP/EMPLOYEE), wizard reorder, emission points, schema simplification |
 | 9c | `v0.12.0` | Phase 9 — cuadre de caja, transfers, lookup, billing preferencial, auto-save, validación, registro |
-| **10a** | **v0.13.0** | **Phase 10 — Edge cases: cancel/stop mid-flow, phone-off resilience, completeDispatch en FusionBridge** |
+| 10a | `v0.13.0` | Phase 10 — Edge cases: cancel/stop mid-flow, phone-off resilience, completeDispatch en FusionBridge |
+| **10b** | **v0.14.0** | **Phase 10 — Impresión: ticket completo, clave de acceso SRI, Font B, datos desde BD** |
 
 ### 📊 Tests
 
 ```bash
 FusionBridge — 72 tests    ./mvnw test    # BUILD SUCCESS
-POS Backend  — 71 tests    pytest          # 71 passed
+POS Backend  — 88 tests    pytest          # 88 passed (+17 access_key)
 Powerfin POS — 41 tests    npm run test    # 41 passed
-Total: 184 tests pasando
+Total: 201 tests pasando
+```
+
+---
+
+## Logros de la sesión (2026-06-08) — v0.14.0
+
+### 34. Impresión — ticket completo con datos desde BD ✅
+
+**DB — 10 columnas nuevas:**
+- `company_info`: +6 columnas (city, province, country, fiscal_regime, sri_environment, emission_type)
+- `products`: +1 columna (subsidy_per_unit)
+- `dispatch_details`: +2 columnas (price_without_subsidy, subsidy_amount)
+- `dispatches`: +1 columna (access_key)
+
+**Backend:**
+- Config API: LocationResponse extendido, HoseResponse +base_price +subsidy_per_unit
+- Config API: printer_policy desde system_config
+- create_dispatch: genera access_key (49 dígitos SRI) + guarda base_price y subsidy
+- complete_dispatch: calcula subsidy_amount automático
+- get_active_dispatches + get_shift_dispatches: customer_id, plate, customer_address,
+  customer_phone, price_without_subsidy, subsidy_per_unit, subsidy_amount, access_key
+- complete_dispatch sin autenticación (FusionBridge lo llama directo)
+
+**Clave de Acceso SRI (49 dígitos):**
+- `app/services/access_key_service.py`: generate_access_key() + módulo 11
+- Estructura correcta: Ambiente 1 dígito, Tipo Emisión en posición 48
+- 17 tests unitarios
+
+**FusionBridge:**
+- TemplateRenderer: +20 placeholders, +5 condicionales anidados, Font B (ESC M 1)
+- TemplateRenderer: espaciado mínimo (ESC 3 0), sin líneas en blanco (skipBlankLines)
+- ReceiptBuilder.FuelReceiptData: +20 campos
+- ReceiptBuilder.fromMap: acepta fuelData (camelCase) + fuel_data (snake_case)
+- PrintResource: /stop con CLEAR_STOP diferido, preview mode, acepta printerIp+printerPort
+- Template actualizado: formato completo del ticket real
+- BOLD con ESC E (independiente de fuente)
+
+**POS:**
+- SaleWizard.doPrint: datos completos (location, customer, subsidy, invoice, subtotal/IVA)
+- History reprint: mismos datos que venta directa + computed fields (IVA 15%)
+- Config types: AppConfig.location extendido, HoseConfig +base_price +subsidy_per_unit
+- DispenserConfig: printer_island → printer_ip + printer_port
+
+### 35. Configuración de impresora desde BD ✅
+
+- printer_ip + printer_port desde tabla dispensers (ya no archivo JSON)
+- printer_policy desde system_config
+- Eliminados archivos: printer-config.json, receipt-template.txt
+- Eliminada dependencia PRINTER_CONFIG_FILE de start.sh
+
+### Archivos modificados (esta sesión)
+
+```
+FusionBridge (5):
+  PrintResource.java          ← +stop CLEAR_STOP, +preview, +printerIp/printerPort
+  ReceiptBuilder.java         ← +20 campos FuelReceiptData, fromMap camelCase+sanke_case
+  TemplateRenderer.java       ← +20 placeholders, +5 condicionales, Font B, skipBlankLines
+  ReceiptBuilderTest.java     ← key actualizado
+  ReceiptTemplateTest.java    ← bold command actualizado
+
+Backend (7):
+  models/company.py           ← +6 columnas
+  models/dispatch.py          ← +3 columnas (price_without_subsidy, subsidy_amount, access_key)
+  models/product.py           ← +1 columna (subsidy_per_unit)
+  schemas/__init__.py         ← LocationResponse extendido, DispenserConfig printer_ip/port,
+                                 HoseResponse +base_price +subsidy_per_unit, ConfigResponse +printer_policy
+  api/config.py               ← devuelve location, printer, product fields desde BD
+  api/dispatches.py           ← crea access_key, guarda subsidy, auto-cancel, respuestas enriquecidas
+  api/shifts.py               ← get_shift_dispatches enriquecido
+  services/access_key_service.py  ← NUEVO: generate_access_key() + módulo 11
+  tests/test_access_key.py        ← NUEVO: 17 tests
+
+POS (6):
+  api/types.ts                ← Location, DispenserConfig, HoseConfig, DispatchOrder extendidos
+  api/bridge.ts               ← +stopDispenser(), preview console.log, ESC/POS stripping
+  components/SaleWizard.svelte← doPrint completo, loadPrintPolicy desde BD
+  routes/(pos)/history/+page.svelte ← reprint con datos completos
+  api/powerfin.mock.ts        ← printer_island → printer_ip+printer_port
+  start.sh                    ← sin PRINTER_CONFIG_FILE
 ```
 
 ---
@@ -201,34 +281,19 @@ pos/src/routes/(pos)/new-dispatch/+page.svelte ← lookupPerson, token real, val
 
 ## Pendiente para próxima sesión
 
-### 🟡 Prioridad 4 — Edge cases restantes
+### 🔴 Prioridad — Correcciones
 
 ```
-☐ 2. Despacho con pago mixto (efectivo + tarjeta) — una venta
-     pagada con dos métodos simultáneos
-☐ 3. Reconexión de FusionBridge durante despacho activo — TCP se cae
-     mientras hay un preset vivo en el dispensador
-☐ 4. Múltiples despachos simultáneos — ambos lados del SURT-01
-     despachando al mismo tiempo
-```
+☐ 1. Revisión de subtotales y totales en el despacho
+     — Verificar que subtotal, IVA y total sean correctos en dispatch_details
+     — El total del Wayne incluye IVA, el subtotal debe ser total / 1.15
 
-### 🟠 Próximos hitos — Impresión y Cuadre de Caja
+☐ 2. Mejorar el código numérico para la clave de acceso SRI
+     — Actualmente usa el mismo secuencial. Debe ser un número aleatorio
+     — Implementar generación aleatoria de 8 dígitos
 
-```
-☐ Prueba de impresión térmica física (192.168.1.31:9100)
-   — validar que el ticket imprime correctamente con hardware real
-☐ Prueba de cuadre de caja end-to-end con hardware real
-   — close_shift con transfers, safe_drops, diferencia $0
-☐ Ajustar ATO en consola Wayne de 0 → 180s (si no se ha hecho)
-```
-
-### 🟢 Prioridad 5 — Deuda técnica
-
-```
-☐ 5. Migración Alembic para cambios de schema acumulados en Phase 9
-     (billing_person_id, emission_points, authorized_by_user_id, etc.)
-☐ 6. Revisar si dispatch_details.quantity=0 inicial debe ser NULL
-☐ 7. Verificar precios VIP/EMPLOYEE/FAMILY dinámicos desde BD end-to-end
+☐ 3. Agregar más espacio al final de la impresión
+     — Más líneas en blanco antes del corte para que no se corte el texto
 ```
 
 ---

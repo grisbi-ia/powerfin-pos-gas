@@ -104,7 +104,7 @@ class ReceiptBuilderTest {
                 "type", "FUEL_RECEIPT",
                 "dispenser_id", 1,
                 "fuel_data", java.util.Map.of(
-                        "location_name", "TEST",
+                        "locationName", "TEST",
                         "dispenserId", 2,
                         "hoseId", 3,
                         "grade", "SUPER",

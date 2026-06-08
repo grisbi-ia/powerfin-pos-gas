@@ -215,7 +215,7 @@ async def get_shift_dispatches(
         for det in details_result.scalars():
             detail_map[det.dispatch_id] = det
 
-    # Build person lookup for customer_name
+    # Build person lookup for customer info
     person_ids = [d.person_id for d in dispatches if d.person_id]
     person_map = {}
     if person_ids:
@@ -225,6 +225,17 @@ async def get_shift_dispatches(
         )
         for p in persons_result.scalars():
             person_map[p.person_id] = p
+
+    # Build vehicle lookup for plate
+    vehicle_ids = [d.vehicle_id for d in dispatches if d.vehicle_id]
+    vehicle_map = {}
+    if vehicle_ids:
+        from app.models.person import Vehicle as VehicleModel
+        vehicles_result = await db.execute(
+            select(VehicleModel).where(VehicleModel.vehicle_id.in_(vehicle_ids))
+        )
+        for v in vehicles_result.scalars():
+            vehicle_map[v.vehicle_id] = v
 
     return [
         {
@@ -236,18 +247,24 @@ async def get_shift_dispatches(
             "preset_type": "MONEY",
             "preset_value": "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
+            "price_without_subsidy": detail_map[d.dispatch_id].price_without_subsidy if d.dispatch_id in detail_map else None,
+            "subsidy_per_unit": detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else None,
+            "subsidy_amount": detail_map[d.dispatch_id].subsidy_amount if d.dispatch_id in detail_map else None,
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
-            "customer_id": None,
+            "customer_id": person_map[d.person_id].id_number if d.person_id and d.person_id in person_map else None,
             "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
-            "plate": None,
+            "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,
+            "customer_phone": person_map[d.person_id].phone if d.person_id and d.person_id in person_map else None,
+            "plate": vehicle_map[d.vehicle_id].plate if d.vehicle_id and d.vehicle_id in vehicle_map else None,
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
             "authorized_by_user_id": d.authorized_by_user_id,
             "final_amount": d.subtotal if d.subtotal else d.total,
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
-            "invoice_number": None,
+            "invoice_number": d.sequential_number,
+            "access_key": d.access_key,
             "credit_contract_id": d.credit_contract_id,
             "credit_status": d.credit_status,
         }

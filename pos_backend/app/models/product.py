@@ -35,6 +35,9 @@ class Product(Base):
     )
     unit: Mapped[str] = mapped_column(String(20), default="UNIDAD")
     base_price: Mapped[float] = mapped_column(Numeric(10, 4), default=0)
+    subsidy_per_unit: Mapped[float | None] = mapped_column(
+        Numeric(10, 4), comment="Government fuel subsidy per unit (e.g. per gallon)"
+    )
     tax_type_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tax_types.tax_type_id")
     )

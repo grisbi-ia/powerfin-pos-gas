@@ -45,7 +45,15 @@ async def get_config(
     location = LocationResponse(
         location_id=company.company_id if company else 1,
         name=company.commercial_name or "NEOGAS" if company else "NEOGAS",
+        ruc=company.ruc if company else None,
         address=company.address if company else None,
+        phone=company.phone if company else None,
+        city=company.city if company else None,
+        province=company.province if company else None,
+        country=company.country if company else None,
+        fiscal_regime=company.fiscal_regime if company else None,
+        sri_environment=company.sri_environment if company else None,
+        emission_type=company.emission_type if company else None,
     )
 
     # Dispensers with hoses
@@ -95,11 +103,20 @@ async def get_config(
         for g in grades_result
     ]
 
+    # Product info for base_price and subsidy
+    product_info = {}
+    for p in products:
+        product_info[p.code] = {
+            "base_price": float(p.base_price) if p.base_price else 0,
+            "subsidy_per_unit": float(p.subsidy_per_unit) if p.subsidy_per_unit else 0,
+        }
+
     dispensers = []
     for d in dispensers_raw:
         sides: dict[str, list] = {"A": [], "B": []}
         for h in d.hoses:
             product_code = grade_product_map.get(h.grade_id, h.grade_id)
+            pinfo = product_info.get(product_code, {})
             hose_data = HoseResponse(
                 hose_id=h.hose_id,
                 fusion_pump_id=h.fusion_pump_id,
@@ -107,6 +124,8 @@ async def get_config(
                 grade_id=h.grade_id,
                 grade_name=product_map.get(h.grade_id, h.grade_id),
                 unit_price=default_prices.get(product_code, 0),
+                base_price=pinfo.get("base_price", 0),
+                subsidy_per_unit=pinfo.get("subsidy_per_unit", 0),
             )
             sides[h.side].append(hose_data)
         dispensers.append(
@@ -114,7 +133,8 @@ async def get_config(
                 dispenser_id=d.dispenser_id,
                 fusion_pump_id=d.fusion_pump_id,
                 name=d.name,
-                printer_island=1,
+                printer_ip=d.printer_ip,
+                printer_port=d.printer_port,
                 sides={k: v for k, v in sides.items() if v},
             )
         )
@@ -137,11 +157,20 @@ async def get_config(
     # Polling config
     polling = PollingConfig(interval_ms=2000, enabled=True)
 
+    # Printer policy from system_config or default
+    printer_policy = "ASK"
+    policy_cfg = (await db.execute(
+        select(SystemConfig).where(SystemConfig.key == "printer_policy")
+    )).scalar_one_or_none()
+    if policy_cfg:
+        printer_policy = policy_cfg.value
+
     return ConfigResponse(
         location=location,
         dispensers=dispensers,
         grades=grades,
         price_lists=price_lists,
         payment_methods=payment_methods,
+        printer_policy=printer_policy,
         polling=polling,
     )

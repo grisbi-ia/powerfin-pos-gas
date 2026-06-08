@@ -57,8 +57,8 @@ class ReceiptTemplateTest {
     void render_includesBoldCommands() {
         byte[] receipt = renderer.render(minimalData());
 
-        // Bold ON: ESC ! 0x08
-        boolean hasBold = containsSequence(receipt, new byte[] { 0x1B, '!', 0x08 });
+        // Bold ON: ESC E 1
+        boolean hasBold = containsSequence(receipt, new byte[] { 0x1B, 'E', 1 });
         assertTrue(hasBold, "Receipt must contain bold ON for TOTAL line");
     }
 

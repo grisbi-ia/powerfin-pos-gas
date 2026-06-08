@@ -21,8 +21,17 @@ export interface AppConfig {
 	location: {
 		location_id: number;
 		name: string;
-		address: string;
+		ruc?: string;
+		address?: string;
+		phone?: string;
+		city?: string;
+		province?: string;
+		country?: string;
+		fiscal_regime?: string;
+		sri_environment?: number;
+		emission_type?: number;
 	};
+	printer_policy?: string;
 	dispensers: DispenserConfig[];
 	grades: GradeConfig[];
 	price_lists: PriceListConfig[];
@@ -43,7 +52,8 @@ export interface DispenserConfig {
 	dispenser_id: number;
 	fusion_pump_id: number;
 	name: string;
-	printer_island?: number;
+	printer_ip?: string | null;
+	printer_port?: number;
 	sides: {
 		A: HoseConfig[];
 		B: HoseConfig[];
@@ -57,6 +67,8 @@ export interface HoseConfig {
 	grade_id: string;
 	grade_name: string;
 	unit_price: number;
+	base_price?: number;
+	subsidy_per_unit?: number;
 }
 
 export interface GradeConfig {
@@ -202,9 +214,14 @@ export interface DispatchOrder {
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
 	unit_price: number;
+	price_without_subsidy?: number;
+	subsidy_per_unit?: number;
+	subsidy_amount?: number;
 	payment_method: string;
 	customer_id?: string;
 	customer_name?: string;
+	customer_address?: string;
+	customer_phone?: string;
 	plate?: string;
 	status: 'PENDING' | 'AUTHORIZED' | 'FUELLING' | 'COMPLETED' | 'CANCELLED' | 'COLLECTED';
 	created_at: string;
@@ -213,6 +230,7 @@ export interface DispatchOrder {
 	final_amount?: number;
 	final_volume?: string;
 	invoice_number?: string;
+	access_key?: string;
 }
 
 export interface CreateDispatchRequest {

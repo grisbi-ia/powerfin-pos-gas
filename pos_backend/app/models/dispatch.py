@@ -77,6 +77,9 @@ class Dispatch(Base):
         Integer, ForeignKey("hoses.hose_id")
     )
     grade_id: Mapped[str | None] = mapped_column(String(20))
+    access_key: Mapped[str | None] = mapped_column(
+        String(49), comment="SRI access key (49 digits, computed at invoicing)"
+    )
 
 
 class DispatchDetail(Base):
@@ -91,6 +94,12 @@ class DispatchDetail(Base):
     )
     quantity: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False)
+    price_without_subsidy: Mapped[float | None] = mapped_column(
+        Numeric(10, 4), comment="unit_price + subsidy_per_unit at time of sale"
+    )
+    subsidy_amount: Mapped[float | None] = mapped_column(
+        Numeric(12, 2), comment="quantity × subsidy_per_unit at time of sale"
+    )
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0)

@@ -17,6 +17,12 @@ class CompanyInfo(Base):
     address: Mapped[str | None] = mapped_column(String(300))
     phone: Mapped[str | None] = mapped_column(String(20))
     email: Mapped[str | None] = mapped_column(String(100))
+    city: Mapped[str | None] = mapped_column(String(100))
+    province: Mapped[str | None] = mapped_column(String(100))
+    country: Mapped[str | None] = mapped_column(String(100))
+    fiscal_regime: Mapped[str | None] = mapped_column(String(200))
+    sri_environment: Mapped[int | None] = mapped_column(Integer, comment="1=PRUEBAS, 2=PRODUCCION")
+    emission_type: Mapped[int | None] = mapped_column(Integer, comment="1=NORMAL")
     logo_url: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

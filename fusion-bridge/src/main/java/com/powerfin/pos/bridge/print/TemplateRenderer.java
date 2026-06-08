@@ -35,13 +35,15 @@ public class TemplateRenderer {
     // ── ESC/POS commands ──────────────────────────────────
     private static final byte ESC = 0x1B;
     private static final byte GS  = 0x1D;
-    private static final byte[] BOLD_ON   = { ESC, '!', 0x08 };
-    private static final byte[] BOLD_OFF  = { ESC, '!', 0x00 };
+    private static final byte[] BOLD_ON   = { ESC, 'E', 1 };         // Bold ON (independent of font)
+    private static final byte[] BOLD_OFF  = { ESC, 'E', 0 };         // Bold OFF
     private static final byte[] ALIGN_LEFT   = { ESC, 'a', 0x00 };
     private static final byte[] ALIGN_CENTER = { ESC, 'a', 0x01 };
-    private static final byte[] CUT_FULL     = { GS,  'V', 0x00 };
+    private static final byte[] FONT_SMALL  = { ESC, 'M', 1 };       // Font B (9x17, compact)
+    private static final byte[] LINE_SPACING_0 = { ESC, '3', 0 };    // Minimal line spacing
+    private static final byte[] CUT_FULL    = { GS, 'V', 0x00 };
     private static final byte[] LF = { '\n' };
-    private static final int COLUMNS = 42;
+    private static final int COLUMNS = 50;  // Font B (9×17) ≈ 50 chars/line
 
     // ── Template storage ─────────────────────────────────
     private volatile String template;
@@ -99,11 +101,20 @@ public class TemplateRenderer {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         String[] lines = template.split("\n");
 
+        // Set Font B (small/compact) + minimal line spacing
+        try { out.write(FONT_SMALL); out.write(LINE_SPACING_0); } catch (IOException ignored) { }
+
         int i = 0;
         while (i < lines.length) {
             String line = lines[i];
 
-            // Conditional blocks: {#customer}...{/customer}
+            // Skip blank lines
+            if (line.isBlank()) {
+                i++;
+                continue;
+            }
+
+            // Conditional blocks
             if (line.contains("{#customer}")) {
                 i = skipConditional(lines, i, "{#customer}", "{/customer}",
                         data.customerName != null && !data.customerName.isEmpty(), out, data);
@@ -114,13 +125,43 @@ public class TemplateRenderer {
                         data.invoiceId != null && !data.invoiceId.isEmpty(), out, data);
                 continue;
             }
+            if (line.contains("{#plate}")) {
+                i = skipConditional(lines, i, "{#plate}", "{/plate}",
+                        data.plate != null && !data.plate.isEmpty(), out, data);
+                continue;
+            }
+            if (line.contains("{#customer_address}")) {
+                i = skipConditional(lines, i, "{#customer_address}", "{/customer_address}",
+                        data.customerAddress != null && !data.customerAddress.isEmpty(), out, data);
+                continue;
+            }
+            if (line.contains("{#customer_email}")) {
+                i = skipConditional(lines, i, "{#customer_email}", "{/customer_email}",
+                        data.customerEmail != null && !data.customerEmail.isEmpty(), out, data);
+                continue;
+            }
+            if (line.contains("{#subsidy_amount}")) {
+                i = skipConditional(lines, i, "{#subsidy_amount}", "{/subsidy_amount}",
+                        data.subsidyAmount != null && !data.subsidyAmount.isEmpty(), out, data);
+                continue;
+            }
+            if (line.contains("{#subtotal}")) {
+                i = skipConditional(lines, i, "{#subtotal}", "{/subtotal}",
+                        data.subtotal != null && !data.subtotal.isEmpty(), out, data);
+                continue;
+            }
+            if (line.contains("{#price_without_subsidy}")) {
+                i = skipConditional(lines, i, "{#price_without_subsidy}", "{/price_without_subsidy}",
+                        data.priceWithoutSubsidy != null && !data.priceWithoutSubsidy.isEmpty(), out, data);
+                continue;
+            }
 
             renderLine(out, line, data);
             i++;
         }
 
-        // Final cut if [CUT] wasn't in template
-        try { out.write(CUT_FULL); } catch (IOException ignored) { }
+        // Final cut with extra blank line so text is not cut off
+        try { out.write(LF); out.write(LF); out.write(CUT_FULL); } catch (IOException ignored) { }
 
         return out.toByteArray();
     }
@@ -143,8 +184,12 @@ public class TemplateRenderer {
             depth += opens;
 
             if (depth > 0 && visible) {
-                // Render this line stripped of tags
-                String stripped = line.replace(open, "").replace(close, "");
+                // Strip ALL conditional tags (including nested ones)
+                String stripped = line
+                        .replace(open, "")
+                        .replace(close, "")
+                        .replaceAll("\\{#[a-z_]+\\}", "")
+                        .replaceAll("\\{/[a-z_]+\\}", "");
                 if (!stripped.isBlank()) {
                     renderLine(out, stripped, data);
                 }
@@ -240,6 +285,13 @@ public class TemplateRenderer {
             .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
             .replace("{{location_address}}", nvl(data.locationAddress, ""))
             .replace("{{location_ruc}}", nvl(data.locationRuc, ""))
+            .replace("{{location_phone}}", nvl(data.locationPhone, ""))
+            .replace("{{location_city}}", nvl(data.locationCity, ""))
+            .replace("{{location_province}}", nvl(data.locationProvince, ""))
+            .replace("{{location_country}}", nvl(data.locationCountry, ""))
+            .replace("{{fiscal_regime}}", nvl(data.fiscalRegime, ""))
+            .replace("{{sri_environment}}", data.sriEnvironment > 0 ? (data.sriEnvironment == 2 ? "PRODUCCION" : "PRUEBAS") : "")
+            .replace("{{emission_type}}", data.emissionType == 1 ? "NORMAL" : "")
             .replace("{{date}}", nvl(data.date, ""))
             .replace("{{time}}", nvl(data.time, ""))
             .replace("{{dispenser_id}}", String.valueOf(data.dispenserId))
@@ -247,13 +299,24 @@ public class TemplateRenderer {
             .replace("{{grade}}", nvl(data.grade, ""))
             .replace("{{volume}}", nvl(data.volume, "0.00"))
             .replace("{{unit_price}}", nvl(data.unitPrice, "0.00"))
+            .replace("{{price_without_subsidy}}", nvl(data.priceWithoutSubsidy, ""))
+            .replace("{{subsidy_per_unit}}", nvl(data.subsidyPerUnit, ""))
+            .replace("{{subsidy_amount}}", nvl(data.subsidyAmount, ""))
             .replace("{{amount}}", nvl(data.amount, "0.00"))
             .replace("{{payment_method}}", nvl(data.paymentMethod, ""))
             .replace("{{customer_name}}", nvl(data.customerName, ""))
+            .replace("{{customer_id}}", nvl(data.customerId, ""))
+            .replace("{{customer_address}}", nvl(data.customerAddress, ""))
+            .replace("{{customer_phone}}", nvl(data.customerPhone, ""))
+            .replace("{{customer_email}}", nvl(data.customerEmail, ""))
             .replace("{{plate}}", nvl(data.plate, ""))
             .replace("{{invoice_id}}", nvl(data.invoiceId, ""))
             .replace("{{invoice_auth}}", nvl(data.invoiceAuth, ""))
-            .replace("{{order_id}}", nvl(data.orderId, ""));
+            .replace("{{order_id}}", nvl(data.orderId, ""))
+            .replace("{{subtotal}}", nvl(data.subtotal, ""))
+            .replace("{{tax_label}}", nvl(data.taxLabel, "IVA"))
+            .replace("{{tax_amount}}", nvl(data.taxAmount, ""))
+            .replace("{{unit}}", nvl(data.unit, "GAL"));
     }
 
     private static String nvl(String s, String def) {
@@ -269,31 +332,47 @@ public class TemplateRenderer {
     // ── Default template ─────────────────────────────────
 
     public static String defaultTemplate() {
+        // Leading \n is filtered by render() skipBlankLines
         return """
-[CENTER][BOLD]{{location_name}}[/BOLD]
-{{location_address}}
-RUC: {{location_ruc}}[/CENTER]
+
+[CENTER][BOLD]{{location_name}}[/BOLD][/CENTER]
+[CENTER]{{location_address}}[/CENTER]
+[CENTER]R.U.C.: {{location_ruc}}[/CENTER]
+[CENTER]Dirección: {{location_address}}[/CENTER]
+[CENTER]Teléfono: {{location_phone}}[/CENTER]
+[CENTER]{{location_city}} - {{location_country}}[/CENTER]
+[CENTER]{{fiscal_regime}}[/CENTER]
 ---
-Fecha: {{date}}  {{time}}
-Surtidor: {{dispenser_id}}  Pistola: {{hose_id}}
-[BOLD]{{grade}}[/BOLD]
----
-Volumen (litros):         {{volume}}
-Precio unitario:          ${{unit_price}}
+Fecha y Hora: {{date}}  {{time}}
+{#invoice}Factura: {{invoice_id}}
+Clave: {{invoice_auth}}
+Ambiente: {{sri_environment}}  Emisión: {{emission_type}}
+{/invoice}---
+{#customer}Cliente: {{customer_name}}
+CED/RUC: {{customer_id}}
+{#customer_address}Dirección: {{customer_address}}
+{/customer_address}Teléfono: {{customer_phone}}  Placa: {{plate}}
+{#customer_email}Email: {{customer_email}}
+{/customer_email}{/customer}---
+Manguera: {{hose_id}}
+Producto: {{grade}}
+Cantidad: {{volume}} {{unit}}
+Precio Sin Subsidio: $ {{price_without_subsidy}}
+Subsidio: $ {{subsidy_per_unit}}
+Precio Unitario: $ {{unit_price}}
+Subtotal: $ {{subtotal}}
+{{tax_label}}: $ {{tax_amount}}
 ===
 [CENTER][BOLD]TOTAL:  ${{amount}}[/BOLD][/CENTER]
 ===
-Pago: {{payment_method}}
-{#customer}Cliente: {{customer_name}}
-Placa: {{plate}}{/customer}
 ---
-{#invoice}Factura: {{invoice_id}}
-[CENTER]Autorizacion SRI
-{{invoice_auth}}[/CENTER]
-{/invoice}
+{#subsidy_amount}Valor Total Sin Subsidio: $ {{subsidy_amount}}
+Ahorro Por Subsidio: $ {{subsidy_amount}}
 ---
-[CENTER]Gracias por su preferencia[/CENTER]
-
+{/subsidy_amount}[CENTER]DOCUMENTO CON VALIDEZ TRIBUTARIA[/CENTER]
+[CENTER]Descarga de Factura en: www.sri.com.ec[/CENTER]
+[CENTER]POWERFIN GAS[/CENTER]
+[CENTER]GRACIAS POR SU COMPRA[/CENTER]
 [CUT]""";
     }
 }

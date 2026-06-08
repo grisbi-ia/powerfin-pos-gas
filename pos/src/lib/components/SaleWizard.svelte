@@ -113,7 +113,14 @@
 	}
 
 	async function loadPrintPolicy() {
-		try { const result = await bridge.getPrintPolicy(); printPolicy = result.policy as 'ALWAYS' | 'ASK' | 'NEVER'; } catch { /* */ }
+		try {
+			// Use printer_policy from backend config (database).
+			// Fallback to bridge.getPrintPolicy() for backward compat.
+			const policy = $config?.printer_policy;
+			if (policy) { printPolicy = policy as 'ALWAYS' | 'ASK' | 'NEVER'; return; }
+			const result = await bridge.getPrintPolicy();
+			printPolicy = result.policy as 'ALWAYS' | 'ASK' | 'NEVER';
+		} catch { /* */ }
 	}
 
 	function submitIncomplete() { if (vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
@@ -337,8 +344,55 @@
 		printing = true;
 		printError = false;
 		try {
-			const island = dispenserConfig?.printer_island ?? 1;
-			await bridge.printReceipt({ type: 'FUEL_RECEIPT', island, dispenserId, fuelData: { dispenserId, orderId: collectOrder?.orderId ?? '', volume: finalVolume, amount: finalAmount.toFixed(2), unitPrice: (collectOrder?.unitPrice ?? 0).toFixed(3), paymentMethod, grade: 'SUPER' } });
+			const printerIp = dispenserConfig?.printer_ip || '192.168.1.21';
+			const printerPort = dispenserConfig?.printer_port || 9100;
+			const loc = $config?.location;
+			const gradeUnit = $config?.grades?.find(g => g.grade_id === selectedHose?.grade_id)?.unit || 'GALONES';
+			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
+			const hoseId = collectOrder?.hoseId ?? selectedHose?.hose_id ?? 0;
+			const gradeName = selectedHose?.grade_name || 'SUPER';
+			await bridge.printReceipt({
+				type: 'FUEL_RECEIPT', printerIp, printerPort, dispenserId,
+				fuelData: {
+					dispenserId, hoseId, orderId: collectOrder?.orderId ?? '',
+					volume: finalVolume, amount: finalAmount.toFixed(2),
+					unitPrice: (collectOrder?.unitPrice ?? selectedHose?.unit_price ?? 0).toFixed(7),
+					paymentMethod, grade: gradeName,
+					unit: gradeUnit === 'GALONES' ? 'GAL' : 'L',
+					// Subsidy from product (via config / price list)
+					priceWithoutSubsidy: (selectedHose?.base_price ?? 0).toFixed(4),
+					subsidyPerUnit: (selectedHose?.subsidy_per_unit ?? 0).toFixed(4),
+					subsidyAmount: '',
+					// Invoice
+					invoiceId: '',
+					invoiceAuth: '',
+					// Computed financials (IVA 15%)
+					subtotal: finalAmount > 0 ? (finalAmount / 1.15).toFixed(2) : '0.00',
+					taxLabel: 'IVA 15%',
+					taxAmount: finalAmount > 0 ? (finalAmount - finalAmount / 1.15).toFixed(2) : '0.00',
+					// Location info from config
+					locationName: loc?.name ?? '',
+					locationAddress: loc?.address ?? '',
+					locationRuc: loc?.ruc ?? '',
+					locationPhone: loc?.phone ?? '',
+					locationCity: loc?.city ?? '',
+					locationProvince: loc?.province ?? '',
+					locationCountry: loc?.country ?? '',
+					fiscalRegime: loc?.fiscal_regime ?? '',
+					sriEnvironment: loc?.sri_environment ?? 0,
+					emissionType: loc?.emission_type ?? 0,
+					// Customer info
+					customerName: owner?.name ?? '',
+					customerId: owner?.id_number ?? '',
+					customerAddress: (owner as any)?.address ?? '',
+					customerPhone: owner?.phone ?? '',
+					customerEmail: owner?.email ?? '',
+					plate: collectOrder?.plate ?? vehicleResult?.plate ?? '',
+					// Date/time
+					date: new Date().toLocaleDateString('es-EC'),
+					time: new Date().toLocaleTimeString('es-EC'),
+				}
+			});
 			hasPrinted = true;
 		} catch {
 			printError = true;

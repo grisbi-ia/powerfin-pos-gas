@@ -114,25 +114,54 @@
 	async function handleReprint(order: DispatchOrder) {
 		if (!$config) return;
 		const dispenser = $config.dispensers.find(d => d.dispenser_id === order.dispenser_id);
-		const island = dispenser?.printer_island ?? 1;
+		const printerIp = dispenser?.printer_ip || '192.168.1.21';
+		const printerPort = dispenser?.printer_port || 9100;
+		const loc = $config.location;
 
 		printing = order.order_id;
 		printError = null;
 		try {
 			await bridge.printReceipt({
 				type: 'FUEL_RECEIPT',
-				island,
+				printerIp,
+				printerPort,
 				dispenserId: order.dispenser_id,
 				fuelData: {
 					dispenserId: order.dispenser_id,
+					hoseId: order.hose_id,
 					orderId: order.order_id,
 					volume: order.final_volume ?? '0',
 					amount: (order.final_amount ?? 0).toFixed(2),
-					unitPrice: (order.unit_price ?? 0).toFixed(3),
+					unitPrice: (order.unit_price ?? 0).toFixed(7),
+					priceWithoutSubsidy: order.price_without_subsidy ? order.price_without_subsidy.toFixed(4) : '',
+					subsidyPerUnit: order.subsidy_per_unit ? order.subsidy_per_unit.toFixed(4) : '',
+					subsidyAmount: order.subsidy_amount ? order.subsidy_amount.toFixed(2) : '',
 					paymentMethod: order.payment_method,
 					grade: order.grade,
 					customerName: order.customer_name,
-					plate: order.plate
+					customerId: order.customer_id ?? '',
+					customerAddress: order.customer_address ?? '',
+					customerPhone: order.customer_phone ?? '',
+					plate: order.plate ?? '',
+					invoiceId: order.invoice_number ?? '',
+					invoiceAuth: order.access_key ?? '',
+					// Computed financials (IVA 15%)
+					subtotal: (order.final_amount && order.final_amount > 0)
+						? (order.final_amount / 1.15).toFixed(2) : '0.00',
+					taxLabel: 'IVA 15%',
+					taxAmount: (order.final_amount && order.final_amount > 0)
+						? (order.final_amount - order.final_amount / 1.15).toFixed(2) : '0.00',
+					// Location from config
+					locationName: loc?.name ?? '',
+					locationAddress: loc?.address ?? '',
+					locationRuc: loc?.ruc ?? '',
+					locationPhone: loc?.phone ?? '',
+					locationCity: loc?.city ?? '',
+					locationCountry: loc?.country ?? '',
+					fiscalRegime: loc?.fiscal_regime ?? '',
+					// Date/time
+					date: new Date().toLocaleDateString('es-EC'),
+					time: new Date().toLocaleTimeString('es-EC'),
 				}
 			});
 		} catch {

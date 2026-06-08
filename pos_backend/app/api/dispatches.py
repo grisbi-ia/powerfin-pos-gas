@@ -33,6 +33,7 @@ from app.schemas import (
 )
 from app.services.credit_service import validate_credit_dispatch
 from app.services.sequential_service import consume_sequential
+from app.services.access_key_service import generate_access_key
 
 router = APIRouter(prefix="/api/pos/dispatches", tags=["dispatches"])
 
@@ -203,14 +204,59 @@ async def create_dispatch(
     db.add(dispatch)
     await db.flush()
 
+    # Generate SRI access key (49 digits) for electronic invoicing
+    if ep and sequential_number:
+        try:
+            # Parse sequential number: "001-004-000000017" → 17
+            parts = sequential_number.split("-")
+            seq_int = int(parts[-1]) if len(parts) >= 3 else int(sequential_number)
+
+            # Get company info for RUC and environment
+            from app.models.company import CompanyInfo
+            company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
+            if company and company.ruc and company.sri_environment:
+                local_date = datetime.now().date()
+                access_key = generate_access_key(
+                    emission_date=local_date,
+                    doc_type=ep.doc_type or "FACTURA",
+                    ruc=company.ruc,
+                    sri_environment=company.sri_environment,
+                    establishment=ep.establishment,
+                    emission_point=ep.emission_point,
+                    sequential=seq_int,
+                    emission_type=company.emission_type or 1,
+                )
+                dispatch.access_key = access_key
+                await db.flush()
+        except Exception:
+            # Non-critical: access key can be regenerated later if needed
+            pass
+
     # Create dispatch detail line with product info (quantity=0 until completed)
     if product_id:
         unit_price_dec = Decimal(str(body.unit_price))
+
+        # Resolve subsidy from product for ticket printing
+        subsidy_per_unit = Decimal("0")
+        base_price_dec = unit_price_dec
+        if product_id:
+            prod_subsidy_result = await db.execute(
+                select(ProductModel).where(ProductModel.product_id == product_id)
+            )
+            prod_with_subsidy = prod_subsidy_result.scalar_one_or_none()
+            if prod_with_subsidy:
+                if prod_with_subsidy.base_price:
+                    base_price_dec = Decimal(str(prod_with_subsidy.base_price))
+                if prod_with_subsidy.subsidy_per_unit:
+                    subsidy_per_unit = Decimal(str(prod_with_subsidy.subsidy_per_unit))
+
         detail = DispatchDetail(
             dispatch_id=dispatch.dispatch_id,
             product_id=product_id,
             quantity=0,
             unit_price=float(unit_price_dec),
+            price_without_subsidy=float(base_price_dec),
+            subsidy_amount=0,  # computed on complete when quantity is known
             tax_rate=float(tax_rate),
             subtotal=0,
             tax_amount=0,
@@ -263,9 +309,10 @@ async def complete_dispatch(
     order_id: str,
     body: CompleteDispatchRequest,
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(get_current_user),
 ):
-    """Mark a dispatch as completed (idempotent)."""
+    """Mark a dispatch as completed (idempotent).
+    Called by FusionBridge (no auth — internal service) and POS (double-safe).
+    """
     result = await db.execute(
         select(Dispatch).where(Dispatch.order_id == order_id)
     )
@@ -304,7 +351,23 @@ async def complete_dispatch(
         # Recalculate from Fusion amount
         subtotal_dec = amount_dec
         tax_dec = subtotal_dec - (subtotal_dec / (1 + tax_rate_dec))
-        
+
+        # Calculate subsidy amounts now that quantity is known
+        # subsidy_amount = quantity × product.subsidy_per_unit
+        if first_detail.product_id and float(volume_dec) > 0:
+            from app.models.product import Product as ProductModel
+            prod_result = await db.execute(
+                select(ProductModel).where(ProductModel.product_id == first_detail.product_id)
+            )
+            product = prod_result.scalar_one_or_none()
+            if product and product.subsidy_per_unit:
+                subsidy_per_unit_dec = Decimal(str(product.subsidy_per_unit))
+                if subsidy_per_unit_dec > 0:
+                    vol_per_detail_dec = Decimal(str(vol_per_detail)) if float(volume_dec) > 0 else Decimal("0")
+                    total_subsidy = float(vol_per_detail_dec * subsidy_per_unit_dec)
+                    for det in details:
+                        det.subsidy_amount = total_subsidy / len(details) if len(details) > 0 else total_subsidy
+
         # Update each detail proportionally
         for i, det in enumerate(details):
             share = Decimal("1") / len(details) if len(details) > 0 else Decimal("1")
@@ -528,7 +591,7 @@ async def get_active_dispatches(
         for det in details_result.scalars():
             detail_map[det.dispatch_id] = det
 
-    # Build person lookup for customer_name
+    # Build person lookup for customer info
     person_ids = [d.person_id for d in dispatches if d.person_id]
     person_map = {}
     if person_ids:
@@ -538,6 +601,17 @@ async def get_active_dispatches(
         )
         for p in persons_result.scalars():
             person_map[p.person_id] = p
+
+    # Build vehicle lookup for plate
+    vehicle_ids = [d.vehicle_id for d in dispatches if d.vehicle_id]
+    vehicle_map = {}
+    if vehicle_ids:
+        from app.models.person import Vehicle as VehicleModel
+        vehicles_result = await db.execute(
+            select(VehicleModel).where(VehicleModel.vehicle_id.in_(vehicle_ids))
+        )
+        for v in vehicles_result.scalars():
+            vehicle_map[v.vehicle_id] = v
 
     return [
         {
@@ -549,18 +623,24 @@ async def get_active_dispatches(
             "preset_type": "MONEY",
             "preset_value": "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
+            "price_without_subsidy": detail_map[d.dispatch_id].price_without_subsidy if d.dispatch_id in detail_map else None,
+            "subsidy_per_unit": detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else None,
+            "subsidy_amount": detail_map[d.dispatch_id].subsidy_amount if d.dispatch_id in detail_map else None,
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
-            "customer_id": None,
+            "customer_id": person_map[d.person_id].id_number if d.person_id and d.person_id in person_map else None,
             "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
-            "plate": None,
+            "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,
+            "customer_phone": person_map[d.person_id].phone if d.person_id and d.person_id in person_map else None,
+            "plate": vehicle_map[d.vehicle_id].plate if d.vehicle_id and d.vehicle_id in vehicle_map else None,
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
             "authorized_by_user_id": d.authorized_by_user_id,
             "final_amount": d.subtotal if d.subtotal else d.total,
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
-            "invoice_number": None,
+            "invoice_number": d.sequential_number,
+            "access_key": d.access_key,
             "credit_contract_id": d.credit_contract_id,
             "credit_status": d.credit_status,
         }

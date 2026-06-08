@@ -94,7 +94,7 @@ export async function getPrintPolicy(): Promise<{ policy: string }> {
 	return res.json();
 }
 
-export async function printReceipt(data: unknown): Promise<{ status: string }> {
+export async function printReceipt(data: unknown): Promise<{ status: string; preview?: string }> {
 	if (USE_MOCKS_BRIDGE) return mock.printReceipt(data);
 	const res = await fetch(bridgeUrl('/api/print'), {
 		method: 'POST',
@@ -102,7 +102,30 @@ export async function printReceipt(data: unknown): Promise<{ status: string }> {
 		body: JSON.stringify(data)
 	});
 	if (!res.ok) throw new Error('Print failed');
-	return res.json();
+	const result = await res.json();
+	if (result.preview) {
+		// Strip ESC/POS control chars for clean console output
+		const clean = result.preview.replace(/[\x00-\x1f]/g, '')
+			.replace(/\x1b/g, '');
+			console.log('─── TICKET PREVIEW ───');
+			console.log(clean);
+			console.log('──────────────────────');
+			// Debug: show what data was sent
+			const sent = (data as any)?.fuelData;
+			if (sent) {
+				console.log('SENT DATA:', {
+					locationName: sent.locationName,
+					locationRuc: sent.locationRuc,
+					locationAddress: sent.locationAddress,
+					customerName: sent.customerName,
+					customerId: sent.customerId,
+					grade: sent.grade,
+					volume: sent.volume,
+					hoseId: sent.hoseId,
+				});
+			}
+	}
+	return result;
 }
 
 export async function paymentLock(saleId: string, lockId?: string): Promise<{ status: string; sale_id: string; lock_id: string }> {

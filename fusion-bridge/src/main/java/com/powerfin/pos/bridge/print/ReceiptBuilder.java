@@ -47,6 +47,13 @@ public class ReceiptBuilder {
         public String locationName;
         public String locationAddress;
         public String locationRuc;
+        public String locationPhone;
+        public String locationCity;
+        public String locationProvince;
+        public String locationCountry;
+        public String fiscalRegime;
+        public int sriEnvironment;
+        public int emissionType;
         public String date;
         public String time;
         public String orderId;
@@ -55,23 +62,53 @@ public class ReceiptBuilder {
         public String grade;
         public String volume;
         public String unitPrice;
+        public String priceWithoutSubsidy;
+        public String subsidyPerUnit;
+        public String subsidyAmount;
         public String amount;
         public String paymentMethod;
         public String customerName;
+        public String customerId;
+        public String customerAddress;
+        public String customerPhone;
+        public String customerEmail;
         public String plate;
         public String invoiceId;
         public String invoiceAuth;
+        public String subtotal;
+        public String taxLabel;
+        public String taxAmount;
+        public String unit;
 
         @SuppressWarnings("unchecked")
         public static FuelReceiptData fromMap(Map<String, Object> request) {
             FuelReceiptData d = new FuelReceiptData();
-            d.dispenserId = intParam(request, "dispenser_id", 1);
 
-            Map<String, Object> fuel = (Map<String, Object>) request.get("fuel_data");
+            // Accept both camelCase (POS/TypeScript) and dispenser_id (legacy)
+            d.dispenserId = intParam(request, "dispenserId",
+                    intParam(request, "dispenser_id", 1));
+
+            // Accept both fuelData (POS) and fuel_data (legacy)
+            Map<String, Object> fuel = (Map<String, Object>) request.get("fuelData");
+            if (fuel == null) {
+                fuel = (Map<String, Object>) request.get("fuel_data");
+            }
+            // Fallback: if no sub-object, read from top level (flat mode)
+            if (fuel == null) {
+                fuel = request;
+            }
+
             if (fuel != null) {
-                d.locationName = strParam(fuel, "location_name");
-                d.locationAddress = strParam(fuel, "location_address");
-                d.locationRuc = strParam(fuel, "location_ruc");
+                d.locationName = strParam(fuel, "locationName");
+                d.locationAddress = strParam(fuel, "locationAddress");
+                d.locationRuc = strParam(fuel, "locationRuc");
+                d.locationPhone = strParam(fuel, "locationPhone");
+                d.locationCity = strParam(fuel, "locationCity");
+                d.locationProvince = strParam(fuel, "locationProvince");
+                d.locationCountry = strParam(fuel, "locationCountry");
+                d.fiscalRegime = strParam(fuel, "fiscalRegime");
+                d.sriEnvironment = intParam(fuel, "sriEnvironment", 0);
+                d.emissionType = intParam(fuel, "emissionType", 0);
                 d.date = strParam(fuel, "date");
                 d.time = strParam(fuel, "time");
                 d.orderId = strParam(fuel, "orderId");
@@ -80,12 +117,23 @@ public class ReceiptBuilder {
                 d.grade = strParam(fuel, "grade");
                 d.volume = strParam(fuel, "volume");
                 d.unitPrice = strParam(fuel, "unitPrice");
+                d.priceWithoutSubsidy = strParam(fuel, "priceWithoutSubsidy");
+                d.subsidyPerUnit = strParam(fuel, "subsidyPerUnit");
+                d.subsidyAmount = strParam(fuel, "subsidyAmount");
                 d.amount = strParam(fuel, "amount");
                 d.paymentMethod = strParam(fuel, "paymentMethod");
                 d.customerName = strParam(fuel, "customerName");
+                d.customerId = strParam(fuel, "customerId");
+                d.customerAddress = strParam(fuel, "customerAddress");
+                d.customerPhone = strParam(fuel, "customerPhone");
+                d.customerEmail = strParam(fuel, "customerEmail");
                 d.plate = strParam(fuel, "plate");
                 d.invoiceId = strParam(fuel, "invoiceId");
                 d.invoiceAuth = strParam(fuel, "invoiceAuth");
+                d.subtotal = strParam(fuel, "subtotal");
+                d.taxLabel = strParam(fuel, "taxLabel");
+                d.taxAmount = strParam(fuel, "taxAmount");
+                d.unit = strParam(fuel, "unit");
             }
 
             return d;

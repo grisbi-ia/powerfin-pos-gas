@@ -38,6 +38,7 @@ public class PrintResource {
     @POST
     public Response print(Map<String, Object> request) {
         String type = (String) request.getOrDefault("type", "");
+        boolean preview = Boolean.TRUE.equals(request.get("preview"));
 
         if (!"FUEL_RECEIPT".equals(type)) {
             return Response.status(400)
@@ -49,26 +50,39 @@ public class PrintResource {
             ReceiptBuilder.FuelReceiptData data =
                     ReceiptBuilder.FuelReceiptData.fromMap(request);
 
-            // New path: POS sends "island" directly (from PowerFin config)
-            // Old path: fall back to dispenser-based lookup
-            int island = intParam(request, "island", 0);
-            if (island == 0) {
-                // Backward compat: map dispenser to island
-                int dispenserId = intParam(request, "dispenser_id", data.dispenserId);
-                island = dispenserId <= 2 ? 1 : 2;
-            }
-
             byte[] receiptBytes = receiptBuilder.buildFuelReceipt(data);
 
-            String printerIp = printerConfig.getIp(island);
-            int printerPort = printerConfig.getPort(island);
+            // Preview mode: return rendered text (dev only, saves paper)
+            if (preview) {
+                String text = new String(receiptBytes, java.nio.charset.StandardCharsets.UTF_8);
+                return Response.ok(Map.of(
+                        "status", "PREVIEW",
+                        "preview", text
+                )).build();
+            }
+
+            // Priority 1: printer_ip + printer_port sent directly by POS (from DB config)
+            String printerIp = strParam(request, "printerIp");
+            int printerPort = intParam(request, "printerPort", 0);
+
+            // Priority 2: island-based lookup (backward compat)
+            if (printerIp == null || printerIp.isEmpty()) {
+                int island = intParam(request, "island", 0);
+                if (island == 0) {
+                    int dispenserId = intParam(request, "dispenser_id", data.dispenserId);
+                    island = dispenserId <= 2 ? 1 : 2;
+                }
+                printerIp = printerConfig.getIp(island);
+                printerPort = printerConfig.getPort(island);
+            } else if (printerPort == 0) {
+                printerPort = 9100;
+            }
 
             thermalPrinter.print(printerIp, printerPort, receiptBytes);
 
             return Response.ok(Map.of(
                     "status", "PRINTED",
-                    "printer_ip", printerIp,
-                    "island", island
+                    "printer_ip", printerIp
             )).build();
 
         } catch (PrintException e) {
@@ -239,6 +253,11 @@ public class PrintResource {
     }
 
     // ── Helpers ──────────────────────────────────────────────
+
+    private static String strParam(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        return v != null ? v.toString() : null;
+    }
 
     private static int intParam(Map<String, Object> map, String key, int defaultVal) {
         Object v = map.get(key);

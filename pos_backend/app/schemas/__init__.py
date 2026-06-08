@@ -35,7 +35,15 @@ class LoginResponse(BaseModel):
 class LocationResponse(BaseModel):
     location_id: int
     name: str
+    ruc: Optional[str] = None
     address: Optional[str] = None
+    phone: Optional[str] = None
+    city: Optional[str] = None
+    province: Optional[str] = None
+    country: Optional[str] = None
+    fiscal_regime: Optional[str] = None
+    sri_environment: Optional[int] = None
+    emission_type: Optional[int] = None
 
 
 class HoseResponse(BaseModel):
@@ -45,13 +53,16 @@ class HoseResponse(BaseModel):
     grade_id: str
     grade_name: str
     unit_price: float = 0
+    base_price: float = 0
+    subsidy_per_unit: float = 0
 
 
 class DispenserConfigResponse(BaseModel):
     dispenser_id: int
     fusion_pump_id: int
     name: str
-    printer_island: int
+    printer_ip: Optional[str] = None
+    printer_port: int = 9100
     sides: dict[str, list[HoseResponse]]
 
 
@@ -83,6 +94,7 @@ class ConfigResponse(BaseModel):
     grades: list[GradeResponse]
     price_lists: list[PriceListResponse]
     payment_methods: list[PaymentMethodResponse]
+    printer_policy: str = "ASK"
     polling: PollingConfig
 
 

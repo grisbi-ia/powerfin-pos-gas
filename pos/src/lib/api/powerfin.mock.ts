@@ -30,7 +30,8 @@ const MOCK_CONFIG: AppConfig = {
 			dispenser_id: 1,
 			fusion_pump_id: 1,
 			name: 'Surtidor DIESEL',
-			printer_island: 1,
+			printer_ip: '192.168.1.21',
+		printer_port: 9100,
 			sides: {
 				A: [
 					{ hose_id: 1, fusion_pump_id: 1, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel', unit_price: 3.103 }
