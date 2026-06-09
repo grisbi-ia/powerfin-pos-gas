@@ -22,13 +22,63 @@ from app.schemas import (
 router = APIRouter(prefix="/api/pos", tags=["cash"])
 
 
+async def _available_cash(db: AsyncSession, shift_id: int) -> Decimal:
+    """Calculate available cash for a shift: opening + income + sales - expenses - transfers - safe_drops."""
+    shift = (await db.execute(
+        select(Shift).where(Shift.shift_id == shift_id)
+    )).scalar_one_or_none()
+    if not shift:
+        return Decimal("0")
+
+    income = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "INCOME"
+        )
+    ) or 0.0
+    expense = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE"
+        )
+    ) or 0.0
+    transfers_out = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_OUT"
+        )
+    ) or 0.0
+    safe_drops = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP"
+        )
+    ) or 0.0
+    sales_cash = await db.scalar(
+        select(func.coalesce(func.sum(Dispatch.total), 0)).where(
+            Dispatch.shift_id == shift_id,
+            Dispatch.status == "COLLECTED",
+        )
+    ) or 0.0
+
+    opening = Decimal(str(shift.opening_cash))
+    result = opening + Decimal(str(income)) + Decimal(str(sales_cash)) - Decimal(str(expense)) - Decimal(str(transfers_out)) - Decimal(str(safe_drops))
+    return max(result, Decimal("0"))
+
+
 @router.post("/cash-movements", response_model=CashMovementResponse, status_code=201)
 async def create_cash_movement(
     body: CreateCashMovementRequest,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Record a cash movement (income or expense)."""
+    """Record a cash movement (income or expense).
+    Blocks expenses that would result in negative cash balance."""
+    # Calculate available cash before this movement
+    available = await _available_cash(db, body.shift_id)
+
+    if body.type == "EXPENSE" and Decimal(str(body.amount)) > available:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo insuficiente. Disponible: ${float(available):.2f}, Egreso: ${body.amount:.2f}"
+        )
+
     # Calculate running balance
     last = await db.execute(
         select(CashMovement)
@@ -89,6 +139,35 @@ async def get_cash_movements(
         )
         for m in movements
     ]
+
+
+@router.get("/cash-movements/{movement_id}")
+async def get_cash_movement(
+    movement_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get a single cash movement (for reprinting)."""
+    result = await db.execute(
+        select(CashMovement, Shift, User)
+        .join(Shift, CashMovement.shift_id == Shift.shift_id)
+        .join(User, Shift.user_id == User.user_id)
+        .where(CashMovement.movement_id == movement_id)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    mv, shift, user = row
+    return {
+        "movement_id": mv.movement_id,
+        "shift_id": mv.shift_id,
+        "type": mv.type,
+        "amount": mv.amount,
+        "observation": mv.observation,
+        "created_at": mv.created_at.isoformat() if mv.created_at else None,
+        "running_balance": mv.running_balance,
+        "user_name": user.name,
+    }
 
 
 @router.get("/shifts/{shift_id}/cash-summary", response_model=CashSummaryResponse)
@@ -161,7 +240,17 @@ async def create_transfer(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Transfer money between users or to Caja Fuerte (to_user_id=0)."""
+    """Transfer money between users or to Caja Fuerte (to_user_id=0).
+    Blocks transfers/safe-drops that would result in negative cash balance."""
+    # Calculate available cash before transfer
+    available = await _available_cash(db, body.from_shift_id)
+
+    if Decimal(str(body.amount)) > available:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo insuficiente. Disponible: ${float(available):.2f}, Transferencia: ${body.amount:.2f}"
+        )
+
     from_shift = (await db.execute(
         select(Shift).where(Shift.shift_id == body.from_shift_id)
     )).scalar_one_or_none()

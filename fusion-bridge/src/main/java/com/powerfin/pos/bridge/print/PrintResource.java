@@ -40,17 +40,24 @@ public class PrintResource {
         String type = (String) request.getOrDefault("type", "");
         boolean preview = Boolean.TRUE.equals(request.get("preview"));
 
-        if (!"FUEL_RECEIPT".equals(type)) {
-            return Response.status(400)
-                    .entity(Map.of("error", "Unknown receipt type: " + type))
-                    .build();
-        }
-
         try {
-            ReceiptBuilder.FuelReceiptData data =
-                    ReceiptBuilder.FuelReceiptData.fromMap(request);
+            byte[] receiptBytes;
 
-            byte[] receiptBytes = receiptBuilder.buildFuelReceipt(data);
+            if ("FUEL_RECEIPT".equals(type)) {
+                ReceiptBuilder.FuelReceiptData data =
+                        ReceiptBuilder.FuelReceiptData.fromMap(request);
+                receiptBytes = receiptBuilder.buildFuelReceipt(data);
+
+            } else if ("CASH_MOVEMENT".equals(type)) {
+                ReceiptBuilder.CashMovementData data =
+                        ReceiptBuilder.CashMovementData.fromMap(request);
+                receiptBytes = receiptBuilder.buildCashMovementReceipt(data);
+
+            } else {
+                return Response.status(400)
+                        .entity(Map.of("error", "Unknown receipt type: " + type))
+                        .build();
+            }
 
             // Preview mode: return rendered text (dev only, saves paper)
             if (preview) {
@@ -65,17 +72,28 @@ public class PrintResource {
             String printerIp = strParam(request, "printerIp");
             int printerPort = intParam(request, "printerPort", 0);
 
-            // Priority 2: island-based lookup (backward compat)
-            if (printerIp == null || printerIp.isEmpty()) {
-                int island = intParam(request, "island", 0);
-                if (island == 0) {
-                    int dispenserId = intParam(request, "dispenser_id", data.dispenserId);
-                    island = dispenserId <= 2 ? 1 : 2;
+            // Priority 2: island-based lookup (backward compat, fuel receipts only)
+            if ("FUEL_RECEIPT".equals(type)) {
+                if (printerIp == null || printerIp.isEmpty()) {
+                    int island = intParam(request, "island", 0);
+                    if (island == 0) {
+                        int dispenserId = intParam(request, "dispenser_id",
+                                intParam(request, "dispenserId", 1));
+                        island = dispenserId <= 2 ? 1 : 2;
+                    }
+                    printerIp = printerConfig.getIp(island);
+                    printerPort = printerConfig.getPort(island);
+                } else if (printerPort == 0) {
+                    printerPort = 9100;
                 }
-                printerIp = printerConfig.getIp(island);
-                printerPort = printerConfig.getPort(island);
-            } else if (printerPort == 0) {
-                printerPort = 9100;
+            } else {
+                // Cash movements: must have printer_ip from request or use island 1
+                if (printerIp == null || printerIp.isEmpty()) {
+                    printerIp = printerConfig.getIp(1);
+                    printerPort = printerConfig.getPort(1);
+                } else if (printerPort == 0) {
+                    printerPort = 9100;
+                }
             }
 
             thermalPrinter.print(printerIp, printerPort, receiptBytes);

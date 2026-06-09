@@ -23,7 +23,7 @@ class ReceiptTemplateTest {
         assertNotNull(tpl);
         assertFalse(tpl.isBlank());
         assertTrue(tpl.contains("TOTAL"), "Default template should contain TOTAL");
-        assertTrue(tpl.contains("[CUT]"), "Default template should contain CUT directive");
+        assertTrue(tpl.contains("GRACIAS"), "Default template should contain GRACIAS");
     }
 
     @Test

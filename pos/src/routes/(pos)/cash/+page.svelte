@@ -4,7 +4,9 @@
 	import Header from '$lib/components/Header.svelte';
 	import { auth } from '$lib/stores/auth';
 	import { shift } from '$lib/stores/shift';
+	import { config } from '$lib/stores/config';
 	import * as powerfin from '$lib/api/powerfin';
+	import * as bridge from '$lib/api/bridge';
 	import type { CashMovement, ShiftCashSummary } from '$lib/api/types';
 
 	let summary: ShiftCashSummary | null = null;
@@ -12,6 +14,7 @@
 	let loading = true;
 	let error = '';
 	let refreshTimer: ReturnType<typeof setInterval> | null = null;
+	let reprintingId: number | null = null;
 
 	async function loadData() {
 		if (!$auth.token || !$shift) return;
@@ -57,6 +60,36 @@
 
 	function formatTime(iso: string): string {
 		return new Date(iso).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+	}
+
+	async function reprintMovement(m: CashMovement) {
+		reprintingId = m.movement_id;
+		try {
+			const loc = $config?.location;
+			const defaultIp = $config?.dispensers?.[0]?.printer_ip || '192.168.1.31';
+			const defaultPort = $config?.dispensers?.[0]?.printer_port || 9100;
+			await bridge.printReceipt({
+				type: 'CASH_MOVEMENT',
+				printerIp: defaultIp,
+				printerPort: defaultPort,
+				cashData: {
+					movementType: m.type === 'TRANSFER_IN' ? 'INCOME' : m.type === 'TRANSFER_OUT' || m.type === 'SAFE_DROP' ? m.type : m.type,
+					date: new Date(m.created_at).toLocaleDateString('es-EC'),
+					time: new Date(m.created_at).toLocaleTimeString('es-EC'),
+					userName: ($shift as any)?.user_name || '',
+					amount: m.amount.toFixed(2),
+					observation: m.observation,
+					locationName: loc?.name || '',
+					locationAddress: loc?.address || '',
+					locationRuc: loc?.ruc || '',
+					locationPhone: loc?.phone || '',
+				}
+			});
+		} catch {
+			// non-blocking
+		} finally {
+			reprintingId = null;
+		}
 	}
 
 	onMount(() => {
@@ -155,8 +188,18 @@
 									{/if}
 								</div>
 							</div>
-							<div class="text-sm font-semibold {m.type === 'INCOME' || m.type === 'TRANSFER_IN' ? 'text-green-600' : 'text-red-600'}">
-								{m.type === 'INCOME' || m.type === 'TRANSFER_IN' ? '+' : '-'}{formatCurrency(m.amount)}
+							<div class="flex items-center gap-1">
+								<div class="text-sm font-semibold {m.type === 'INCOME' || m.type === 'TRANSFER_IN' ? 'text-green-600' : 'text-red-600'}">
+									{m.type === 'INCOME' || m.type === 'TRANSFER_IN' ? '+' : '-'}{formatCurrency(m.amount)}
+								</div>
+								<button
+									class="touch-btn text-gray-400 hover:text-blue-600 px-1 text-sm"
+									title="Reimprimir comprobante"
+									on:click|stopPropagation={() => reprintMovement(m)}
+									disabled={reprintingId === m.movement_id}
+								>
+									{reprintingId === m.movement_id ? '⏳' : '🖨'}
+								</button>
 							</div>
 						</div>
 					{/each}

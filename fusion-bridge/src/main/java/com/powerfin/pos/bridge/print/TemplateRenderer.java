@@ -160,8 +160,13 @@ public class TemplateRenderer {
             i++;
         }
 
-        // Final cut with extra blank line so text is not cut off
-        try { out.write(LF); out.write(LF); out.write(CUT_FULL); } catch (IOException ignored) { }
+        // Feed blank lines + dot so paper advances well past the cutter
+        try {
+            for (int j = 0; j < 6; j++) out.write(LF);
+            out.write(".".getBytes(StandardCharsets.UTF_8));
+            out.write(LF);
+            out.write(CUT_FULL);
+        } catch (IOException ignored) { }
 
         return out.toByteArray();
     }
@@ -329,6 +334,121 @@ public class TemplateRenderer {
         return b;
     }
 
+    // ── Cash movement receipt ───────────────────────────
+
+    /** Renders a cash movement receipt with its own template. */
+    public byte[] renderCashMovement(ReceiptBuilder.CashMovementData data) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        String[] lines = cashMovementTemplate().split("\n");
+
+        // Set Font B (small/compact) + minimal line spacing
+        try { out.write(FONT_SMALL); out.write(LINE_SPACING_0); } catch (IOException ignored) { }
+
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+
+            try {
+                if (line.trim().equals("[CUT]")) {
+                    for (int j = 0; j < 6; j++) out.write(LF);
+                    out.write(".".getBytes(StandardCharsets.UTF_8));
+                    out.write(LF);
+                    out.write(CUT_FULL);
+                    continue;
+                }
+
+                boolean bold = false;
+                boolean center = false;
+                String resolved = line;
+
+                while (resolved.contains("[BOLD]") && resolved.contains("[/BOLD]")) {
+                    bold = true;
+                    resolved = resolved.replace("[BOLD]", "").replace("[/BOLD]", "");
+                }
+                while (resolved.contains("[CENTER]") && resolved.contains("[/CENTER]")) {
+                    center = true;
+                    resolved = resolved.replace("[CENTER]", "").replace("[/CENTER]", "");
+                }
+
+                // Resolve cash placeholders
+                resolved = resolved
+                    .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
+                    .replace("{{location_address}}", nvl(data.locationAddress, ""))
+                    .replace("{{location_ruc}}", nvl(data.locationRuc, ""))
+                    .replace("{{location_phone}}", nvl(data.locationPhone, ""))
+                    .replace("{{movement_type}}", movementLabel(data.movementType))
+                    .replace("{{date}}", nvl(data.date, ""))
+                    .replace("{{time}}", nvl(data.time, ""))
+                    .replace("{{user_name}}", nvl(data.userName, ""))
+                    .replace("{{amount}}", nvl(data.amount, "0.00"))
+                    .replace("{{observation}}", nvl(data.observation, ""));
+
+                boolean isSep = resolved.trim().matches("-{3,}") || resolved.trim().matches("={3,}");
+                if (isSep) {
+                    out.write(LF);
+                    byte[] dashes = repeat('-', COLUMNS);
+                    out.write(dashes);
+                    out.write(LF);
+                    continue;
+                }
+
+                if (center) out.write(ALIGN_CENTER);
+                if (bold) out.write(BOLD_ON);
+
+                out.write(resolved.getBytes(StandardCharsets.UTF_8));
+                out.write(LF);
+
+                if (bold) out.write(BOLD_OFF);
+                if (center) out.write(ALIGN_LEFT);
+
+            } catch (IOException e) {
+                Log.errorf("Cash receipt render error: %s", e.getMessage());
+            }
+        }
+
+        // Final feed + dot + cut
+        try {
+            for (int j = 0; j < 6; j++) out.write(LF);
+            out.write(".".getBytes(StandardCharsets.UTF_8));
+            out.write(LF);
+            out.write(CUT_FULL);
+        } catch (IOException ignored) { }
+
+        return out.toByteArray();
+    }
+
+    private static String movementLabel(String type) {
+        if (type == null) return "";
+        return switch (type.toUpperCase()) {
+            case "INCOME" -> "COMPROBANTE DE INGRESO";
+            case "EXPENSE" -> "COMPROBANTE DE EGRESO";
+            case "TRANSFER_OUT" -> "COMPROBANTE DE TRANSFERENCIA";
+            case "SAFE_DROP" -> "COMPROBANTE DE DEPÓSITO";
+            default -> "COMPROBANTE DE CAJA";
+        };
+    }
+
+    public static String cashMovementTemplate() {
+        return """
+
+[CENTER][BOLD]{{location_name}}[/BOLD][/CENTER]
+[CENTER]{{location_address}}[/CENTER]
+[CENTER]R.U.C.: {{location_ruc}}[/CENTER]
+[CENTER]Teléfono: {{location_phone}}[/CENTER]
+---
+[CENTER][BOLD]{{movement_type}}[/BOLD][/CENTER]
+---
+Fecha: {{date}}
+Hora: {{time}}
+Usuario: {{user_name}}
+---
+Concepto: {{observation}}
+---
+[CENTER][BOLD]TOTAL:  ${{amount}}[/BOLD][/CENTER]
+---
+[CENTER]DOCUMENTO SIN VALIDEZ TRIBUTARIA[/CENTER]
+[CENTER]COMPROBANTE INTERNO[/CENTER]""";
+    }
+
     // ── Default template ─────────────────────────────────
 
     public static String defaultTemplate() {
@@ -372,7 +492,6 @@ Ahorro Por Subsidio: $ {{subsidy_amount}}
 {/subsidy_amount}[CENTER]DOCUMENTO CON VALIDEZ TRIBUTARIA[/CENTER]
 [CENTER]Descarga de Factura en: www.sri.com.ec[/CENTER]
 [CENTER]POWERFIN GAS[/CENTER]
-[CENTER]GRACIAS POR SU COMPRA[/CENTER]
-[CUT]""";
+[CENTER]GRACIAS POR SU COMPRA[/CENTER]""";
     }
 }

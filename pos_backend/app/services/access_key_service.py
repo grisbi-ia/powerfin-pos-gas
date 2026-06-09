@@ -13,6 +13,7 @@ Structure (49 digits):
     49:    Dígito Verificador (Módulo 11)
 """
 
+import random
 from datetime import date
 
 
@@ -98,9 +99,9 @@ def generate_access_key(
     # 7. Secuencial (9 digits, zero-padded)
     secuencial = str(sequential).zfill(9)
 
-    # 8. Código Numérico (8 digits)
+    # 8. Código Numérico (8 digits) — random to avoid repetition
     if codigo_numerico is None:
-        codigo_numerico = sequential
+        codigo_numerico = random.randint(0, 99999999)
     codigo = str(codigo_numerico).zfill(8)
 
     # 9. Tipo de Emisión (1 digit)

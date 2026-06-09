@@ -236,19 +236,15 @@ async def create_dispatch(
     if product_id:
         unit_price_dec = Decimal(str(body.unit_price))
 
-        # Resolve subsidy from product for ticket printing
-        subsidy_per_unit = Decimal("0")
+        # Resolve base price from product for ticket printing
         base_price_dec = unit_price_dec
         if product_id:
-            prod_subsidy_result = await db.execute(
+            prod_result = await db.execute(
                 select(ProductModel).where(ProductModel.product_id == product_id)
             )
-            prod_with_subsidy = prod_subsidy_result.scalar_one_or_none()
-            if prod_with_subsidy:
-                if prod_with_subsidy.base_price:
-                    base_price_dec = Decimal(str(prod_with_subsidy.base_price))
-                if prod_with_subsidy.subsidy_per_unit:
-                    subsidy_per_unit = Decimal(str(prod_with_subsidy.subsidy_per_unit))
+            product_obj = prod_result.scalar_one_or_none()
+            if product_obj and product_obj.base_price:
+                base_price_dec = Decimal(str(product_obj.base_price))
 
         detail = DispatchDetail(
             dispatch_id=dispatch.dispatch_id,
@@ -256,7 +252,7 @@ async def create_dispatch(
             quantity=0,
             unit_price=float(unit_price_dec),
             price_without_subsidy=float(base_price_dec),
-            subsidy_amount=0,  # computed on complete when quantity is known
+            subsidy_amount=0,
             tax_rate=float(tax_rate),
             subtotal=0,
             tax_amount=0,
@@ -348,37 +344,24 @@ async def complete_dispatch(
             for det in details:
                 det.quantity = vol_per_detail
         
-        # Recalculate from Fusion amount
-        subtotal_dec = amount_dec
-        tax_dec = subtotal_dec - (subtotal_dec / (1 + tax_rate_dec))
-
-        # Calculate subsidy amounts now that quantity is known
-        # subsidy_amount = quantity × product.subsidy_per_unit
-        if first_detail.product_id and float(volume_dec) > 0:
-            from app.models.product import Product as ProductModel
-            prod_result = await db.execute(
-                select(ProductModel).where(ProductModel.product_id == first_detail.product_id)
-            )
-            product = prod_result.scalar_one_or_none()
-            if product and product.subsidy_per_unit:
-                subsidy_per_unit_dec = Decimal(str(product.subsidy_per_unit))
-                if subsidy_per_unit_dec > 0:
-                    vol_per_detail_dec = Decimal(str(vol_per_detail)) if float(volume_dec) > 0 else Decimal("0")
-                    total_subsidy = float(vol_per_detail_dec * subsidy_per_unit_dec)
-                    for det in details:
-                        det.subsidy_amount = total_subsidy / len(details) if len(details) > 0 else total_subsidy
+        # Wayne returns total (includes IVA). Recalculate subtotal and tax.
+        # base_price in products already includes IVA — no subsidy active.
+        total_dec = amount_dec
+        subtotal_dec = total_dec / (1 + tax_rate_dec)
+        tax_dec = total_dec - subtotal_dec
 
         # Update each detail proportionally
         for i, det in enumerate(details):
             share = Decimal("1") / len(details) if len(details) > 0 else Decimal("1")
             det.subtotal = float(subtotal_dec * share)
             det.tax_amount = float(tax_dec * share)
-            det.total = float(subtotal_dec * share)
+            det.total = float(total_dec * share)
+            det.subsidy_amount = 0
         
         # Update dispatch totals
         dispatch.subtotal = float(subtotal_dec)
         dispatch.tax_amount = float(tax_dec)
-        dispatch.total = float(subtotal_dec)
+        dispatch.total = float(total_dec)
     else:
         # Fallback: no detail exists yet (legacy dispatch)
         dispatch.total = float(amount_dec)

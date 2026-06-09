@@ -131,7 +131,8 @@ class TestAccessKey:
         # Positions 30-39 (0-indexed: 30:39)
         assert key[30:39] == "000000018"
 
-    def test_codigo_numerico_8_digits(self):
+    def test_codigo_numerico_8_digits_random(self):
+        """Código numérico must be 8 random digits (not sequential)."""
         key = generate_access_key(
             emission_date=date(2026, 6, 8),
             doc_type="FACTURA",
@@ -142,8 +143,12 @@ class TestAccessKey:
             sequential=18,
             emission_type=1,
         )
-        # Positions 39-47 (0-indexed: 39:47)
-        assert key[39:47] == "00000018"
+        # Positions 39-47 (0-indexed: 39:47), 8 digits
+        codigo = key[39:47]
+        assert len(codigo) == 8
+        assert codigo.isdigit()
+        # Must NOT equal sequential (the bug: was "00000018" = sequential)
+        assert codigo != "00000018"
 
     def test_tipo_emision_at_position_47(self):
         """Tipo de Emision is at position 47 (0-indexed), 1 digit."""
@@ -194,7 +199,8 @@ class TestAccessKey:
         assert key[24:27] == "001"           # establecimiento
         assert key[27:30] == "004"           # punto emisión
         assert key[30:39] == "000000018"     # secuencial
-        assert key[39:47] == "00000018"      # código numérico
+        assert len(key[39:47]) == 8          # código numérico (8 random digits)
+        assert key[39:47].isdigit()
         assert key[47] == "1"                # tipo emisión (1 digit)
         # key[48] = dígito verificador
 

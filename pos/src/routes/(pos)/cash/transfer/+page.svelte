@@ -4,7 +4,9 @@
 	import Header from '$lib/components/Header.svelte';
 	import { auth } from '$lib/stores/auth';
 	import { shift } from '$lib/stores/shift';
+	import { config } from '$lib/stores/config';
 	import * as powerfin from '$lib/api/powerfin';
+	import * as bridge from '$lib/api/bridge';
 	import type { OnlineUser } from '$lib/api/types';
 	import { SAFE_VAULT_ROLE } from '$lib/api/types';
 
@@ -15,6 +17,8 @@
 	let loading = false;
 	let loadingUsers = true;
 	let error = '';
+	let showPrintModal = false;
+	let printing = false;
 
 	$: selectedUser = users.find(u => u.user_id === selectedUserId);
 	$: isSafeVault = selectedUser?.role === SAFE_VAULT_ROLE;
@@ -56,12 +60,48 @@
 				amount,
 				observation: observation.trim()
 			});
-			goto('/cash');
-		} catch {
-			error = 'Error al realizar la transferencia';
+			showPrintModal = true;
+		} catch (err: any) {
+			error = err?.message || 'Error al realizar la transferencia';
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function handlePrint() {
+		printing = true;
+		try {
+			const loc = $config?.location;
+			const defaultIp = $config?.dispensers?.[0]?.printer_ip || '192.168.1.31';
+			const defaultPort = $config?.dispensers?.[0]?.printer_port || 9100;
+			const movType = isSafeVault ? 'SAFE_DROP' : 'TRANSFER_OUT';
+			await bridge.printReceipt({
+				type: 'CASH_MOVEMENT',
+				printerIp: defaultIp,
+				printerPort: defaultPort,
+				cashData: {
+					movementType: movType,
+					date: new Date().toLocaleDateString('es-EC'),
+					time: new Date().toLocaleTimeString('es-EC'),
+					userName: ($shift as any)?.user_name || '',
+					amount: amount?.toFixed(2) || '0.00',
+					observation: observation.trim() || (isSafeVault ? 'Depósito a caja fuerte' : `Transferencia a ${selectedUser?.name}`),
+					locationName: loc?.name || '',
+					locationAddress: loc?.address || '',
+					locationRuc: loc?.ruc || '',
+					locationPhone: loc?.phone || '',
+				}
+			});
+		} catch {
+			// Print failure is non-blocking
+		} finally {
+			printing = false;
+		}
+		goto('/cash');
+	}
+
+	function handleSkip() {
+		goto('/cash');
 	}
 
 	function userIcon(role: string): string {
@@ -196,5 +236,44 @@
 			</button>
 		</div>
 	</div>
+	{/if}
+
+	<!-- Print confirmation modal -->
+	{#if showPrintModal}
+		<div class="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
+			<div class="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-6 shadow-xl animate-slide-up">
+				<div class="text-center mb-4">
+					<div class="text-4xl mb-2">{isSafeVault ? '🏦' : '📤'}</div>
+					<div class="text-lg font-bold text-gray-800">
+						{isSafeVault ? 'Depósito registrado' : 'Transferencia registrada'}
+					</div>
+					<div class="text-sm text-gray-500 mt-1">
+						$ {amount?.toFixed(2)}
+						{#if !isSafeVault && selectedUser}
+							→ {selectedUser.name}
+						{/if}
+					</div>
+				</div>
+				<div class="text-sm text-gray-600 text-center mb-4">
+					¿Desea imprimir el comprobante?
+				</div>
+				<div class="grid grid-cols-2 gap-3">
+					<button
+						class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-semibold"
+						on:click={handleSkip}
+						disabled={printing}
+					>
+						No
+					</button>
+					<button
+						class="touch-btn bg-blue-600 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+						on:click={handlePrint}
+						disabled={printing}
+					>
+						{printing ? 'Imprimiendo...' : '🖨 Sí'}
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 </main>

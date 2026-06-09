@@ -30,6 +30,13 @@ public class ReceiptBuilder {
     }
 
     /**
+     * Renders a cash movement receipt using the cash template.
+     */
+    public byte[] buildCashMovementReceipt(CashMovementData data) throws IOException {
+        return renderer.renderCashMovement(data);
+    }
+
+    /**
      * Checks if a printer is reachable via TCP.
      */
     public boolean isPrinterReachable(String ip, int port) {
@@ -151,6 +158,53 @@ public class ReceiptBuilder {
                 try { return Integer.parseInt((String) v); } catch (NumberFormatException e) { }
             }
             return defaultVal;
+        }
+    }
+
+    // ── Cash movement receipt data ─────────────────────────
+
+    public static class CashMovementData {
+        public String locationName;
+        public String locationAddress;
+        public String locationRuc;
+        public String locationPhone;
+        public String movementType;   // INGRESO, EGRESO, TRANSFERENCIA
+        public String date;
+        public String time;
+        public String userName;
+        public String amount;
+        public String observation;
+
+        @SuppressWarnings("unchecked")
+        public static CashMovementData fromMap(Map<String, Object> request) {
+            CashMovementData d = new CashMovementData();
+
+            // Accept both camelCase (POS) and snake_case
+            Map<String, Object> data = (Map<String, Object>) request.get("cashData");
+            if (data == null) {
+                data = (Map<String, Object>) request.get("cash_data");
+            }
+            if (data == null) {
+                data = request;
+            }
+
+            d.locationName = str(data, "locationName", str(data, "location_name", "GASOLINERA"));
+            d.locationAddress = str(data, "locationAddress", str(data, "location_address", ""));
+            d.locationRuc = str(data, "locationRuc", str(data, "location_ruc", ""));
+            d.locationPhone = str(data, "locationPhone", str(data, "location_phone", ""));
+            d.movementType = str(data, "movementType", str(data, "movement_type", ""));
+            d.date = str(data, "date", "");
+            d.time = str(data, "time", "");
+            d.userName = str(data, "userName", str(data, "user_name", ""));
+            d.amount = str(data, "amount", "0.00");
+            d.observation = str(data, "observation", "");
+
+            return d;
+        }
+
+        private static String str(Map<String, Object> map, String key, String def) {
+            Object v = map.get(key);
+            return v != null ? v.toString() : def;
         }
     }
 }

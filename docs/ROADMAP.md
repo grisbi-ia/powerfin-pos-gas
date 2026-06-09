@@ -454,8 +454,12 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 [x] Cancelación a mitad del flujo (STOP durante FUELLING + rollback Gap D)
 [x] Celular apagado/offline durante despacho (completeDispatch en FusionBridge)
 [x] Ticket de impresión completo con datos desde BD
-[x] Clave de acceso SRI (49 dígitos, módulo 11)
+[x] Clave de acceso SRI (49 dígitos, módulo 11) + código numérico aleatorio
 [x] Configuración de impresora desde BD (sin archivos JSON)
+[x] Corrección subtotal/IVA (desglose correcto: total / 1.15)
+[x] Espacio al final de impresión (6 líneas + punto antes del corte)
+[x] Saldos negativos bloqueados en caja (validación egreso/transferencia/safe drop)
+[x] Comprobantes de caja con impresión + reimpresión (ingreso/egreso/transferencia)
 ☐ Despacho con pago mixto (efectivo + tarjeta)
 ☐ Reconexión de FusionBridge durante despacho activo
 ☐ Múltiples despachos simultáneos (ambos lados del SURT-01)
@@ -548,5 +552,5 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 | Fase 9c      | `v0.12.0`| Cuadre, lookup, billing, registro  |
 | Fase 10a     | `v0.13.0`| Edge cases: STOP, phone-off, Gap D |
 | Fase 10b     | `v0.14.0`| Impresión, clave SRI, DB config    |
-| Fase 10c     | `v0.15.0`| Pago mixto, reconexión, simultáneos|
+| Fase 10c     | `v0.15.0`| Correcciones: IVA, aleatorio, corte, saldo, comprobantes ✅ |
 | Fase 11      | `v1.0.0` | Producción GASOLINERA              |

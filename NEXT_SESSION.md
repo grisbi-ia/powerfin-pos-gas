@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-08)
+## Estado actual (2026-06-09)
 
 ### ✅ Fases completadas
 
@@ -24,14 +24,104 @@
 | 9c | `v0.12.0` | Phase 9 — cuadre de caja, transfers, lookup, billing preferencial, auto-save, validación, registro |
 | 10a | `v0.13.0` | Phase 10 — Edge cases: cancel/stop mid-flow, phone-off resilience, completeDispatch en FusionBridge |
 | **10b** | **v0.14.0** | **Phase 10 — Impresión: ticket completo, clave de acceso SRI, Font B, datos desde BD** |
+| **10c** | **v0.15.0** | **Phase 10 — Correcciones: subtotal/IVA, código aleatorio, espacio corte, saldos negativos, comprobantes caja** |
 
 ### 📊 Tests
 
 ```bash
 FusionBridge — 72 tests    ./mvnw test    # BUILD SUCCESS
-POS Backend  — 88 tests    pytest          # 88 passed (+17 access_key)
+POS Backend  — 93 tests    pytest          # 93 passed (+5 cash validation)
 Powerfin POS — 41 tests    npm run test    # 41 passed
-Total: 201 tests pasando
+Total: 206 tests pasando
+```
+
+---
+
+## Logros de la sesión (2026-06-09) — v0.15.0
+
+### 35. Corrección Subtotal/IVA — desglose correcto ✅
+
+**Problema:** `subtotal == total` ($1.00 ambos). El Wayne devuelve total con IVA incluido,
+pero el código lo asignaba como subtotal. Con IVA 15%: subtotal = total / 1.15.
+
+**Corrección en `complete_dispatch`:**
+```python
+# ✅ CORRECTO
+total_dec = amount_dec                          # $1.00 total Wayne (con IVA)
+subtotal_dec = total_dec / (1 + tax_rate_dec)   # $1.00 / 1.15 = $0.87
+tax_dec = total_dec - subtotal_dec              # $1.00 - $0.87 = $0.13
+```
+
+**DB:** `tax_types.rate` 0.1200 → 0.1500, `IVA_12` → `IVA_15`.
+**Subsidio:** desactivado — `subsidy_amount = 0` siempre, `price_without_subsidy = base_price`.
+
+### 36. Código numérico aleatorio en clave SRI ✅
+
+**Problema:** `codigo_numerico` usaba el mismo valor del secuencial → "00000019" repetitivo.
+
+**Corrección en `access_key_service.py`:**
+```python
+if codigo_numerico is None:
+    codigo_numerico = random.randint(0, 99999999)  # aleatorio 8 dígitos
+```
+
+### 37. Espacio al final de impresión — sin cortar texto ✅
+
+**Problema:** Solo 3 LF antes del corte → "GRACIAS POR SU COMPRA" salía cortado a la mitad.
+
+**Corrección en `TemplateRenderer.java`:** 6 líneas en blanco + punto visible + corte.
+`[CUT]` removido de la plantilla default.
+
+### 38. Saldos negativos bloqueados en caja ✅
+
+**Nueva función `_available_cash()`** calcula disponible real:
+```
+disponible = apertura + ingresos + ventas_cobradas - egresos - transferencias - safe_drops
+```
+
+Validaciones agregadas:
+- `EXPENSE` → 400 "Saldo insuficiente" si `amount > disponible`
+- `TRANSFER_OUT` → misma validación
+- `SAFE_DROP` → misma validación
+- `INCOME` → sin restricción
+
+**5 tests nuevos** (`test_api_cash.py`): egreso rechazado, egreso permitido, transferencia rechazada,
+safe drop rechazado, ingreso siempre permitido.
+
+### 39. Comprobantes de caja — impresión + reimpresión ✅
+
+**FusionBridge:**
+- `TemplateRenderer.renderCashMovement()` + plantilla `cashMovementTemplate()`
+- `ReceiptBuilder.CashMovementData` + `fromMap()`
+- `PrintResource` maneja `type=CASH_MOVEMENT`
+
+**Backend:** `GET /api/pos/cash-movements/{id}` con `user_name` para reimpresión.
+
+**POS:**
+- Modal "¿Desea imprimir comprobante?" al crear ingreso/egreso/transferencia
+- Botón 🖨 en cada movimiento del listado de caja para reimpresión
+
+**Títulos por tipo:** INGRESO, EGRESO, TRANSFERENCIA, DEPÓSITO.
+
+### Archivos modificados (esta sesión)
+
+```
+FusionBridge (3):
+  TemplateRenderer.java       ← +renderCashMovement, +movementLabel, +cashMovementTemplate
+  ReceiptBuilder.java         ← +CashMovementData class, +buildCashMovementReceipt
+  PrintResource.java          ← maneja type=CASH_MOVEMENT
+
+Backend (4):
+  services/access_key_service.py  ← random.randint en código numérico
+  api/dispatches.py               ← subtotal=total/(1+tax), IVA 15%, subsidy=0
+  api/cash.py                     ← +_available_cash(), +GET cash-movements/{id}, validación saldo
+  tests/test_api_cash.py          ← NUEVO: 5 tests validación saldo negativo
+  tests/test_access_key.py        ← actualizados: validan aleatoriedad
+
+POS (3):
+  cash/movement/+page.svelte      ← modal print al crear ingreso/egreso
+  cash/transfer/+page.svelte      ← modal print al crear transferencia
+  cash/+page.svelte               ← botón 🖨 reimpresión en lista movimientos
 ```
 
 ---
@@ -281,19 +371,27 @@ pos/src/routes/(pos)/new-dispatch/+page.svelte ← lookupPerson, token real, val
 
 ## Pendiente para próxima sesión
 
-### 🔴 Prioridad — Correcciones
+### 🔴 Prioridad — Integración SRI Key49
 
 ```
-☐ 1. Revisión de subtotales y totales en el despacho
-     — Verificar que subtotal, IVA y total sean correctos en dispatch_details
-     — El total del Wayne incluye IVA, el subtotal debe ser total / 1.15
+☐ 1. Integración con sistema de emisión de facturas al SRI Key49
+     — Conectar el POS Backend con el servicio Key49 del SRI
+     — Envío automático de facturas electrónicas al cerrar venta
+     — Recepción de autorización SRI (clave de acceso + fecha autorización)
+     — Almacenar respuesta SRI (autorización, estado, fecha) en DB
+     — Reenvío de facturas pendientes (cola de reintentos)
+     — Endpoint de consulta de estado de factura
+```
 
-☐ 2. Mejorar el código numérico para la clave de acceso SRI
-     — Actualmente usa el mismo secuencial. Debe ser un número aleatorio
-     — Implementar generación aleatoria de 8 dígitos
+### 🟡 Backlog Phase 10c
 
-☐ 3. Agregar más espacio al final de la impresión
-     — Más líneas en blanco antes del corte para que no se corte el texto
+```
+☐ 2. Pago mixto (efectivo + tarjeta)
+☐ 3. Reconexión FusionBridge durante despacho activo
+☐ 4. Múltiples despachos simultáneos
+☐ 5. Prueba de cuadre de caja end-to-end con hardware real
+☐ 6. Ajustar ATO en consola Wayne de 0 → 180s
+☐ 7. Migración Alembic para schema acumulado
 ```
 
 ---
