@@ -267,6 +267,8 @@ async def get_shift_dispatches(
             "access_key": d.access_key,
             "credit_contract_id": d.credit_contract_id,
             "credit_status": d.credit_status,
+            "sri_status": d.sri_status,
+            "key49_access_key": d.key49_access_key,
         }
         for d in dispatches
     ]

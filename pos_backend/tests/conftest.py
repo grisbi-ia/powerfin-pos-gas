@@ -93,6 +93,10 @@ async def _seed_data(db: AsyncSession):
     db.add(CompanyInfo(ruc="1790012345001", name="TEST GAS", commercial_name="TEST"))
     db.add(SystemConfig(key="accounting_branch_code", value="001"))
     db.add(SystemConfig(key="default_currency", value="USD"))
+    db.add(SystemConfig(key="key49_api_key", value="k49_test_00000000000000000000"))
+    db.add(SystemConfig(key="key49_base_url", value="https://key49.apx5.com/v1"))
+    db.add(SystemConfig(key="key49_sandbox", value="true"))
+    db.add(SystemConfig(key="key49_enabled", value="true"))
 
     admin_role = Role(code="ADMIN", name="Admin")
     disp_role = Role(code="DISPATCHER", name="Despachador")
@@ -104,7 +108,7 @@ async def _seed_data(db: AsyncSession):
         User(user_id=2, username="carlos", pin_hash=hash_pin("1234"), name="Carlos Sarmiento", role_id=disp_role.role_id, accounting_cash_code="CAJA-01"),
     ])
 
-    db.add(TaxType(code="IVA_12", name="IVA 12%", rate=0.12))
+    db.add(TaxType(code="IVA_15", name="IVA 15%", rate=0.1500))
     db.add(TaxType(code="IVA_0", name="IVA 0%", rate=0.0))
     await db.flush()
 

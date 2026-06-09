@@ -38,6 +38,25 @@ from app.services.access_key_service import generate_access_key
 router = APIRouter(prefix="/api/pos/dispatches", tags=["dispatches"])
 
 
+async def _key49_background(dispatch_id: int):
+    """Fire-and-forget Key49 invoice emission with its own DB session."""
+    from app.database import async_session
+    from app.services.key49_service import emitir_factura
+    async with async_session() as session:
+        # Check if Key49 is enabled
+        from app.models.company import SystemConfig
+        result = await session.execute(
+            select(SystemConfig).where(SystemConfig.key == "key49_enabled")
+        )
+        cfg = result.scalar_one_or_none()
+        if cfg and cfg.value.lower() == "false":
+            return  # Key49 disabled — invoice stays PENDING, no attempt
+        try:
+            await emitir_factura(session, dispatch_id)
+        except Exception:
+            pass
+
+
 def _build_order_id() -> str:
     now = datetime.now()
     return f"OV-{now.strftime('%Y%m%d%H%M%S')}-{now.microsecond // 1000:03d}"
@@ -434,6 +453,15 @@ async def collect_dispatch(
 
     await db.commit()
 
+    # Fire-and-forget: send invoice to SRI via Key49 (non-blocking)
+    # Pass only dispatch_id — background task creates its own DB session
+    try:
+        import asyncio
+        dispatch_id = dispatch.dispatch_id
+        asyncio.create_task(_key49_background(dispatch_id))
+    except Exception:
+        pass  # Key49 failure never blocks the sale
+
     return CollectDispatchResponse(
         order_id=order_id,
         status="COLLECTED",
@@ -626,6 +654,72 @@ async def get_active_dispatches(
             "access_key": d.access_key,
             "credit_contract_id": d.credit_contract_id,
             "credit_status": d.credit_status,
+            "sri_status": d.sri_status,
+            "key49_access_key": d.key49_access_key,
         }
         for d in dispatches
     ]
+
+
+@router.get("/{order_id}/sri-status")
+async def get_sri_status(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get SRI electronic invoice status for a dispatch."""
+    result = await db.execute(
+        select(Dispatch).where(Dispatch.order_id == order_id)
+    )
+    dispatch = result.scalar_one_or_none()
+    if not dispatch:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    from app.services.key49_service import consultar_estado
+    return await consultar_estado(db, dispatch.dispatch_id)
+
+
+@router.post("/{order_id}/retry-sri")
+async def retry_single_invoice(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Manually retry SRI emission for a single dispatch (ADMIN/SUPERVISOR)."""
+    if _user.role and _user.role.code not in ("ADMIN", "SUPERVISOR"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    result = await db.execute(
+        select(Dispatch).where(Dispatch.order_id == order_id)
+    )
+    dispatch = result.scalar_one_or_none()
+    if not dispatch:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    # Reset to PENDING to allow retry (even FAILED ones)
+    dispatch.sri_status = "PENDING"
+    dispatch.sri_messages = None
+    await db.commit()
+
+    from app.services.key49_service import emitir_factura
+    success = await emitir_factura(db, dispatch.dispatch_id)
+
+    return {
+        "order_id": order_id,
+        "success": success,
+        "sri_status": dispatch.sri_status,
+    }
+
+
+@router.post("/retry-pending-invoices")
+async def retry_pending_invoices_endpoint(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Retry all pending SRI invoices. Admin/SUPERVISOR only."""
+    if _user.role and _user.role.code not in ("ADMIN", "SUPERVISOR"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    from app.services.key49_service import retry_pending_invoices
+    result = await retry_pending_invoices(db)
+    return result

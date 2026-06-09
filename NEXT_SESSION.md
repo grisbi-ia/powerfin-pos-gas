@@ -25,6 +25,7 @@
 | 10a | `v0.13.0` | Phase 10 — Edge cases: cancel/stop mid-flow, phone-off resilience, completeDispatch en FusionBridge |
 | **10b** | **v0.14.0** | **Phase 10 — Impresión: ticket completo, clave de acceso SRI, Font B, datos desde BD** |
 | **10c** | **v0.15.0** | **Phase 10 — Correcciones: subtotal/IVA, código aleatorio, espacio corte, saldos negativos, comprobantes caja** |
+| **10d** | **v0.16.0** | **Phase 10 — Key49: facturación electrónica SRI, fire-and-forget, polling, reintentos** |
 
 ### 📊 Tests
 
@@ -122,6 +123,56 @@ POS (3):
   cash/movement/+page.svelte      ← modal print al crear ingreso/egreso
   cash/transfer/+page.svelte      ← modal print al crear transferencia
   cash/+page.svelte               ← botón 🖨 reimpresión en lista movimientos
+```
+
+---
+
+## Logros de la sesión (2026-06-09) — v0.16.0
+
+### 40. Integración Key49 — Facturación electrónica SRI ✅
+
+**DB — 5 columnas nuevas en dispatches:**
+- `key49_invoice_id` (UUID de Key49)
+- `key49_access_key` (clave SRI oficial de 49 dígitos)
+- `sri_status` (PENDING → CREATED → SIGNED → SENT → AUTHORIZED / REJECTED / FAILED)
+- `sri_authorization_date` (fecha de autorización SRI)
+- `sri_messages` (JSON con errores SRI si rechazado)
+
+**Servicio `key49_service.py` (NUEVO):**
+- `emitir_factura()`: POST /v1/invoices → construye payload desde dispatch + person + details
+- `_poll_autorizacion()`: polling cada 2s (máx 10 intentos) hasta AUTHORIZED/REJECTED
+- `consultar_estado()`: devuelve estado SRI actual
+- `retry_pending_invoices()`: reintenta PENDING, ignora >24h (SRI rechaza fecha pasada)
+
+**Arquitectura fire-and-forget:**
+- `collect_dispatch` dispara `asyncio.create_task(_key49_background)` con sesión DB independiente
+- Si Key49 no responde → `sri_status = PENDING`, venta completada, ticket impreso
+- El cliente NUNCA espera por Key49
+
+**Toggle `key49_enabled` en system_config:**
+- `true` → envía facturas automáticamente
+- `false` → no intenta enviar (testing, emergencias)
+
+**Mappings:**
+- `persons.id_type`: CED→05, RUC→04
+- `tax_types.rate`: 0%→0, 12%→2, 15%→4
+- `payment_methods`: EFECTIVO→01, TARJETA→19, TRANSFERENCIA→20, etc.
+- `issue_date`: siempre hoy en zona Ecuador (UTC-5)
+
+**Endpoints nuevos:**
+- `GET /api/pos/dispatches/{order_id}/sri-status` — consultar estado SRI
+- `POST /api/pos/dispatches/{order_id}/retry-sri` — reintento manual (ADMIN)
+- `POST /api/pos/dispatches/retry-pending-invoices` — reintento masivo (ADMIN)
+
+### Archivos modificados (esta sesión)
+
+```
+Backend (5):
+  models/dispatch.py              ← +5 columnas Key49
+  services/key49_service.py       ← NUEVO: emitir, polling, retry, consultar
+  api/dispatches.py               ← _key49_background, +3 endpoints SRI
+  api/shifts.py                   ← +sri_status, key49_access_key en respuesta
+  tests/conftest.py               ← key49 config + IVA_15 seed fix
 ```
 
 ---
@@ -371,16 +422,37 @@ pos/src/routes/(pos)/new-dispatch/+page.svelte ← lookupPerson, token real, val
 
 ## Pendiente para próxima sesión
 
-### 🔴 Prioridad — Integración SRI Key49
+### 🔴 Prioridad — Cierre de turno con cuadre en CERO
 
 ```
-☐ 1. Integración con sistema de emisión de facturas al SRI Key49
-     — Conectar el POS Backend con el servicio Key49 del SRI
-     — Envío automático de facturas electrónicas al cerrar venta
-     — Recepción de autorización SRI (clave de acceso + fecha autorización)
-     — Almacenar respuesta SRI (autorización, estado, fecha) en DB
-     — Reenvío de facturas pendientes (cola de reintentos)
-     — Endpoint de consulta de estado de factura
+☐ 1. Refactorizar cierre de turno (close_shift)
+     — REGLA: el usuario SIEMPRE debe cerrar en CERO
+     — Todo el efectivo debe entregarse vía TRANSFERENCIA a Caja Fuerte
+       o vía EGRESO a otro compañero antes de cerrar
+     — Validación fuerte: si saldo != 0 → RECHAZAR cierre con mensaje claro
+
+☐ 2. Pantalla de cierre de turno (POS)
+     — Sección 1: RESUMEN DE EFECTIVO
+       · Ventas en efectivo (total + cantidad)
+       · Ingresos (total + cantidad)
+       · Egresos (total + cantidad)
+       · Transferencias enviadas/recibidas
+       · Safe drops
+       · SALDO ESPERADO (sumatoria)
+     — Sección 2: OTRAS FORMAS DE PAGO (no efectivo)
+       · Tarjeta, QR, Crédito, Transferencia, etc.
+       · Cantidad de transacciones y total por cada una
+     — Campo: "Efectivo contado" (lo que el usuario cuenta físicamente)
+     — Indicador: DIFERENCIA entre saldo esperado y contado
+     — Botón: CERRAR TURNO E IMPRIMIR
+
+☐ 3. Template de cierre de turno (FusionBridge)
+     — Plantilla completa con resumen de caja
+     · Apertura, ingresos, egresos, ventas efectivo, transferencias, safe drops
+     · Totales por forma de pago
+     · Efectivo contado vs esperado + diferencia
+     · Fecha, hora, usuario, turno
+     · Firma del supervisor (espacio en blanco)
 ```
 
 ### 🟡 Backlog Phase 10c

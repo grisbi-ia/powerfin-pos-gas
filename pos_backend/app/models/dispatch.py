@@ -80,6 +80,23 @@ class Dispatch(Base):
     access_key: Mapped[str | None] = mapped_column(
         String(49), comment="SRI access key (49 digits, computed at invoicing)"
     )
+    # Key49 integration — SRI electronic invoicing
+    key49_invoice_id: Mapped[str | None] = mapped_column(
+        String(36), comment="Key49 invoice UUID"
+    )
+    key49_access_key: Mapped[str | None] = mapped_column(
+        String(49), comment="Official SRI access key from Key49"
+    )
+    sri_status: Mapped[str | None] = mapped_column(
+        String(20), default="PENDING",
+        comment="SRI status: PENDING, CREATED, SIGNED, SENT, AUTHORIZED, REJECTED, FAILED"
+    )
+    sri_authorization_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="When SRI authorized"
+    )
+    sri_messages: Mapped[str | None] = mapped_column(
+        String(500), comment="JSON array of SRI error messages if rejected"
+    )
 
 
 class DispatchDetail(Base):
