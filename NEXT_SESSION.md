@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-09)
+## Estado actual (2026-06-10)
 
 ### ✅ Fases completadas
 
@@ -26,14 +26,110 @@
 | **10b** | **v0.14.0** | **Phase 10 — Impresión: ticket completo, clave de acceso SRI, Font B, datos desde BD** |
 | **10c** | **v0.15.0** | **Phase 10 — Correcciones: subtotal/IVA, código aleatorio, espacio corte, saldos negativos, comprobantes caja** |
 | **10d** | **v0.16.0** | **Phase 10 — Key49: facturación electrónica SRI, fire-and-forget, polling, reintentos** |
+| **10e** | **v0.16.1** | **Phase 10 — Correcciones: zona horaria, clave Key49, IPs impresora, subtotal→total, reimpresión** |
 
 ### 📊 Tests
 
 ```bash
-FusionBridge — 72 tests    ./mvnw test    # BUILD SUCCESS
-POS Backend  — 93 tests    pytest          # 93 passed (+5 cash validation)
+FusionBridge — 67 tests    ./mvnw test    # BUILD SUCCESS
+POS Backend  — 93 tests    pytest          # 93 passed
 Powerfin POS — 41 tests    npm run test    # 41 passed
-Total: 206 tests pasando
+Total: 201 tests pasando
+```
+
+---
+
+## Logros de la sesión (2026-06-10) — v0.16.1
+
+### 41. Zona horaria unificada — ECUADOR_TZ ✅
+
+**Problema:** Mezcla de `datetime.now()` (naive), `datetime.now(timezone.utc)`, y ECUADOR_TZ local.
+`.replace(tzinfo=utc)` sobre datetime con offset -05 causaba corte de 24h de facturas Key49
+5 horas antes de lo debido.
+
+**Corrección:**
+- `config.py`: nueva constante compartida `ECUADOR_TZ = timezone(timedelta(hours=-5))`
+- `key49_service.py`: `datetime.now(ECUADOR_TZ)` en sri_authorization_date, cutoff, idempotency key
+- `shifts.py`: `datetime.now(ECUADOR_TZ)` en closed_at
+- `dispatches.py`: `datetime.now(ECUADOR_TZ)` en completed_at, stale_cutoff, order_id, local_date
+- `auth_service.py`: sin cambio (JWT usa UTC por estándar RFC 7519)
+
+### 42. Clave de acceso enviada a Key49 ✅
+
+**Problema:** Key49 generaba su propia clave de acceso, diferente a la impresa en el ticket.
+
+**Corrección:** `_build_invoice_payload()` incluye `"access_key": dispatch.access_key` en el payload.
+Key49 respeta la clave enviada y la usa para el SRI → misma clave en ticket y SRI.
+
+### 43. Eliminación de key49_sandbox redundante ✅
+
+`key49_sandbox` en system_config era redundante. El ambiente se determina en un solo lugar:
+`company_info.sri_environment` (1=PRUEBAS, 2=PRODUCCION). Eliminado de código y BD.
+
+### 44. Columnas Key49 en BD + system_config ✅
+
+**dispatches:** +5 columnas (key49_invoice_id, key49_access_key, sri_status,
+sri_authorization_date, sri_messages).
+
+**system_config:** +3 entradas (key49_api_key, key49_base_url, key49_enabled).
+Aplicado en powerfin_gas y powerfin_gas_test.
+
+### 45. final_amount = total (no subtotal) ✅
+
+**Problema:** `get_active_dispatches` y `get_shift_dispatches` devolvían
+`final_amount = d.subtotal` ($0.87 sin IVA) en vez de `d.total` ($1.00 con IVA).
+El POS mostraba "Cobrar $0.87" y registraba el pago por $0.87 en dispatch_payments.
+
+**Corrección:** Ambos endpoints devuelven `float(d.total or 0)`.
+
+### 46. Eliminación de fallbacks de IPs de impresora ✅
+
+**Problema:** FusionBridge tenía IPs hardcodeadas (192.168.1.31/32) como fallback en
+properties, PrinterConfig.java, y múltiples defaults. Errores de conectividad silenciosos.
+
+**Corrección:**
+- `PrinterConfig.java`: reducido a solo policy (sin islas, sin IPs, sin JSON file)
+- `PrintResource.java`: exige `printerIp` + `printerPort` del POS → error 400 si falta
+- `application.properties`: eliminadas island IPs y printer.config.file
+- `BridgeHealthResource.java`: sin referencias a islas de impresora
+- `AGENTS.md`: IPs reemplazadas por placeholders referenciales
+
+### 47. Corrección de reimpresión de despacho ✅
+
+**Bug 1 — TypeError silencioso:** `subsidy_per_unit` venía como string `'0E+2'`
+del backend. `string.toFixed(4)` lanzaba TypeError, tragado por `catch {}` sin log.
+
+**Bug 2 — Config no cargado:** `loadData()` en historial nunca cargaba `$config`.
+Si el layout fallaba al cargarlo, `handleReprint` retornaba sin hacer nada.
+
+**Correcciones:**
+- Frontend: `Number(val ?? 0).toFixed()` en todos los valores del API (8 ubicaciones)
+- Frontend: `console.error('[reprint] ERROR:', err)` en catch del historial
+- Frontend: `loadData()` carga config si `!$configStore.loaded`
+- Backend: `float()` explícito en subsidy_per_unit, subsidy_amount, price_without_subsidy
+
+### Archivos modificados (esta sesión)
+
+```
+FusionBridge (6):
+  PrinterConfig.java           ← simplificado: solo policy, sin islas/IPs/JSON
+  PrintResource.java           ← error 400 si falta printerIp, sin fallbacks
+  BridgeHealthResource.java    ← sin referencias a islas de impresora
+  application.properties       ← eliminadas island IPs y printer.config.file
+  PrinterConfigTest.java       ← reescrito para nueva API simplificada (7 tests)
+
+Backend (5):
+  config.py                    ← +ECUADOR_TZ constante compartida
+  services/key49_service.py    ← ECUADOR_TZ, access_key en payload, -sandbox
+  api/dispatches.py            ← ECUADOR_TZ, final_amount=total, float() en subsidy
+  api/shifts.py                ← ECUADOR_TZ, final_amount=total, float() en subsidy
+
+POS (5):
+  bridge.ts                    ← +log datos enviados, +error body en catch
+  history/+page.svelte         ← +carga config, +Number().toFixed(), +console.error
+  cash/+page.svelte            ← +Number().toFixed()
+  SaleWizard.svelte            ← +Number().toFixed()
+  AGENTS.md                    ← IPs referenciales, no hardcodeadas
 ```
 
 ---
@@ -421,6 +517,25 @@ pos/src/routes/(pos)/new-dispatch/+page.svelte ← lookupPerson, token real, val
 ---
 
 ## Pendiente para próxima sesión
+
+### 🔴 Urgente — Mejorar plantilla de impresión de factura
+
+```
+☐ 1. Revisar y mejorar la plantilla de ticket (TemplateRenderer.java)
+     — El formato actual es funcional pero debe revisarse:
+       · Layout y espaciado general del ticket
+       · Información de la empresa (nombre, dirección, RUC, teléfono)
+       · Datos del cliente (nombre, cédula/RUC, dirección, teléfono, email)
+       · Detalle del despacho (producto, cantidad, precio unitario, subtotal, IVA, total)
+       · Clave de acceso SRI (49 dígitos) — legible y bien posicionada
+       · Fecha y hora de emisión
+       · Punto de emisión y secuencial
+       · Mensaje de pie ("Gracias por su compra", etc.)
+       · Código QR si aplica
+     — Validar contra un ticket fiscal real del SRI
+     — Probar con datos reales: empresa NEOGAS, cliente con cédula/RUC
+     — Asegurar que la clave de acceso sea legible ( fuente, tamaño, sin corte)
+```
 
 ### 🔴 Prioridad — Cierre de turno con cuadre en CERO
 

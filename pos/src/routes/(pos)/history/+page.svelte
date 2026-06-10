@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import Header from '$lib/components/Header.svelte';
 	import { auth } from '$lib/stores/auth';
 	import { shift } from '$lib/stores/shift';
-	import { config } from '$lib/stores/config';
+	import { config, configLoaded } from '$lib/stores/config';
+	import { configStore } from '$lib/stores/config';
 	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge';
 	import type { DispatchOrder, CashMovement } from '$lib/api/types';
@@ -24,6 +26,15 @@
 
 	async function loadData() {
 		if (!$auth.token || !$shift) return;
+
+		// Ensure config is loaded (otherwise reprint fails silently)
+		if (!get(configLoaded) && get(auth).token) {
+			try {
+				const appConfig = await powerfin.fetchConfig(get(auth).token!);
+				configStore.setConfig(appConfig);
+			} catch { /* config load best-effort, proceed without it */ }
+		}
+
 		try {
 			[dispatches, movements] = await Promise.all([
 				powerfin.getShiftDispatches($auth.token, $shift.shift_id),
@@ -112,8 +123,10 @@
 	}
 
 	async function handleReprint(order: DispatchOrder) {
-		if (!$config) return;
+		console.log('[reprint] called, config:', $config ? 'loaded' : 'NULL', 'dispensers:', $config?.dispensers?.length ?? 0);
+		if (!$config) { console.error('[reprint] config is null, cannot print'); return; }
 		const dispenser = $config.dispensers.find(d => d.dispenser_id === order.dispenser_id);
+		console.log('[reprint] dispenser:', dispenser?.dispenser_id, 'printer_ip:', dispenser?.printer_ip);
 		const printerIp = dispenser?.printer_ip || '192.168.1.21';
 		const printerPort = dispenser?.printer_port || 9100;
 		const loc = $config.location;
@@ -131,11 +144,11 @@
 					hoseId: order.hose_id,
 					orderId: order.order_id,
 					volume: order.final_volume ?? '0',
-					amount: (order.final_amount ?? 0).toFixed(2),
-					unitPrice: (order.unit_price ?? 0).toFixed(7),
-					priceWithoutSubsidy: order.price_without_subsidy ? order.price_without_subsidy.toFixed(4) : '',
-					subsidyPerUnit: order.subsidy_per_unit ? order.subsidy_per_unit.toFixed(4) : '',
-					subsidyAmount: order.subsidy_amount ? order.subsidy_amount.toFixed(2) : '',
+					amount: Number(order.final_amount ?? 0).toFixed(2),
+					unitPrice: Number(order.unit_price ?? 0).toFixed(7),
+					priceWithoutSubsidy: order.price_without_subsidy != null ? Number(order.price_without_subsidy).toFixed(4) : '',
+					subsidyPerUnit: order.subsidy_per_unit != null ? Number(order.subsidy_per_unit).toFixed(4) : '',
+					subsidyAmount: order.subsidy_amount != null ? Number(order.subsidy_amount).toFixed(2) : '',
 					paymentMethod: order.payment_method,
 					grade: order.grade,
 					customerName: order.customer_name,
@@ -164,7 +177,8 @@
 					time: new Date().toLocaleTimeString('es-EC'),
 				}
 			});
-		} catch {
+		} catch (err) {
+			console.error('[reprint] ERROR:', err);
 			printError = order.order_id;
 		} finally {
 			printing = null;
@@ -259,7 +273,7 @@
 										{formatCurrency(order.final_amount)}
 									</div>
 									<div class="text-xs text-gray-400">
-										{order.final_volume ?? '—'} L · {order.unit_price?.toFixed(3) ?? '—'} /L
+										{order.final_volume ?? '—'} L · {Number(order.unit_price ?? 0).toFixed(3)} /L
 									</div>
 								</div>
 							</div>

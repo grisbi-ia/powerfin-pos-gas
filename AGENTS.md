@@ -30,11 +30,14 @@ but is independent from the ERP — it can work with any ERP via accounting expo
 ## Hardware (validated against real Wayne Synergy)
 
 ```
-Wayne Synergy:    192.168.1.20:3011  (Firmware Rel-5.19.1)
-Printer Island 1: 192.168.1.31:9100  (ESC/POS, raw TCP socket, no CUPS/drivers)
-Printer Island 2: 192.168.1.32:9100
-Server:           192.168.1.10       (Debian 12, direct install, NO Docker)
+Wayne Synergy:    <ip-dispensador>:3011  (Firmware Rel-5.19.1)
+Printer Island 1: <ip-impresora-1>:9100  (ESC/POS, raw TCP socket, no CUPS/drivers)
+Printer Island 2: <ip-impresora-2>:9100
+Server:           <ip-servidor>          (Debian 12, direct install, NO Docker)
 ```
+
+> Las IPs reales se configuran en la tabla `dispensers` (printer_ip, printer_port)
+> y en `system_config`. NO hardcodear IPs en código ni docs.
 
 ## Fusion Protocol (critical — easy to get wrong)
 

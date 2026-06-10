@@ -1,12 +1,13 @@
 """Shift management — open, current, close."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.config import ECUADOR_TZ
 from app.database import get_db
 from app.models import CashMovement, Dispatch, Shift
 from app.models.payment import PaymentMethod
@@ -37,7 +38,7 @@ async def open_shift(
     )
     for s in existing.scalars().all():
         s.status = "CLOSED"
-        s.closed_at = datetime.now(timezone.utc)
+        s.closed_at = datetime.now(ECUADOR_TZ)
 
     shift = Shift(
         user_id=current_user.user_id,
@@ -102,7 +103,7 @@ async def close_shift(
         raise HTTPException(status_code=404, detail="Turno no encontrado")
 
     shift.status = "CLOSED"
-    shift.closed_at = datetime.now(timezone.utc)
+    shift.closed_at = datetime.now(ECUADOR_TZ)
     shift.closing_cash = float(body.closing_cash)
 
     # Count dispatches
@@ -247,9 +248,9 @@ async def get_shift_dispatches(
             "preset_type": "MONEY",
             "preset_value": "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
-            "price_without_subsidy": detail_map[d.dispatch_id].price_without_subsidy if d.dispatch_id in detail_map else None,
-            "subsidy_per_unit": detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else None,
-            "subsidy_amount": detail_map[d.dispatch_id].subsidy_amount if d.dispatch_id in detail_map else None,
+            "price_without_subsidy": float(detail_map[d.dispatch_id].price_without_subsidy) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].price_without_subsidy is not None else None,
+            "subsidy_per_unit": float(detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else 0.0,
+            "subsidy_amount": float(detail_map[d.dispatch_id].subsidy_amount) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].subsidy_amount is not None else 0.0,
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
             "customer_id": person_map[d.person_id].id_number if d.person_id and d.person_id in person_map else None,
@@ -261,7 +262,7 @@ async def get_shift_dispatches(
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
             "authorized_by_user_id": d.authorized_by_user_id,
-            "final_amount": d.subtotal if d.subtotal else d.total,
+            "final_amount": float(d.total or 0),
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
             "invoice_number": d.sequential_number,
             "access_key": d.access_key,

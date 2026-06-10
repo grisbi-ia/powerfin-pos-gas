@@ -356,12 +356,12 @@
 				fuelData: {
 					dispenserId, hoseId, orderId: collectOrder?.orderId ?? '',
 					volume: finalVolume, amount: finalAmount.toFixed(2),
-					unitPrice: (collectOrder?.unitPrice ?? selectedHose?.unit_price ?? 0).toFixed(7),
+					unitPrice: Number(collectOrder?.unitPrice ?? selectedHose?.unit_price ?? 0).toFixed(7),
 					paymentMethod, grade: gradeName,
 					unit: gradeUnit === 'GALONES' ? 'GAL' : 'L',
 					// Subsidy from product (via config / price list)
-					priceWithoutSubsidy: (selectedHose?.base_price ?? 0).toFixed(4),
-					subsidyPerUnit: (selectedHose?.subsidy_per_unit ?? 0).toFixed(4),
+					priceWithoutSubsidy: Number(selectedHose?.base_price ?? 0).toFixed(4),
+					subsidyPerUnit: Number(selectedHose?.subsidy_per_unit ?? 0).toFixed(4),
 					subsidyAmount: '',
 					// Invoice
 					invoiceId: '',
@@ -522,7 +522,7 @@
 							<button class="touch-btn w-full p-4 rounded-xl border-2 border-gray-200 hover:border-primary text-left"
 								on:click={() => selectHose(hose)}>
 								<div class="font-semibold text-gray-800">Pistola {hose.hose_id} · ⛽ {hose.grade_name}</div>
-								<div class="text-xs text-gray-500">${hose.unit_price.toFixed(3)}/{unitAbbr}</div>
+								<div class="text-xs text-gray-500">${Number(hose.unit_price ?? 0).toFixed(3)}/{unitAbbr}</div>
 							</button>
 						{/each}
 					</div>
@@ -748,7 +748,7 @@
 				<div class="card p-4 mb-4">
 					<div class="space-y-2">
 						<div class="flex justify-between text-sm"><span class="text-gray-500">Volumen</span><span class="font-medium">{finalVolume} {unitAbbr}</span></div>
-						<div class="flex justify-between text-sm"><span class="text-gray-500">Precio</span><span class="font-medium">${collectOrder.unitPrice.toFixed(3)}/{unitAbbr}</span></div>
+						<div class="flex justify-between text-sm"><span class="text-gray-500">Precio</span><span class="font-medium">${Number(collectOrder.unitPrice ?? 0).toFixed(3)}/{unitAbbr}</span></div>
 						{#if collectOrder.customerName}<div class="flex justify-between text-sm"><span class="text-gray-500">Cliente</span><span class="font-medium">{collectOrder.customerName}</span></div>{/if}
 						{#if collectOrder.plate}<div class="flex justify-between text-sm"><span class="text-gray-500">Placa</span><span class="font-medium font-mono">{collectOrder.plate}</span></div>{/if}
 						<hr class="border-gray-100" />

@@ -1,6 +1,5 @@
 package com.powerfin.pos.bridge.print;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 import io.quarkus.logging.Log;
@@ -13,6 +12,11 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+/**
+ * Print resource. Printer IPs come from the POS (read from the database).
+ * FusionBridge has NO printer IP configuration — if the POS doesn't send
+ * printerIp + printerPort, the request fails with a clear error.
+ */
 @Path("/api/print")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -68,32 +72,18 @@ public class PrintResource {
                 )).build();
             }
 
-            // Priority 1: printer_ip + printer_port sent directly by POS (from DB config)
+            // Printer IP MUST come from the POS (read from database).
+            // FusionBridge has no printer IP configuration.
             String printerIp = strParam(request, "printerIp");
             int printerPort = intParam(request, "printerPort", 0);
 
-            // Priority 2: island-based lookup (backward compat, fuel receipts only)
-            if ("FUEL_RECEIPT".equals(type)) {
-                if (printerIp == null || printerIp.isEmpty()) {
-                    int island = intParam(request, "island", 0);
-                    if (island == 0) {
-                        int dispenserId = intParam(request, "dispenser_id",
-                                intParam(request, "dispenserId", 1));
-                        island = dispenserId <= 2 ? 1 : 2;
-                    }
-                    printerIp = printerConfig.getIp(island);
-                    printerPort = printerConfig.getPort(island);
-                } else if (printerPort == 0) {
-                    printerPort = 9100;
-                }
-            } else {
-                // Cash movements: must have printer_ip from request or use island 1
-                if (printerIp == null || printerIp.isEmpty()) {
-                    printerIp = printerConfig.getIp(1);
-                    printerPort = printerConfig.getPort(1);
-                } else if (printerPort == 0) {
-                    printerPort = 9100;
-                }
+            if (printerIp == null || printerIp.isEmpty()) {
+                return Response.status(400).entity(Map.of(
+                        "error", "printerIp es requerido — configure printer_ip en la tabla dispensers"
+                )).build();
+            }
+            if (printerPort == 0) {
+                printerPort = 9100;
             }
 
             thermalPrinter.print(printerIp, printerPort, receiptBytes);
@@ -117,28 +107,31 @@ public class PrintResource {
         }
     }
 
-    // ── Test print ───────────────────────────────────────────
+    // ── Test print (requires explicit printer IP) ────────────
 
     @POST
     @Path("/test")
     public Response testPrint(Map<String, Object> body) {
-        int island = intParam(body, "island", 1);
+        String printerIp = strParam(body, "printerIp");
+
+        if (printerIp == null || printerIp.isEmpty()) {
+            return Response.status(400).entity(Map.of(
+                    "error", "printerIp es requerido para test de impresión"
+            )).build();
+        }
+        int printerPort = intParam(body, "printerPort", 9100);
 
         try {
             String now = java.time.LocalDateTime.now()
                     .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
 
-            byte[] testTicket = buildTestTicket(island, now);
+            byte[] testTicket = buildTestTicket(printerIp, now);
 
-            String ip = printerConfig.getIp(island);
-            int port = printerConfig.getPort(island);
-
-            thermalPrinter.print(ip, port, testTicket);
+            thermalPrinter.print(printerIp, printerPort, testTicket);
 
             return Response.ok(Map.of(
                     "status", "PRINTED",
-                    "printer_ip", ip,
-                    "island", island
+                    "printer_ip", printerIp
             )).build();
 
         } catch (PrintException e) {
@@ -154,7 +147,7 @@ public class PrintResource {
     }
 
     /** Builds a simple test ticket in raw ESC/POS bytes. */
-    private byte[] buildTestTicket(int island, String dateTime) {
+    private byte[] buildTestTicket(String printerIp, String dateTime) {
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
         try {
             byte[] boldOn  = { 0x1B, '!', 0x08 };
@@ -171,7 +164,7 @@ public class PrintResource {
             out.write(boldOn);
             out.write(dashes.getBytes()); out.write(lf);
             out.write("    PRUEBA DE IMPRESORA".getBytes()); out.write(lf);
-            out.write(("    ISLA " + island + " — " + dateTime).getBytes()); out.write(lf);
+            out.write(("    " + printerIp + " — " + dateTime).getBytes()); out.write(lf);
             out.write(dashes.getBytes()); out.write(lf);
             out.write(boldOff);
             out.write(left);
@@ -188,7 +181,7 @@ public class PrintResource {
         return out.toByteArray();
     }
 
-    // ── Policy (backward compatible) ─────────────────────────
+    // ── Policy ───────────────────────────────────────────────
 
     @GET
     @Path("/policy")
@@ -196,48 +189,6 @@ public class PrintResource {
         return Response.ok(Map.of(
                 "policy", printerConfig.getPolicy().name()
         )).build();
-    }
-
-    // ── Full runtime config ──────────────────────────────────
-
-    @GET
-    @Path("/config")
-    public Response getConfig() {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("policy", printerConfig.getPolicy().name());
-
-        Map<String, Object> islandMap = new LinkedHashMap<>();
-        for (var entry : printerConfig.getIslands().entrySet()) {
-            islandMap.put(entry.getKey().toString(), Map.of(
-                    "ip", entry.getValue().ip,
-                    "port", entry.getValue().port
-            ));
-        }
-        result.put("islands", islandMap);
-
-        return Response.ok(result).build();
-    }
-
-    @PUT
-    @Path("/config")
-    @SuppressWarnings("unchecked")
-    public Response updateConfig(Map<String, Object> body) {
-        try {
-            printerConfig.updateFromMap(body);
-            Log.infof("Printer config updated via API: policy=%s, islands=%d",
-                    printerConfig.getPolicy(), printerConfig.getIslands().size());
-
-            return Response.ok(Map.of(
-                    "status", "UPDATED",
-                    "policy", printerConfig.getPolicy().name()
-            )).build();
-
-        } catch (Exception e) {
-            Log.error("Failed to update printer config", e);
-            return Response.status(400)
-                    .entity(Map.of("error", e.getMessage()))
-                    .build();
-        }
     }
 
     // ── Receipt template ─────────────────────────────────────

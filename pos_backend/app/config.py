@@ -1,6 +1,11 @@
 """Application configuration loaded from environment variables."""
 
+from datetime import timedelta, timezone
+
 from pydantic_settings import BaseSettings
+
+# Ecuador timezone (UTC-5). Used consistently across the whole backend.
+ECUADOR_TZ = timezone(timedelta(hours=-5))
 
 
 class Settings(BaseSettings):

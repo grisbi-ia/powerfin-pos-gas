@@ -15,16 +15,15 @@ All HTTP calls have 10s timeout. Errors are logged, never raised to user.
 import asyncio
 import json
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import ECUADOR_TZ
 from app.models.dispatch import Dispatch
-
-ECUADOR_TZ = timezone(timedelta(hours=-5))
 
 # ── Mapping tables ──────────────────────────────────────────
 
@@ -63,14 +62,13 @@ async def _get_key49_config(db: AsyncSession) -> dict:
     from app.models.company import SystemConfig
     result = await db.execute(
         select(SystemConfig).where(
-            SystemConfig.key.in_(["key49_api_key", "key49_base_url", "key49_sandbox"])
+            SystemConfig.key.in_(["key49_api_key", "key49_base_url"])
         )
     )
     configs = {c.key: c.value for c in result.scalars().all()}
     return {
         "api_key": configs.get("key49_api_key", ""),
         "base_url": configs.get("key49_base_url", "https://key49.apx5.com/v1"),
-        "sandbox": configs.get("key49_sandbox", "true").lower() == "true",
     }
 
 
@@ -203,6 +201,7 @@ async def _build_invoice_payload(
             seq_number = dispatch.sequential_number.zfill(9)
 
     payload = {
+        "access_key": dispatch.access_key,
         "establishment": ep.establishment,
         "issue_point": ep.emission_point,
         "sequence_number": seq_number,
@@ -273,7 +272,7 @@ async def emitir_factura(
         await db.commit()
         return False
 
-    idempotency_key = f"dispatch-{dispatch_id}-{datetime.now().timestamp()}"
+    idempotency_key = f"dispatch-{dispatch_id}-{datetime.now(ECUADOR_TZ).timestamp()}"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -363,7 +362,7 @@ async def _poll_autorizacion(
                             sri_status=status,
                             key49_access_key=data.get("access_key"),
                             sri_authorization_date=(
-                                datetime.now(timezone.utc)
+                                datetime.now(ECUADOR_TZ)
                                 if status in ("AUTHORIZED", "NOTIFIED") else None
                             ),
                             sri_messages=(
@@ -446,11 +445,13 @@ async def retry_pending_invoices(db: AsyncSession) -> dict:
     
     retried = 0
     expired = 0
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    ecuador_now = datetime.now(ECUADOR_TZ)
+    cutoff = ecuador_now - timedelta(hours=24)
     
     for d in pending:
         # Skip invoices older than 24h — SRI rejects past-date
-        if d.created_at and d.created_at.replace(tzinfo=timezone.utc) < cutoff:
+        # d.created_at comes from DB with Ecuador offset (-05); compare directly
+        if d.created_at and d.created_at < cutoff:
             d.sri_status = "FAILED"
             d.sri_messages = json.dumps(["Vencida: más de 24h desde emisión. SRI rechaza fecha pasada."])
             expired += 1

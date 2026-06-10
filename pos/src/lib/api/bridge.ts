@@ -96,12 +96,17 @@ export async function getPrintPolicy(): Promise<{ policy: string }> {
 
 export async function printReceipt(data: unknown): Promise<{ status: string; preview?: string }> {
 	if (USE_MOCKS_BRIDGE) return mock.printReceipt(data);
+	console.log('[printReceipt] sending:', JSON.stringify(data));
 	const res = await fetch(bridgeUrl('/api/print'), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(data)
 	});
-	if (!res.ok) throw new Error('Print failed');
+	if (!res.ok) {
+		const errBody = await res.text();
+		console.error(`Print failed (${res.status}):`, errBody);
+		throw new Error('Print failed: ' + (errBody || res.statusText));
+	}
 	const result = await res.json();
 	if (result.preview) {
 		// Strip ESC/POS control chars for clean console output

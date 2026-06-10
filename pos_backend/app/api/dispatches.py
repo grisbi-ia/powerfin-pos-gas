@@ -1,6 +1,6 @@
 """Dispatch management — create, complete, collect, cancel, billing, invoice."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.config import ECUADOR_TZ
 from app.database import get_db
 from app.models import (
     Dispatch,
@@ -58,7 +59,7 @@ async def _key49_background(dispatch_id: int):
 
 
 def _build_order_id() -> str:
-    now = datetime.now()
+    now = datetime.now(ECUADOR_TZ)
     return f"OV-{now.strftime('%Y%m%d%H%M%S')}-{now.microsecond // 1000:03d}"
 
 
@@ -234,7 +235,7 @@ async def create_dispatch(
             from app.models.company import CompanyInfo
             company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
             if company and company.ruc and company.sri_environment:
-                local_date = datetime.now().date()
+                local_date = datetime.now(ECUADOR_TZ).date()
                 access_key = generate_access_key(
                     emission_date=local_date,
                     doc_type=ep.doc_type or "FACTURA",
@@ -341,7 +342,7 @@ async def complete_dispatch(
         return {"status": "ok"}
 
     dispatch.status = "COMPLETED"
-    dispatch.completed_at = datetime.now(timezone.utc)
+    dispatch.completed_at = datetime.now(ECUADOR_TZ)
 
     # Update dispatch details with actual volume and recalculate totals
     amount_dec = Decimal(str(body.amount))
@@ -559,7 +560,7 @@ async def get_active_dispatches(
     # ── Auto-cancel stale AUTHORIZED dispatches (> 5 min old) ──────────
     # Covers Gap D: dispatch created, preset never reached the dispenser
     # (FusionBridge down, network timeout, etc.) or ATO expired (180s).
-    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+    stale_cutoff = datetime.now(ECUADOR_TZ) - timedelta(minutes=5)
     stale_result = await db.execute(
         select(Dispatch).where(
             Dispatch.status == "AUTHORIZED",
@@ -634,9 +635,9 @@ async def get_active_dispatches(
             "preset_type": "MONEY",
             "preset_value": "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
-            "price_without_subsidy": detail_map[d.dispatch_id].price_without_subsidy if d.dispatch_id in detail_map else None,
-            "subsidy_per_unit": detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else None,
-            "subsidy_amount": detail_map[d.dispatch_id].subsidy_amount if d.dispatch_id in detail_map else None,
+            "price_without_subsidy": float(detail_map[d.dispatch_id].price_without_subsidy) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].price_without_subsidy is not None else None,
+            "subsidy_per_unit": float(detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else 0.0,
+            "subsidy_amount": float(detail_map[d.dispatch_id].subsidy_amount) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].subsidy_amount is not None else 0.0,
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
             "payment_method": "EFECTIVO",
             "customer_id": person_map[d.person_id].id_number if d.person_id and d.person_id in person_map else None,
@@ -648,7 +649,7 @@ async def get_active_dispatches(
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
             "authorized_by_user_id": d.authorized_by_user_id,
-            "final_amount": d.subtotal if d.subtotal else d.total,
+            "final_amount": float(d.total or 0),
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,
             "invoice_number": d.sequential_number,
             "access_key": d.access_key,

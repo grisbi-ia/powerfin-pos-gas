@@ -77,7 +77,7 @@
 					date: new Date(m.created_at).toLocaleDateString('es-EC'),
 					time: new Date(m.created_at).toLocaleTimeString('es-EC'),
 					userName: ($shift as any)?.user_name || '',
-					amount: m.amount.toFixed(2),
+					amount: Number(m.amount ?? 0).toFixed(2),
 					observation: m.observation,
 					locationName: loc?.name || '',
 					locationAddress: loc?.address || '',
