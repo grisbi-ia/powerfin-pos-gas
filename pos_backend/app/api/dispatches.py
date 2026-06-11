@@ -454,6 +454,9 @@ async def collect_dispatch(
 
     await db.commit()
 
+    # Build receipt data from persisted DB records (same as reprint uses)
+    receipt_data = await _build_receipt_data(db, dispatch)
+
     # Fire-and-forget: send invoice to SRI via Key49 (non-blocking)
     # Pass only dispatch_id — background task creates its own DB session
     try:
@@ -471,7 +474,119 @@ async def collect_dispatch(
         payment_method=body.payment_method,
         collected_amount=body.collected_amount,
         change_amount=body.change_amount,
+        receipt_data=receipt_data,
     )
+
+
+async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch) -> dict:
+    """Build full receipt data from persisted DB records.
+    Same data source as history reprint — ensures print and reprint are identical."""
+    from app.models.company import CompanyInfo
+
+    # Dispatch detail (volume, unit_price, subsidy)
+    detail_result = await db.execute(
+        select(DispatchDetail).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
+    )
+    detail = detail_result.scalars().first()
+
+    # Payment
+    pay_result = await db.execute(
+        select(DispatchPayment).where(DispatchPayment.dispatch_id == dispatch.dispatch_id)
+    )
+    pay = pay_result.scalars().first()
+    pay_method_name = "EFECTIVO"
+    if pay:
+        pm_result = await db.execute(
+            select(PaymentMethod).where(PaymentMethod.payment_method_id == pay.payment_method_id)
+        )
+        pm = pm_result.scalar_one_or_none()
+        if pm:
+            pay_method_name = pm.name or pm.code or "EFECTIVO"
+
+    # Person (customer)
+    person = None
+    if dispatch.person_id:
+        person_result = await db.execute(
+            select(Person).where(Person.person_id == dispatch.person_id)
+        )
+        person = person_result.scalar_one_or_none()
+
+    # Vehicle (plate)
+    plate = ""
+    if dispatch.vehicle_id:
+        v_result = await db.execute(
+            select(Vehicle).where(Vehicle.vehicle_id == dispatch.vehicle_id)
+        )
+        v = v_result.scalar_one_or_none()
+        if v:
+            plate = v.plate or ""
+
+    # Company info
+    company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
+
+    # Emission point
+    ep = None
+    if dispatch.emission_point_id:
+        ep_result = await db.execute(
+            select(EmissionPoint).where(
+                EmissionPoint.emission_point_id == dispatch.emission_point_id
+            )
+        )
+        ep = ep_result.scalar_one_or_none()
+
+    # Dispenser (for printer_ip)
+    dispenser = None
+    if dispatch.dispenser_id:
+        d_result = await db.execute(
+            select(Dispenser).where(Dispenser.dispenser_id == dispatch.dispenser_id)
+        )
+        dispenser = d_result.scalar_one_or_none()
+
+    # Computed financials (IVA 15%)
+    total = float(dispatch.total or 0)
+    subtotal = round(total / 1.15, 2)
+    tax = round(total - subtotal, 2)
+
+    return {
+        "printerIp": dispenser.printer_ip if dispenser and dispenser.printer_ip else "",
+        "printerPort": dispenser.printer_port if dispenser else 9100,
+        "dispenserId": dispatch.dispenser_id or 0,
+        "fuelData": {
+            "dispenserId": dispatch.dispenser_id or 0,
+            "hoseId": dispatch.hose_id or 0,
+            "orderId": dispatch.order_id or "",
+            "volume": str(float(detail.quantity)) if detail and detail.quantity else "0",
+            "amount": f"{total:.2f}",
+            "unitPrice": f"{float(detail.unit_price):.7f}" if detail and detail.unit_price else "0",
+            "priceWithoutSubsidy": f"{float(detail.price_without_subsidy):.4f}" if detail and detail.price_without_subsidy is not None else "",
+            "subsidyPerUnit": f"{float(detail.subsidy_amount / detail.quantity):.4f}" if detail and detail.subsidy_amount and detail.quantity and detail.quantity > 0 else "",
+            "subsidyAmount": f"{float(detail.subsidy_amount):.2f}" if detail and detail.subsidy_amount is not None else "",
+            "paymentMethod": pay_method_name,
+            "grade": dispatch.grade_id or "",
+            "customerName": person.name if person else "",
+            "customerId": person.id_number if person else "",
+            "customerAddress": person.address if person and person.address else "",
+            "customerPhone": person.phone if person and person.phone else "",
+            "customerEmail": person.email if person and person.email else "",
+            "plate": plate,
+            "invoiceId": dispatch.sequential_number or "",
+            "invoiceAuth": dispatch.access_key or "",
+            "subtotal": f"{subtotal:.2f}",
+            "taxLabel": "IVA 15%",
+            "taxAmount": f"{tax:.2f}",
+            "unit": "GAL",
+            "locationName": company.commercial_name or company.name or "",
+            "locationAddress": company.address or "",
+            "locationRuc": company.ruc or "",
+            "locationPhone": company.phone or "",
+            "locationCity": company.city or "",
+            "locationProvince": company.province or "",
+            "locationCountry": company.country or "",
+            "fiscalRegime": company.fiscal_regime or "",
+            "sriEnvironment": company.sri_environment or 0,
+            "emissionType": company.emission_type or 0,
+        },
+    }
 
 
 @router.post("/{order_id}/cancel")
@@ -644,6 +759,7 @@ async def get_active_dispatches(
             "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
             "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,
             "customer_phone": person_map[d.person_id].phone if d.person_id and d.person_id in person_map else None,
+            "customer_email": person_map[d.person_id].email if d.person_id and d.person_id in person_map else None,
             "plate": vehicle_map[d.vehicle_id].plate if d.vehicle_id and d.vehicle_id in vehicle_map else None,
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,

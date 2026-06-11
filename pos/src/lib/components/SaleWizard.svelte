@@ -61,7 +61,9 @@
 	let confirmed = false;
 	let printing = false;
 	let hasPrinted = false;
+	let printSent = false;  // set after successful print, triggers auto-redirect
 	let printError = false;
+	let receiptData: any = null;  // from collect response, DB-persisted
 	let printPolicy: 'ALWAYS' | 'ASK' | 'NEVER' = 'ASK';
 	let autoReturnTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -332,7 +334,9 @@
 			const shiftId = $shift?.shift_id ?? 0;
 			const received = paymentMethod === 'EFECTIVO' ? (parseFloat(receivedAmount) || 0) : 0;
 			const realChange = Math.max(0, received - finalAmount);
-			await powerfin.collectDispatch(token(), collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: realChange, reference_code: referenceCode || undefined });
+			const collectResult = await powerfin.collectDispatch(token(), collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: realChange, reference_code: referenceCode || undefined });
+		// Store receipt data from backend (DB-persisted, same as reprint)
+		receiptData = (collectResult as any)?.receipt_data ?? null;
 			// Note: do NOT removeOrder here — it would nullify collectOrder reactively
 			// and destroy the collect UI before the user sees the print/confirmation.
 			// The order is removed in handleNewSale() when the user clicks "Nueva Venta".
@@ -344,63 +348,76 @@
 		printing = true;
 		printError = false;
 		try {
-			const printerIp = dispenserConfig?.printer_ip || '192.168.1.21';
-			const printerPort = dispenserConfig?.printer_port || 9100;
-			const loc = $config?.location;
-			const gradeUnit = $config?.grades?.find(g => g.grade_id === selectedHose?.grade_id)?.unit || 'GALONES';
-			const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
-			const hoseId = collectOrder?.hoseId ?? selectedHose?.hose_id ?? 0;
-			const gradeName = selectedHose?.grade_name || 'SUPER';
-			await bridge.printReceipt({
-				type: 'FUEL_RECEIPT', printerIp, printerPort, dispenserId,
-				fuelData: {
-					dispenserId, hoseId, orderId: collectOrder?.orderId ?? '',
-					volume: finalVolume, amount: finalAmount.toFixed(2),
-					unitPrice: Number(collectOrder?.unitPrice ?? selectedHose?.unit_price ?? 0).toFixed(7),
-					paymentMethod, grade: gradeName,
-					unit: gradeUnit === 'GALONES' ? 'GAL' : 'L',
-					// Subsidy from product (via config / price list)
-					priceWithoutSubsidy: Number(selectedHose?.base_price ?? 0).toFixed(4),
-					subsidyPerUnit: Number(selectedHose?.subsidy_per_unit ?? 0).toFixed(4),
-					subsidyAmount: '',
-					// Invoice
-					invoiceId: '',
-					invoiceAuth: '',
-					// Computed financials (IVA 15%)
-					subtotal: finalAmount > 0 ? (finalAmount / 1.15).toFixed(2) : '0.00',
-					taxLabel: 'IVA 15%',
-					taxAmount: finalAmount > 0 ? (finalAmount - finalAmount / 1.15).toFixed(2) : '0.00',
-					// Location info from config
-					locationName: loc?.name ?? '',
-					locationAddress: loc?.address ?? '',
-					locationRuc: loc?.ruc ?? '',
-					locationPhone: loc?.phone ?? '',
-					locationCity: loc?.city ?? '',
-					locationProvince: loc?.province ?? '',
-					locationCountry: loc?.country ?? '',
-					fiscalRegime: loc?.fiscal_regime ?? '',
-					sriEnvironment: loc?.sri_environment ?? 0,
-					emissionType: loc?.emission_type ?? 0,
-					// Customer info
-					customerName: owner?.name ?? '',
-					customerId: owner?.id_number ?? '',
-					customerAddress: (owner as any)?.address ?? '',
-					customerPhone: owner?.phone ?? '',
-					customerEmail: owner?.email ?? '',
-					plate: collectOrder?.plate ?? vehicleResult?.plate ?? '',
-					// Date/time
-					date: new Date().toLocaleDateString('es-EC'),
-					time: new Date().toLocaleTimeString('es-EC'),
-				}
-			});
+			// Use receipt_data from backend (DB-persisted, same as reprint) if available
+			if (receiptData) {
+				await bridge.printReceipt({
+					type: 'FUEL_RECEIPT',
+					printerIp: receiptData.printerIp || '',
+					printerPort: receiptData.printerPort || 9100,
+					dispenserId: receiptData.dispenserId || dispenserId,
+					fuelData: {
+						...receiptData.fuelData,
+						date: new Date().toLocaleDateString('es-EC'),
+						time: new Date().toLocaleTimeString('es-EC'),
+					},
+				});
+			} else {
+				// Fallback: build from wizard state (legacy, no DB data available yet)
+				const printerIp = dispenserConfig?.printer_ip || '';
+				const printerPort = dispenserConfig?.printer_port || 9100;
+				const loc = $config?.location;
+				const gradeUnit = $config?.grades?.find(g => g.grade_id === selectedHose?.grade_id)?.unit || 'GALONES';
+				const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
+				const hoseId = collectOrder?.hoseId ?? selectedHose?.hose_id ?? 0;
+				const gradeName = selectedHose?.grade_name || 'SUPER';
+				await bridge.printReceipt({
+					type: 'FUEL_RECEIPT', printerIp, printerPort, dispenserId,
+					fuelData: {
+						dispenserId, hoseId, orderId: collectOrder?.orderId ?? '',
+						volume: finalVolume, amount: finalAmount.toFixed(2),
+						unitPrice: Number(collectOrder?.unitPrice ?? selectedHose?.unit_price ?? 0).toFixed(7),
+						paymentMethod, grade: gradeName,
+						unit: gradeUnit === 'GALONES' ? 'GAL' : 'L',
+						priceWithoutSubsidy: Number(selectedHose?.base_price ?? 0).toFixed(4),
+						subsidyPerUnit: Number(selectedHose?.subsidy_per_unit ?? 0).toFixed(4),
+						subsidyAmount: '',
+						invoiceId: '',
+						invoiceAuth: '',
+						subtotal: finalAmount > 0 ? (finalAmount / 1.15).toFixed(2) : '0.00',
+						taxLabel: 'IVA 15%',
+						taxAmount: finalAmount > 0 ? (finalAmount - finalAmount / 1.15).toFixed(2) : '0.00',
+						locationName: loc?.name ?? '',
+						locationAddress: loc?.address ?? '',
+						locationRuc: loc?.ruc ?? '',
+						locationPhone: loc?.phone ?? '',
+						locationCity: loc?.city ?? '',
+						locationProvince: loc?.province ?? '',
+						locationCountry: loc?.country ?? '',
+						fiscalRegime: loc?.fiscal_regime ?? '',
+						sriEnvironment: loc?.sri_environment ?? 0,
+						emissionType: loc?.emission_type ?? 0,
+						customerName: owner?.name ?? '',
+						customerId: owner?.id_number ?? '',
+						customerAddress: (owner as any)?.address ?? '',
+						customerPhone: owner?.phone ?? '',
+						customerEmail: owner?.email ?? '',
+						plate: collectOrder?.plate ?? vehicleResult?.plate ?? '',
+						date: new Date().toLocaleDateString('es-EC'),
+						time: new Date().toLocaleTimeString('es-EC'),
+					}
+				});
+			}
 			hasPrinted = true;
+		// Auto-redirect to dashboard after 2.5s
+		printSent = true;
+		setTimeout(() => { if (printSent) handleNewSale(); }, 2500);
 		} catch {
 			printError = true;
 		}
 		finally { printing = false; }
 	}
 
-	function handleNewSale() { if (collectOrder) pendingOrders.removeOrder(collectOrder.orderId); dispatch('done'); }
+	function handleNewSale() { if (collectOrder) pendingOrders.removeOrder(collectOrder.orderId); receiptData = null; printSent = false; dispatch('done'); }
 	function handleBackToDashboard() {
 		if (confirmed && collectOrder) pendingOrders.removeOrder(collectOrder.orderId);
 		dispatch('done');
@@ -854,7 +871,7 @@
 					{#if referenceCode}<div class="text-xs text-green-500 text-center mt-1">Transacción: {referenceCode}</div>{/if}
 				</div>
 
-				{#if printPolicy === 'ASK' && !printing}
+				{#if printPolicy === 'ASK' && !printing && !hasPrinted}
 					<div class="card p-4 mb-4 text-center">
 						<p class="text-gray-700 mb-3">¿El cliente desea ticket?</p>
 						{#if printError}
@@ -870,8 +887,11 @@
 				{:else}
 					{#if hasPrinted}
 						<div class="card p-4 mb-4 bg-green-50 border-green-200 text-center">
-							<p class="text-green-700 text-sm mb-2">✅ Ticket impreso</p>
-							<div class="grid grid-cols-2 gap-2">
+							{#if printSent}
+								<p class="text-green-700 font-semibold mb-1">✅ Impresión enviada</p>
+								<p class="text-green-500 text-xs">Regresando al dashboard...</p>
+							{/if}
+							<div class="grid grid-cols-2 gap-2 mt-2">
 								<button class="touch-btn bg-blue-600 text-white rounded-xl py-3 font-semibold" on:click={doPrint}>🖨 Reimprimir</button>
 								<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-medium" on:click={handleNewSale}>Nueva Venta</button>
 							</div>

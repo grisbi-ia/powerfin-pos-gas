@@ -34,12 +34,13 @@ class TestShiftAPI:
         shift_id = r.json()["shift_id"]
 
         r = await client.post(f"/api/pos/shifts/{shift_id}/close", headers=auth_headers, json={
-            "closing_cash": 100, "notes": ""
+            "notes": ""
         })
         assert r.status_code == 200
         data = r.json()
         assert data["shift_id"] == shift_id
-        assert float(data["difference"]) == 0
+        assert float(data["surplus"]) == 0
+        assert float(data["shortage"]) == 100.0  # opening cash not zeroed = faltante
 
 
 class TestDispatchAPI:

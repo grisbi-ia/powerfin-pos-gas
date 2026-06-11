@@ -18,16 +18,6 @@ import io.quarkus.logging.Log;
 /**
  * Renders a receipt template with {{placeholders}} and formatting directives
  * into raw ESC/POS bytes for thermal printers.
- *
- * Directives:
- *   [BOLD]...[/BOLD]     — bold text
- *   [CENTER]...[/CENTER] — centred text
- *   ---                  — separator line (thin)
- *   ===                  — separator line (bold)
- *   {#customer}...{/customer} — conditional: visible only when customerName != null
- *   {#invoice}...{/invoice}   — conditional: visible only when invoiceId != null
- *   [CUT]                — full paper cut
- *   {{variable}}         — placeholder (see resolve())
  */
 @ApplicationScoped
 public class TemplateRenderer {
@@ -35,20 +25,23 @@ public class TemplateRenderer {
     // ── ESC/POS commands ──────────────────────────────────
     private static final byte ESC = 0x1B;
     private static final byte GS  = 0x1D;
-    private static final byte[] BOLD_ON   = { ESC, 'E', 1 };         // Bold ON (independent of font)
-    private static final byte[] BOLD_OFF  = { ESC, 'E', 0 };         // Bold OFF
+    private static final byte[] BOLD_ON   = { ESC, 'E', 1 };
+    private static final byte[] BOLD_OFF  = { ESC, 'E', 0 };
     private static final byte[] ALIGN_LEFT   = { ESC, 'a', 0x00 };
     private static final byte[] ALIGN_CENTER = { ESC, 'a', 0x01 };
-    private static final byte[] FONT_SMALL  = { ESC, 'M', 1 };       // Font B (9x17, compact)
-    private static final byte[] LINE_SPACING_0 = { ESC, '3', 0 };    // Minimal line spacing
+    private static final byte[] FONT_SMALL  = { ESC, 'M', 1 };
+    private static final byte[] LINE_SPACING_0 = { ESC, '3', 0 };
     private static final byte[] CUT_FULL    = { GS, 'V', 0x00 };
     private static final byte[] LF = { '\n' };
-    private static final int COLUMNS = 50;  // Font B (9×17) ≈ 50 chars/line
+    private static final int COLUMNS = 50;
 
     // ── Template storage ─────────────────────────────────
     private volatile String template;
     private final Path templateFile;
     private final String defaultTemplate;
+
+    /** 7 dots at end of every ticket — prevents cutter from slicing text. */
+    private static final String TRAILER_DOTS = ".\n.\n.\n.\n.\n.\n.";
 
     public TemplateRenderer(
             @ConfigProperty(name = "printer.template.file",
@@ -63,7 +56,6 @@ public class TemplateRenderer {
         load();
     }
 
-    /** Load template from file, falling back to default. */
     private void load() {
         if (templateFile != null && Files.exists(templateFile)) {
             try {
@@ -82,7 +74,6 @@ public class TemplateRenderer {
         return template;
     }
 
-    /** Save a new template to disk + update in memory. */
     public void saveTemplate(String newTemplate) throws IOException {
         this.template = newTemplate;
         if (templateFile != null) {
@@ -94,27 +85,17 @@ public class TemplateRenderer {
 
     // ── Render ───────────────────────────────────────────
 
-    /**
-     * Renders the current template with the given data into ESC/POS bytes.
-     */
     public byte[] render(ReceiptBuilder.FuelReceiptData data) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         String[] lines = template.split("\n");
 
-        // Set Font B (small/compact) + minimal line spacing
         try { out.write(FONT_SMALL); out.write(LINE_SPACING_0); } catch (IOException ignored) { }
 
         int i = 0;
         while (i < lines.length) {
             String line = lines[i];
+            if (line.isBlank()) { i++; continue; }
 
-            // Skip blank lines
-            if (line.isBlank()) {
-                i++;
-                continue;
-            }
-
-            // Conditional blocks
             if (line.contains("{#customer}")) {
                 i = skipConditional(lines, i, "{#customer}", "{/customer}",
                         data.customerName != null && !data.customerName.isEmpty(), out, data);
@@ -155,23 +136,26 @@ public class TemplateRenderer {
                         data.priceWithoutSubsidy != null && !data.priceWithoutSubsidy.isEmpty(), out, data);
                 continue;
             }
+            if (line.contains("{#reprint}")) {
+                i = skipConditional(lines, i, "{#reprint}", "{/reprint}", data.isReprint, out, data);
+                continue;
+            }
 
             renderLine(out, line, data);
             i++;
         }
 
-        // Feed blank lines + dot so paper advances well past the cutter
-        try {
-            for (int j = 0; j < 6; j++) out.write(LF);
-            out.write(".".getBytes(StandardCharsets.UTF_8));
-            out.write(LF);
-            out.write(CUT_FULL);
-        } catch (IOException ignored) { }
-
+        // Feed paper then cut — LFs go through text buffer ensuring all text is printed
+        try { writeCut(out); } catch (IOException ignored) { }
         return out.toByteArray();
     }
 
     // ── Internal ─────────────────────────────────────────
+
+    /** Full paper cut. No extra feed — template provides trailing dots. */
+    private static void writeCut(OutputStream out) throws IOException {
+        out.write(CUT_FULL);
+    }
 
     private int skipConditional(String[] lines, int start,
                                  String open, String close,
@@ -182,14 +166,11 @@ public class TemplateRenderer {
         int i = start;
         while (i < lines.length) {
             String line = lines[i];
-
-            // Track depth BEFORE processing close on same line
             int opens = countInLine(line, open);
             int closes = countInLine(line, close);
             depth += opens;
 
             if (depth > 0 && visible) {
-                // Strip ALL conditional tags (including nested ones)
                 String stripped = line
                         .replace(open, "")
                         .replace(close, "")
@@ -202,15 +183,8 @@ public class TemplateRenderer {
 
             depth -= closes;
             i++;
-
-            if (depth <= 0 && opens > 0) {
-                // We opened and closed on this line (or opened earlier, closed now)
-                break;
-            }
-            if (depth <= 0 && opens == 0 && i > start + 1) {
-                // No open on this line, depth went to 0 from a close, done
-                break;
-            }
+            if (depth <= 0 && opens > 0) break;
+            if (depth <= 0 && opens == 0 && i > start + 1) break;
         }
         return i;
     }
@@ -218,24 +192,15 @@ public class TemplateRenderer {
     private int countInLine(String line, String tag) {
         int count = 0;
         int idx = 0;
-        while ((idx = line.indexOf(tag, idx)) >= 0) {
-            count++;
-            idx += tag.length();
-        }
+        while ((idx = line.indexOf(tag, idx)) >= 0) { count++; idx += tag.length(); }
         return count;
     }
 
     private void renderLine(OutputStream out, String line,
                              ReceiptBuilder.FuelReceiptData data) {
         try {
-            // [CUT] directive
-            if (line.trim().equals("[CUT]")) {
-                out.write(LF);
-                out.write(CUT_FULL);
-                return;
-            }
+            if (line.trim().equals("[CUT]")) { writeCut(out); return; }
 
-            // Formatting wrappers
             boolean bold = false;
             boolean center = false;
 
@@ -248,34 +213,26 @@ public class TemplateRenderer {
                 line = line.replace("[CENTER]", "").replace("[/CENTER]", "");
             }
 
-            // Resolve placeholders
             line = resolve(line, data);
 
-            // Separator lines
             boolean isThinSep  = line.trim().matches("-{3,}");
             boolean isBoldSep  = line.trim().matches("={3,}");
 
             if (isThinSep || isBoldSep) {
                 out.write(LF);
                 if (isBoldSep) out.write(BOLD_ON);
-                byte[] dashes = repeat('-', COLUMNS);
-                out.write(dashes);
+                out.write(repeat('-', COLUMNS));
                 if (isBoldSep) out.write(BOLD_OFF);
                 out.write(LF);
                 return;
             }
 
-            // Alignment
             if (center) out.write(ALIGN_CENTER);
-
-            // Bold
             if (bold) out.write(BOLD_ON);
 
-            // Text
             out.write(line.getBytes(StandardCharsets.UTF_8));
             out.write(LF);
 
-            // Reset
             if (bold) out.write(BOLD_OFF);
             if (center) out.write(ALIGN_LEFT);
 
@@ -284,7 +241,6 @@ public class TemplateRenderer {
         }
     }
 
-    /** Replace {{placeholders}} with actual values. */
     String resolve(String line, ReceiptBuilder.FuelReceiptData data) {
         return line
             .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
@@ -336,25 +292,32 @@ public class TemplateRenderer {
 
     // ── Cash movement receipt ───────────────────────────
 
-    /** Renders a cash movement receipt with its own template. */
     public byte[] renderCashMovement(ReceiptBuilder.CashMovementData data) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         String[] lines = cashMovementTemplate().split("\n");
 
-        // Set Font B (small/compact) + minimal line spacing
         try { out.write(FONT_SMALL); out.write(LINE_SPACING_0); } catch (IOException ignored) { }
 
+        boolean inReprintBlock = false;
         for (String line : lines) {
             if (line.isBlank()) continue;
 
+            // {#reprint} conditional — only show on reprints
+            if (line.contains("{#reprint}")) {
+                inReprintBlock = true;
+                if (!data.isReprint) continue; // skip entire block
+                line = line.replace("{#reprint}", "");
+            }
+            if (line.contains("{/reprint}")) {
+                inReprintBlock = false;
+                if (!data.isReprint) continue;
+                line = line.replace("{/reprint}", "");
+            }
+            if (inReprintBlock && !data.isReprint) continue;
+            if (line.isBlank()) continue;
+
             try {
-                if (line.trim().equals("[CUT]")) {
-                    for (int j = 0; j < 6; j++) out.write(LF);
-                    out.write(".".getBytes(StandardCharsets.UTF_8));
-                    out.write(LF);
-                    out.write(CUT_FULL);
-                    continue;
-                }
+                if (line.trim().equals("[CUT]")) { writeCut(out); continue; }
 
                 boolean bold = false;
                 boolean center = false;
@@ -369,7 +332,6 @@ public class TemplateRenderer {
                     resolved = resolved.replace("[CENTER]", "").replace("[/CENTER]", "");
                 }
 
-                // Resolve cash placeholders
                 resolved = resolved
                     .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
                     .replace("{{location_address}}", nvl(data.locationAddress, ""))
@@ -385,18 +347,15 @@ public class TemplateRenderer {
                 boolean isSep = resolved.trim().matches("-{3,}") || resolved.trim().matches("={3,}");
                 if (isSep) {
                     out.write(LF);
-                    byte[] dashes = repeat('-', COLUMNS);
-                    out.write(dashes);
+                    out.write(repeat('-', COLUMNS));
                     out.write(LF);
                     continue;
                 }
 
                 if (center) out.write(ALIGN_CENTER);
                 if (bold) out.write(BOLD_ON);
-
                 out.write(resolved.getBytes(StandardCharsets.UTF_8));
                 out.write(LF);
-
                 if (bold) out.write(BOLD_OFF);
                 if (center) out.write(ALIGN_LEFT);
 
@@ -405,15 +364,176 @@ public class TemplateRenderer {
             }
         }
 
-        // Final feed + dot + cut
-        try {
-            for (int j = 0; j < 6; j++) out.write(LF);
-            out.write(".".getBytes(StandardCharsets.UTF_8));
-            out.write(LF);
-            out.write(CUT_FULL);
-        } catch (IOException ignored) { }
-
+        try { writeCut(out); } catch (IOException ignored) { }
         return out.toByteArray();
+    }
+
+    // ── Shift close receipt ────────────────────────────
+
+    public byte[] renderShiftClose(ReceiptBuilder.ShiftCloseData data) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        String[] lines = shiftCloseTemplate().split("\n");
+
+        try { out.write(FONT_SMALL); out.write(LINE_SPACING_0); } catch (IOException ignored) { }
+
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+
+            try {
+                boolean bold = false, center = false;
+                String resolved = line;
+
+                while (resolved.contains("[BOLD]") && resolved.contains("[/BOLD]")) {
+                    bold = true;
+                    resolved = resolved.replace("[BOLD]", "").replace("[/BOLD]", "");
+                }
+                while (resolved.contains("[CENTER]") && resolved.contains("[/CENTER]")) {
+                    center = true;
+                    resolved = resolved.replace("[CENTER]", "").replace("[/CENTER]", "");
+                }
+
+                // Conditionals — handle both open and close tags
+                if (resolved.contains("{#surplus}") || resolved.contains("{/surplus}")) {
+                    if (data.surplus == null || data.surplus.isEmpty() || "0.00".equals(data.surplus)) continue;
+                    resolved = resolved.replace("{#surplus}", "").replace("{/surplus}", "");
+                    if (resolved.isBlank()) continue;
+                }
+                if (resolved.contains("{#shortage}") || resolved.contains("{/shortage}")) {
+                    if (data.shortage == null || data.shortage.isEmpty() || "0.00".equals(data.shortage)) continue;
+                    resolved = resolved.replace("{#shortage}", "").replace("{/shortage}", "");
+                    if (resolved.isBlank()) continue;
+                }
+                if (resolved.contains("{#noncash}") || resolved.contains("{/noncash}")) {
+                    if (data.nonCashLines == null || data.nonCashLines.isEmpty()) continue;
+                    resolved = resolved.replace("{#noncash}", "").replace("{/noncash}", "");
+                    if (resolved.isBlank()) continue;
+                }
+
+                resolved = resolved
+                    .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
+                    .replace("{{location_address}}", nvl(data.locationAddress, ""))
+                    .replace("{{location_ruc}}", nvl(data.locationRuc, ""))
+                    .replace("{{location_phone}}", nvl(data.locationPhone, ""))
+                    .replace("{{date}}", nvl(data.date, ""))
+                    .replace("{{time}}", nvl(data.time, ""))
+                    .replace("{{user_name}}", nvl(data.userName, ""))
+                    .replace("{{shift_id}}", nvl(data.shiftId, ""))
+                    .replace("{{opened_at}}", nvl(data.openedAt, ""))
+                    .replace("{{closed_at}}", nvl(data.closedAt, ""))
+                    .replace("{{opening_cash}}", nvl(data.openingCash, "0.00"))
+                    .replace("{{sales_cash}}", nvl(data.salesCash, "0.00"))
+                    .replace("{{sales_cash_count}}", nvl(data.salesCashCount, "0"))
+                    .replace("{{income}}", nvl(data.income, "0.00"))
+                    .replace("{{income_count}}", nvl(data.incomeCount, "0"))
+                    .replace("{{expense}}", nvl(data.expense, "0.00"))
+                    .replace("{{expense_count}}", nvl(data.expenseCount, "0"))
+                    .replace("{{deposits}}", nvl(data.deposits, "0.00"))
+                    .replace("{{deposits_count}}", nvl(data.depositsCount, "0"))
+                    .replace("{{transfers_out}}", nvl(data.transfersOut, "0.00"))
+                    .replace("{{transfers_out_count}}", nvl(data.transfersOutCount, "0"))
+                    .replace("{{transfers_in}}", nvl(data.transfersIn, "0.00"))
+                    .replace("{{transfers_in_count}}", nvl(data.transfersInCount, "0"))
+                    .replace("{{safe_drops}}", nvl(data.safeDrops, "0.00"))
+                    .replace("{{safe_drops_count}}", nvl(data.safeDropsCount, "0"))
+                    .replace("{{total_cash}}", nvl(data.totalCash, "0.00"))
+                    .replace("{{total_sales}}", nvl(data.totalSales, "0.00"))
+                    .replace("{{surplus}}", nvl(data.surplus, ""))
+                    .replace("{{shortage}}", nvl(data.shortage, ""))
+                    .replace("{{noncash_lines}}", nvl(data.nonCashLines, ""));
+
+                boolean isSep = resolved.trim().matches("-{3,}") || resolved.trim().matches("={3,}");
+                if (isSep) {
+                    out.write(LF);
+                    out.write(repeat('-', COLUMNS));
+                    out.write(LF);
+                    continue;
+                }
+
+                if (center) out.write(ALIGN_CENTER);
+                if (bold) out.write(BOLD_ON);
+
+                // {{DOT:label:value}} → "LABEL: ..... $ VALUE" with dot leaders
+                if (resolved.contains("{{DOT:")) {
+                    resolved = formatDottedLine(resolved);
+                }
+
+                out.write(resolved.getBytes(StandardCharsets.UTF_8));
+                out.write(LF);
+                if (bold) out.write(BOLD_OFF);
+                if (center) out.write(ALIGN_LEFT);
+            } catch (IOException e) {
+                Log.errorf("Shift close render error: %s", e.getMessage());
+            }
+        }
+
+        try { writeCut(out); } catch (IOException ignored) { }
+        return out.toByteArray();
+    }
+
+    /** Format "{{DOT:label:value}}" → "LABEL: ..... $ VALUE" with dots to fill 48 chars. */
+    private static String formatDottedLine(String line) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{\\{DOT:([^:]+):([^}]+)\\}\\}").matcher(line);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String label = m.group(1).trim();
+            String value = m.group(2).trim();
+            String full = label + ": $" + value;
+            int dots = 48 - full.length();
+            if (dots > 0) full = label + ": " + ".".repeat(dots) + "$" + value;
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(full));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    public static String shiftCloseTemplate() {
+        return """
+
+[CENTER][BOLD]{{location_name}}[/BOLD][/CENTER]
+[CENTER]{{location_address}}[/CENTER]
+[CENTER]R.U.C.: {{location_ruc}}[/CENTER]
+[CENTER]TELEFONO: {{location_phone}}[/CENTER]
+---
+[CENTER][BOLD]CIERRE DE TURNO[/BOLD][/CENTER]
+---
+FECHA: {{date}}  HORA: {{time}}
+USUARIO: {{user_name}}
+TURNO: #{{shift_id}}
+APERTURA: {{opened_at}}
+CIERRE: {{closed_at}}
+---
+[CENTER][BOLD]RESUMEN DE EFECTIVO[/BOLD][/CENTER]
+---
+{{DOT:(+) APERTURA: {{opening_cash}}}}
+{{DOT:(+) VENTAS EFECTIVO ({{sales_cash_count}}): {{sales_cash}}}}
+{{DOT:(+) INGRESOS ({{income_count}}): {{income}}}}
+{{DOT:(-) EGRESOS ({{expense_count}}): {{expense}}}}
+{{DOT:(-) DEPOSITOS ({{deposits_count}}): {{deposits}}}}
+{{DOT:(-) TRANSF. ENVIADAS ({{transfers_out_count}}): {{transfers_out}}}}
+{{DOT:(+) TRANSF. RECIBIDAS ({{transfers_in_count}}): {{transfers_in}}}}
+---
+{{DOT:TOTAL EFECTIVO: {{total_cash}}}}
+---
+{#surplus}[CENTER]SOBRANTE: $ {{surplus}}[/CENTER]
+{/surplus}
+{#shortage}[CENTER]FALTANTE: $ {{shortage}}[/CENTER]
+{/shortage}
+---
+{#noncash}[CENTER][BOLD]OTRAS FORMAS DE PAGO[/BOLD][/CENTER]
+---
+{{noncash_lines}}
+---
+{/noncash}
+[CENTER][BOLD]TOTAL VENTAS DEL TURNO: $ {{total_sales}}[/BOLD][/CENTER]
+---
+[CENTER]POWERFIN GAS[/CENTER]
+.
+.
+.
+.
+.
+.
+.""";
     }
 
     private static String movementLabel(String type) {
@@ -422,7 +542,8 @@ public class TemplateRenderer {
             case "INCOME" -> "COMPROBANTE DE INGRESO";
             case "EXPENSE" -> "COMPROBANTE DE EGRESO";
             case "TRANSFER_OUT" -> "COMPROBANTE DE TRANSFERENCIA";
-            case "SAFE_DROP" -> "COMPROBANTE DE DEPÓSITO";
+            case "SAFE_DROP" -> "COMPROBANTE DE DEPOSITO";
+            case "DEPOSIT" -> "COMPROBANTE DE DEPOSITO";
             default -> "COMPROBANTE DE CAJA";
         };
     }
@@ -430,68 +551,84 @@ public class TemplateRenderer {
     public static String cashMovementTemplate() {
         return """
 
+{#reprint}[CENTER][BOLD]*** REIMPRESION ***[/BOLD][/CENTER]
+{/reprint}
 [CENTER][BOLD]{{location_name}}[/BOLD][/CENTER]
 [CENTER]{{location_address}}[/CENTER]
 [CENTER]R.U.C.: {{location_ruc}}[/CENTER]
-[CENTER]Teléfono: {{location_phone}}[/CENTER]
+[CENTER]TELEFONO: {{location_phone}}[/CENTER]
 ---
 [CENTER][BOLD]{{movement_type}}[/BOLD][/CENTER]
 ---
-Fecha: {{date}}
-Hora: {{time}}
-Usuario: {{user_name}}
+FECHA: {{date}}
+HORA: {{time}}
+USUARIO: {{user_name}}
 ---
-Concepto: {{observation}}
+CONCEPTO: {{observation}}
 ---
 [CENTER][BOLD]TOTAL:  ${{amount}}[/BOLD][/CENTER]
 ---
 [CENTER]DOCUMENTO SIN VALIDEZ TRIBUTARIA[/CENTER]
-[CENTER]COMPROBANTE INTERNO[/CENTER]""";
+[CENTER]COMPROBANTE INTERNO[/CENTER]
+.
+.
+.
+.
+.
+.
+.""";
     }
 
     // ── Default template ─────────────────────────────────
 
     public static String defaultTemplate() {
-        // Leading \n is filtered by render() skipBlankLines
         return """
 
+{#reprint}[CENTER][BOLD]*** REIMPRESION ***[/BOLD][/CENTER]
+{/reprint}
 [CENTER][BOLD]{{location_name}}[/BOLD][/CENTER]
-[CENTER]{{location_address}}[/CENTER]
 [CENTER]R.U.C.: {{location_ruc}}[/CENTER]
-[CENTER]Dirección: {{location_address}}[/CENTER]
-[CENTER]Teléfono: {{location_phone}}[/CENTER]
+[CENTER]DIRECCION: {{location_address}}[/CENTER]
+[CENTER]TELEFONO: {{location_phone}}[/CENTER]
 [CENTER]{{location_city}} - {{location_country}}[/CENTER]
 [CENTER]{{fiscal_regime}}[/CENTER]
 ---
-Fecha y Hora: {{date}}  {{time}}
-{#invoice}Factura: {{invoice_id}}
-Clave: {{invoice_auth}}
-Ambiente: {{sri_environment}}  Emisión: {{emission_type}}
+FECHA Y HORA: {{date}}  {{time}}
+{#invoice}FACTURA: {{invoice_id}}
+CLAVE: {{invoice_auth}}
+AMBIENTE: {{sri_environment}}  EMISION: {{emission_type}}
 {/invoice}---
-{#customer}Cliente: {{customer_name}}
+{#customer}CLIENTE: {{customer_name}}
 CED/RUC: {{customer_id}}
-{#customer_address}Dirección: {{customer_address}}
-{/customer_address}Teléfono: {{customer_phone}}  Placa: {{plate}}
-{#customer_email}Email: {{customer_email}}
+{#customer_address}DIRECCION: {{customer_address}}
+{/customer_address}TELEFONO: {{customer_phone}}  PLACA: {{plate}}
+{#customer_email}EMAIL: {{customer_email}}
 {/customer_email}{/customer}---
-Manguera: {{hose_id}}
-Producto: {{grade}}
-Cantidad: {{volume}} {{unit}}
-Precio Sin Subsidio: $ {{price_without_subsidy}}
-Subsidio: $ {{subsidy_per_unit}}
-Precio Unitario: $ {{unit_price}}
-Subtotal: $ {{subtotal}}
+MANGUERA: {{hose_id}}
+PRODUCTO: {{grade}}
+CANTIDAD: {{volume}} {{unit}}
+PRECIO SIN SUBSIDIO: $ {{price_without_subsidy}}
+SUBSIDIO: $ {{subsidy_per_unit}}
+PRECIO UNITARIO: $ {{unit_price}}
+SUBTOTAL: $ {{subtotal}}
 {{tax_label}}: $ {{tax_amount}}
 ===
 [CENTER][BOLD]TOTAL:  ${{amount}}[/BOLD][/CENTER]
 ===
 ---
-{#subsidy_amount}Valor Total Sin Subsidio: $ {{subsidy_amount}}
-Ahorro Por Subsidio: $ {{subsidy_amount}}
+{#subsidy_amount}VALOR TOTAL SIN SUBSIDIO: $ {{amount}}
+AHORRO POR SUBSIDIO: $ {{subsidy_amount}}
 ---
 {/subsidy_amount}[CENTER]DOCUMENTO CON VALIDEZ TRIBUTARIA[/CENTER]
-[CENTER]Descarga de Factura en: www.sri.com.ec[/CENTER]
+[CENTER]DESCARGA DE FACTURA EN: www.sri.com.ec[/CENTER]
 [CENTER]POWERFIN GAS[/CENTER]
-[CENTER]GRACIAS POR SU COMPRA[/CENTER]""";
+[CENTER]GRACIAS POR SU COMPRA[/CENTER]
+.
+.
+.
+.
+.
+.
+.""";
     }
 }

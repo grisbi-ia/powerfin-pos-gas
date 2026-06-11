@@ -24,6 +24,8 @@ class Shift(Base):
     )
     opening_cash: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     closing_cash: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    surplus: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)
+    shortage: Mapped[float | None] = mapped_column(Numeric(12, 2), default=0)
     status: Mapped[str] = mapped_column(String(10), default="OPEN")
     opened_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

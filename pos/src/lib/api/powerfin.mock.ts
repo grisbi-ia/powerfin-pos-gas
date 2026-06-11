@@ -262,7 +262,7 @@ export async function getCurrentShift(_token: string): Promise<Shift | null> {
 }
 
 export async function closeShift(
-	_token: string, _shiftId: number, data: { closing_cash: number; notes: string }
+	_token: string, _shiftId: number, _data: { notes: string }
 ): Promise<CloseShiftResponse> {
 	await delay(500);
 	mockShift = null;
@@ -270,12 +270,29 @@ export async function closeShift(
 		shift_id: shiftCounter,
 		closed_at: new Date().toISOString(),
 		opening_cash: 0,
-		closing_cash: data.closing_cash,
-		expected_cash: data.closing_cash,
-		difference: 0,
+		surplus: 0,
+		shortage: 0,
 		total_sales: 12,
 		total_volume: 487.5,
-		dispatch_count: 45
+		dispatch_count: 45,
+		cash_income: 100,
+		cash_income_count: 2,
+		cash_expense: 50,
+		cash_expense_count: 1,
+		cash_deposits: 200,
+		cash_deposits_count: 2,
+		cash_transfers_out: 75,
+		cash_transfers_out_count: 1,
+		cash_transfers_in: 0,
+		cash_transfers_in_count: 0,
+		cash_safe_drops: 0,
+		cash_safe_drops_count: 0,
+		sales_cash: 450,
+		sales_cash_count: 8,
+		non_cash_sales: [
+			{ method_code: 'TARJETA', method_name: 'Tarjeta', total: 120, count: 2 },
+			{ method_code: 'QR', method_name: 'QR', total: 80, count: 2 },
+		],
 	};
 }
 

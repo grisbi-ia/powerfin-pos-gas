@@ -72,9 +72,11 @@ describe('PowerFin Mock API', () => {
 
 	it('closeShift returns summary', async () => {
 		const { closeShift } = await import('$lib/api/powerfin.mock');
-		const result = await closeShift('token', 45, { closing_cash: 890.50, notes: '' });
+		const result = await closeShift('token', 45, { notes: '' });
 		expect(result.total_sales).toBeGreaterThan(0);
-		expect(result.difference).toBe(0);
+		expect(result.surplus).toBe(0);
+		expect(result.shortage).toBe(0);
+		expect(result.cash_income_count).toBe(2);
 	});
 
 	it('lookupVehicle finds existing plate with complete data', async () => {

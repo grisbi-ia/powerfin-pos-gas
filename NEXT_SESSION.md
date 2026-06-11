@@ -27,14 +27,145 @@
 | **10c** | **v0.15.0** | **Phase 10 — Correcciones: subtotal/IVA, código aleatorio, espacio corte, saldos negativos, comprobantes caja** |
 | **10d** | **v0.16.0** | **Phase 10 — Key49: facturación electrónica SRI, fire-and-forget, polling, reintentos** |
 | **10e** | **v0.16.1** | **Phase 10 — Correcciones: zona horaria, clave Key49, IPs impresora, subtotal→total, reimpresión** |
+| **10f** | **v0.17.0** | **Phase 10 — Cierre de turno completo: cuadre, surplus/shortage, depósito, template impresión** |
 
 ### 📊 Tests
 
 ```bash
 FusionBridge — 67 tests    ./mvnw test    # BUILD SUCCESS
-POS Backend  — 93 tests    pytest          # 93 passed
+POS Backend  — 92 tests    pytest          # 92 passed
 Powerfin POS — 41 tests    npm run test    # 41 passed
-Total: 201 tests pasando
+Total: 200 tests pasando
+```
+
+---
+
+## Logros de la sesión (2026-06-11) — v0.17.0
+
+### 48. max_cash_in_hand + alerta en dashboard ✅
+
+`system_config.max_cash_in_hand = 300.00`. Dashboard verifica efectivo cada 30s vía `getShiftCashSummary`.
+Si `current_balance > 300` → punto rojo pulsante + texto "⚠️ ALERTA, Límite de dinero en caja excedido".
+Solo aviso, no bloquea.
+
+### 49. Módulo Depósito + Caja Fuerte removida ✅
+
+- Nuevo tipo de movimiento: `DEPOSIT` (idéntico a EGRESO, disminuye saldo).
+- DB constraint + queries de balance actualizadas.
+- POS: botón 🏦 Depósito en módulo Caja.
+- Caja Fuerte removida de `get_online_users` y `create_transfer`.
+- Transferencia solo entre usuarios reales con turno abierto.
+
+### 50. Cierre de turno sin campo de efectivo ✅
+
+- `CloseShiftRequest`: sin `closing_cash`.
+- DB shifts: +`surplus`, +`shortage`.
+- Sistema calcula: balance POSITIVO → FALTANTE, balance NEGATIVO → SOBRANTE.
+- POS: modal confirmación, sin campo efectivo.
+- Botón "🔒 Cerrar Turno" movido del dashboard al módulo Caja.
+
+### 51. Pantalla post-cierre con resumen completo ✅
+
+- Sección 1: 💰 Resumen de Efectivo (apertura, ventas, ingresos, egresos, depósitos, transfers).
+- Sección 2: 💳 Otras Formas de Pago (totales por método).
+- "Sobrante de Efectivo" / "Faltante de Efectivo" / "Efectivo en CERO".
+- Botón 🖨 Imprimir.
+
+### 52. Template impresión cierre de turno ✅
+
+- `SHIFT_CLOSE` type en FusionBridge con `ShiftCloseData`.
+- Plantilla completa: empresa, empleado, turno, resumen efectivo (+/-), total ventas.
+- 7 puntos separadores al final.
+
+### 53. Validación de saldo negativo eliminada ✅
+
+Egresos, Depósitos y Transferencias ya no validan saldo disponible.
+Empleado puede depositar/transferir todo su efectivo físico.
+Diferencia se refleja como sobrante/faltante al cerrar.
+
+### 54. TRANSFER_IN como tipo independiente ✅
+
+- Reemplaza `INCOME + related_user_id IS NOT NULL` por `TRANSFER_IN`.
+- DB constraint, queries de balance, labels POS actualizados.
+- Ícono 📥, label "Transferencia recibida".
+
+### 55. cash_printer_ip en system_config ✅
+
+- `system_config.cash_printer_ip` + `cash_printer_port` independiente de dispensers.
+- Expuesto en config API (`$config.cash_printer_ip`).
+- Todas las impresiones de caja usan esta IP.
+
+### 56. Módulo Caja — siempre accesible ✅
+
+- Caja accesible sin turno abierto.
+- Botones deshabilitados hasta abrir turno.
+- Botón "🔓 Abrir Turno" visible cuando no hay turno.
+- Dashboard: dispensers visibles pero bloqueados, card "Turno no aperturado".
+
+### 57. Modal de confirmación en movimientos de caja ✅
+
+- Flujo: Formulario → Modal ¿Confirmar? → Registro → Modal ¿Imprimir?
+- Aplica a Ingreso, Egreso, Depósito, Transferencia.
+- Botones rápidos reemplazan valor (no suman). Etiquetas sin "+".
+
+### 58. Historial: limpieza y reimpresión ✅
+
+- Tarjetas "Total ingresos" / "Total egresos" eliminadas.
+- Línea "Saldo: $" eliminada de movimientos de caja.
+- Reimpresión en despachos y caja con ícono 🖨.
+- `formatCurrency` inmune a strings.
+
+### 59. Plantillas: 7 puntos + puntos suspensivos + MAYÚSCULAS ✅
+
+- Todas las plantillas: 7 `.` al final para evitar corte.
+- Cierre de turno: `{{DOT:label:value}}` → "LABEL: ..... $ VALUE".
+- Símbolos (+) y (-) en resumen de efectivo.
+- Textos fijos en MAYÚSCULAS sin tildes.
+- `REIMPRESION` label en tickets reimpresos.
+- Auto-redirect 2.5s post-impresión.
+
+### 60. docs/INSTALL.md ✅
+
+Guía completa de instalación para Debian 13, usuario único `app`, sin Docker.
+Cubre: PostgreSQL, POS Backend, FusionBridge, Nginx, SSL, firewall, seeds.
+
+### Archivos modificados (esta sesión)
+
+```
+FusionBridge (3):
+  PrintResource.java           ← SHIFT_CLOSE type, 7 dots test ticket
+  ReceiptBuilder.java          ← +ShiftCloseData class
+  TemplateRenderer.java        ← renderShiftClose, shiftCloseTemplate, DOT format, TRANSFER_IN label
+
+Backend (7):
+  config.py                    ← cash_printer_ip, cash_printer_port
+  api/cash.py                  ← DEPOSIT type, TRANSFER_IN, remove balance validation
+  api/shifts.py                ← +surplus/shortage, close_shift refactor, sales_cash_count
+  api/dispatches.py            ← _build_receipt_data, customer_email
+  models/dispatch.py           ← +DEPOSIT, +TRANSFER_IN constraints
+  models/shift.py              ← +surplus, +shortage
+  schemas/__init__.py          ← CloseShiftResponse refactor, ConfigResponse cash_printer
+  tests/test_api_cash.py       ← reescrito: sin validación negativa
+  tests/test_api_credit.py     ← test_transfer sin Caja Fuerte
+  tests/test_api_dispatch.py   ← test_close_shift surplus/shortage
+
+POS (9):
+  +page.svelte                 ← max_cash_in_hand alert, dispensers bloqueados sin turno
+  cash/+page.svelte            ← solo botones, Abrir/Cerrar Turno, sin movimientos
+  cash/movement/+page.svelte   ← DEPOSIT type, confirm modal, botones reemplazan
+  cash/transfer/+page.svelte   ← confirm modal, botones reemplazan, sin Caja Fuerte
+  history/+page.svelte         ← reprint cash, sin cards/saldo, TRANSFER_IN label, formatCurrency fix
+  users/+page.svelte           ← formatCurrency fix
+  shift/close/+page.svelte     ← pantalla completa: resumen efectivo + no-efectivo + print
+  SaleWizard.svelte            ← receipt_data from DB, auto-redirect
+  bridge.ts                    ← print error logging
+  types.ts                     ← DEPOSIT, TRANSFER_IN, CloseShiftResponse, cash_printer
+  powerfin.ts                  ← CloseShiftRequest sin closing_cash
+  powerfin.mock.ts             ← actualizado para nuevos tipos
+
+Docs (2):
+  INSTALL.md                   ← NUEVO: guía instalación Debian 13
+  KEY49-INTEGRATION-GUIDE.md   ← actualizado
 ```
 
 ---

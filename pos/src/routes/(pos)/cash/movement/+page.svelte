@@ -8,22 +8,29 @@
 	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge';
 
-	const type = ($page.url.searchParams.get('type') ?? 'INCOME') as 'INCOME' | 'EXPENSE';
+	const type = ($page.url.searchParams.get('type') ?? 'INCOME') as 'INCOME' | 'EXPENSE' | 'DEPOSIT';
 	const isIncome = type === 'INCOME';
+	const title = type === 'INCOME' ? 'Registrar Ingreso' : type === 'DEPOSIT' ? 'Registrar Depósito' : 'Registrar Egreso';
 
 	let amount: number | null = null;
 	let observation = '';
 	let loading = false;
 	let error = '';
 	let showPrintModal = false;
+	let showConfirmModal = false;
 
 	async function handleSubmit() {
 		if (!amount || amount <= 0) {
 			error = 'Ingrese un valor válido';
 			return;
 		}
-		if (!$auth.token || !$shift) return;
+		error = '';
+		showConfirmModal = true;
+	}
 
+	async function handleConfirm() {
+		if (!$auth.token || !$shift) return;
+		showConfirmModal = false;
 		loading = true;
 		error = '';
 
@@ -31,7 +38,7 @@
 			await powerfin.createCashMovement($auth.token, {
 				shift_id: $shift.shift_id,
 				type,
-				amount,
+				amount: amount!,
 				observation: observation.trim()
 			});
 			showPrintModal = true;
@@ -46,8 +53,8 @@
 		printing = true;
 		try {
 			const loc = $config?.location;
-			const defaultIp = $config?.dispensers?.[0]?.printer_ip || '192.168.1.31';
-			const defaultPort = $config?.dispensers?.[0]?.printer_port || 9100;
+			const defaultIp = $config?.cash_printer_ip || '';
+			const defaultPort = $config?.cash_printer_port || 9100;
 			await bridge.printReceipt({
 				type: 'CASH_MOVEMENT',
 				printerIp: defaultIp,
@@ -81,7 +88,7 @@
 </script>
 
 <Header
-	title={isIncome ? 'Registrar Ingreso' : 'Registrar Egreso'}
+	title={title}
 	showBack={true}
 	onBack={() => goto('/cash')}
 />
@@ -105,7 +112,7 @@
 		<div class="text-center mb-6">
 			<div class="text-4xl mb-2">{isIncome ? '💰' : '💸'}</div>
 			<div class="text-lg font-bold {isIncome ? 'text-green-700' : 'text-red-600'}">
-				{isIncome ? 'Ingreso de dinero' : 'Egreso de dinero'}
+				{isIncome ? 'Ingreso de dinero' : type === 'DEPOSIT' ? 'Depósito de dinero' : 'Egreso de dinero'}
 			</div>
 			<div class="text-xs text-gray-400 mt-1">
 				{isIncome ? 'Incrementa el saldo de caja' : 'Disminuye el saldo de caja'}
@@ -134,9 +141,9 @@
 			{#each [5, 10, 20, 50, 100, 200] as val}
 				<button
 					class="touch-btn px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:border-primary hover:text-primary transition"
-					on:click={() => { amount = (amount ?? 0) + val; }}
+					on:click={() => { amount = val; }}
 				>
-					+${val}
+					${val}
 				</button>
 			{/each}
 		</div>
@@ -169,10 +176,35 @@
 				on:click={handleSubmit}
 				disabled={loading || !amount}
 			>
-				{loading ? 'Registrando...' : isIncome ? 'Registrar Ingreso' : 'Registrar Egreso'}
+				{loading ? 'Registrando...' : isIncome ? 'Registrar Ingreso' : type === 'DEPOSIT' ? 'Registrar Depósito' : 'Registrar Egreso'}
 			</button>
 		</div>
 	</div>
+	{/if}
+
+	<!-- Confirmación modal -->
+	{#if showConfirmModal}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+			<div class="absolute inset-0 bg-black/50" on:click={() => showConfirmModal = false}></div>
+			<div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+				<div class="text-center mb-4">
+					<div class="text-4xl mb-2">{isIncome ? '💰' : type === 'DEPOSIT' ? '🏦' : '💸'}</div>
+					<h3 class="text-lg font-semibold text-gray-800">¿Confirmar {isIncome ? 'Ingreso' : type === 'DEPOSIT' ? 'Depósito' : 'Egreso'}?</h3>
+					<p class="text-2xl font-bold mt-2">{isIncome ? '+' : '-'}$ {amount?.toFixed(2)}</p>
+					{#if observation}
+						<p class="text-sm text-gray-500 mt-1">{observation}</p>
+					{/if}
+				</div>
+				<div class="grid grid-cols-2 gap-3">
+					<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-semibold" on:click={() => showConfirmModal = false}>
+						Cancelar
+					</button>
+					<button class="touch-btn rounded-xl py-3 font-semibold text-white {isIncome ? 'bg-green-600' : 'bg-red-600'}" on:click={handleConfirm}>
+						Sí, Confirmar
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 
 	<!-- Print confirmation modal -->
@@ -182,7 +214,7 @@
 				<div class="text-center mb-4">
 					<div class="text-4xl mb-2">{isIncome ? '💰' : '💸'}</div>
 					<div class="text-lg font-bold text-gray-800">
-						{isIncome ? 'Ingreso registrado' : 'Egreso registrado'}
+						{isIncome ? 'Ingreso registrado' : type === 'DEPOSIT' ? 'Depósito registrado' : 'Egreso registrado'}
 					</div>
 					<div class="text-sm text-gray-500 mt-1">
 						$ {amount?.toFixed(2)}

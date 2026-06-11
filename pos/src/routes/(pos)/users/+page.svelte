@@ -24,8 +24,9 @@
 		}
 	}
 
-	function formatCurrency(value: number | undefined | null): string {
-		return '$ ' + (value ?? 0).toFixed(2);
+	function formatCurrency(value: number | string | undefined | null): string {
+		const num = typeof value === 'number' ? value : Number(value ?? 0);
+		return '$ ' + num.toFixed(2);
 	}
 
 	function userIcon(role: string): string {

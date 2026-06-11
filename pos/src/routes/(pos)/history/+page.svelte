@@ -18,6 +18,7 @@
 	let activeTab: 'dispatches' | 'cash' = 'dispatches';
 	let printing: string | null = null; // order_id being printed
 	let printError: string | null = null;
+	let reprintingCashId: number | null = null;
 	let refreshTimer: ReturnType<typeof setInterval> | null = null;
 	let dispatchCount = 0;
 	let dispatchTotal = 0;
@@ -64,8 +65,9 @@
 		}
 	}
 
-	function formatCurrency(value: number | undefined | null): string {
-		return '$ ' + (value ?? 0).toFixed(2);
+	function formatCurrency(value: number | string | undefined | null): string {
+		const num = typeof value === 'number' ? value : Number(value ?? 0);
+		return '$ ' + num.toFixed(2);
 	}
 
 	function formatTime(iso: string): string {
@@ -127,7 +129,7 @@
 		if (!$config) { console.error('[reprint] config is null, cannot print'); return; }
 		const dispenser = $config.dispensers.find(d => d.dispenser_id === order.dispenser_id);
 		console.log('[reprint] dispenser:', dispenser?.dispenser_id, 'printer_ip:', dispenser?.printer_ip);
-		const printerIp = dispenser?.printer_ip || '192.168.1.21';
+		const printerIp = dispenser?.printer_ip || '';
 		const printerPort = dispenser?.printer_port || 9100;
 		const loc = $config.location;
 
@@ -155,6 +157,7 @@
 					customerId: order.customer_id ?? '',
 					customerAddress: order.customer_address ?? '',
 					customerPhone: order.customer_phone ?? '',
+					customerEmail: order.customer_email ?? '',
 					plate: order.plate ?? '',
 					invoiceId: order.invoice_number ?? '',
 					invoiceAuth: order.access_key ?? '',
@@ -170,11 +173,15 @@
 					locationRuc: loc?.ruc ?? '',
 					locationPhone: loc?.phone ?? '',
 					locationCity: loc?.city ?? '',
+					locationProvince: loc?.province ?? '',
 					locationCountry: loc?.country ?? '',
 					fiscalRegime: loc?.fiscal_regime ?? '',
+					sriEnvironment: loc?.sri_environment ?? 0,
+					emissionType: loc?.emission_type ?? 0,
 					// Date/time
 					date: new Date().toLocaleDateString('es-EC'),
 					time: new Date().toLocaleTimeString('es-EC'),
+					isReprint: true,
 				}
 			});
 		} catch (err) {
@@ -183,6 +190,35 @@
 		} finally {
 			printing = null;
 		}
+	}
+
+	async function reprintCashMovement(m: CashMovement) {
+		if (!$config) return;
+		reprintingCashId = m.movement_id;
+		try {
+			const loc = $config?.location;
+			const defaultIp = $config?.cash_printer_ip || '';
+			const defaultPort = $config?.cash_printer_port || 9100;
+			await bridge.printReceipt({
+				type: 'CASH_MOVEMENT',
+				printerIp: defaultIp,
+				printerPort: defaultPort,
+				cashData: {
+					movementType: m.type === 'TRANSFER_IN' ? 'INCOME' : m.type,
+					date: new Date(m.created_at).toLocaleDateString('es-EC'),
+					time: new Date(m.created_at).toLocaleTimeString('es-EC'),
+					userName: ($shift as any)?.user_name || '',
+					amount: Number(m.amount ?? 0).toFixed(2),
+					observation: m.observation,
+					locationName: loc?.name || '',
+					locationAddress: loc?.address || '',
+					locationRuc: loc?.ruc || '',
+					locationPhone: loc?.phone || '',
+					isReprint: true,
+				}
+			});
+		} catch { /* non-blocking */ }
+		finally { reprintingCashId = null; }
 	}
 
 	onMount(() => {
@@ -328,18 +364,6 @@
 					Sin movimientos de caja en este turno
 				</div>
 			{:else}
-				<!-- Mini resumen de caja -->
-				<div class="grid grid-cols-2 gap-3 mb-4">
-					<div class="card p-3 text-center bg-green-50 border-green-200">
-						<div class="text-lg font-bold text-green-700">{formatCurrency(incomeTotal)}</div>
-						<div class="text-xs text-green-600">Total ingresos</div>
-					</div>
-					<div class="card p-3 text-center bg-red-50 border-red-200">
-						<div class="text-lg font-bold text-red-600">{formatCurrency(expenseTotal)}</div>
-						<div class="text-xs text-red-500">Total egresos</div>
-					</div>
-				</div>
-
 				<div class="space-y-2">
 					{#each movements as m (m.movement_id)}
 						<div class="card p-3 flex items-center gap-3">
@@ -358,7 +382,14 @@
 							</div>
 							<div class="text-sm font-semibold {m.type === 'INCOME' ? 'text-green-600' : 'text-red-600'} text-right">
 								<div>{m.type === 'INCOME' ? '+' : '-'}{formatCurrency(m.amount)}</div>
-								<div class="text-xs text-gray-400 font-normal">Saldo: {formatCurrency(m.running_balance)}</div>
+								<button
+								class="touch-btn text-gray-400 hover:text-blue-600 px-1 text-sm"
+								title="Reimprimir comprobante"
+								on:click|stopPropagation={() => reprintCashMovement(m)}
+								disabled={reprintingCashId === m.movement_id}
+							>
+								{reprintingCashId === m.movement_id ? '⏳' : '🖨'}
+							</button>
 							</div>
 						</div>
 					{/each}

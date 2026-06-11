@@ -18,6 +18,7 @@
 	let loadingUsers = true;
 	let error = '';
 	let showPrintModal = false;
+	let showConfirmModal = false;
 	let printing = false;
 
 	$: selectedUser = users.find(u => u.user_id === selectedUserId);
@@ -48,16 +49,21 @@
 			error = 'Seleccione un destinatario';
 			return;
 		}
-		if (!$auth.token || !$shift) return;
+		error = '';
+		showConfirmModal = true;
+	}
 
+	async function handleConfirm() {
+		if (!$auth.token || !$shift) return;
+		showConfirmModal = false;
 		loading = true;
 		error = '';
 
 		try {
 			await powerfin.createTransfer($auth.token, {
 				from_shift_id: $shift.shift_id,
-				to_user_id: selectedUserId,
-				amount,
+				to_user_id: selectedUserId!,
+				amount: amount!,
 				observation: observation.trim()
 			});
 			showPrintModal = true;
@@ -72,7 +78,7 @@
 		printing = true;
 		try {
 			const loc = $config?.location;
-			const defaultIp = $config?.dispensers?.[0]?.printer_ip || '192.168.1.31';
+			const defaultIp = $config?.cash_printer_ip || '';
 			const defaultPort = $config?.dispensers?.[0]?.printer_port || 9100;
 			const movType = isSafeVault ? 'SAFE_DROP' : 'TRANSFER_OUT';
 			await bridge.printReceipt({
@@ -196,9 +202,9 @@
 				{#each [10, 20, 50, 100, 200, 500] as val}
 					<button
 						class="touch-btn px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:border-primary hover:text-primary transition"
-						on:click={() => { amount = (amount ?? 0) + val; }}
+						on:click={() => { amount = val; }}
 					>
-						+${val}
+						${val}
 					</button>
 				{/each}
 			</div>
@@ -236,6 +242,32 @@
 			</button>
 		</div>
 	</div>
+	{/if}
+
+	<!-- Confirmación modal -->
+	{#if showConfirmModal}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+			<div class="absolute inset-0 bg-black/50" on:click={() => showConfirmModal = false}></div>
+			<div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+				<div class="text-center mb-4">
+					<div class="text-4xl mb-2">📤</div>
+					<h3 class="text-lg font-semibold text-gray-800">¿Confirmar Transferencia?</h3>
+					<p class="text-2xl font-bold mt-2">$ {amount?.toFixed(2)}</p>
+					<p class="text-sm text-gray-500 mt-1">Destinatario: {selectedUser?.name}</p>
+					{#if observation}
+						<p class="text-sm text-gray-500 mt-1">{observation}</p>
+					{/if}
+				</div>
+				<div class="grid grid-cols-2 gap-3">
+					<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-3 font-semibold" on:click={() => showConfirmModal = false}>
+						Cancelar
+					</button>
+					<button class="touch-btn bg-red-600 text-white rounded-xl py-3 font-semibold" on:click={handleConfirm}>
+						Sí, Confirmar
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 
 	<!-- Print confirmation modal -->

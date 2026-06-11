@@ -57,6 +57,11 @@ public class PrintResource {
                         ReceiptBuilder.CashMovementData.fromMap(request);
                 receiptBytes = receiptBuilder.buildCashMovementReceipt(data);
 
+            } else if ("SHIFT_CLOSE".equals(type)) {
+                ReceiptBuilder.ShiftCloseData data =
+                        ReceiptBuilder.ShiftCloseData.fromMap(request);
+                receiptBytes = receiptBuilder.buildShiftCloseReceipt(data);
+
             } else {
                 return Response.status(400)
                         .entity(Map.of("error", "Unknown receipt type: " + type))
@@ -172,6 +177,13 @@ public class PrintResource {
             out.write("Si puede leer este ticket,".getBytes()); out.write(lf);
             out.write("la impresora funciona correctamente.".getBytes()); out.write(lf);
             out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
+            out.write(".".getBytes()); out.write(lf);
             out.write(center);
             out.write(dashes.getBytes()); out.write(lf);
             out.write(left);

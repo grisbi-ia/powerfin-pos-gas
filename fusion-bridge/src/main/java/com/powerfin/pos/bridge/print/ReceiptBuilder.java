@@ -37,6 +37,13 @@ public class ReceiptBuilder {
     }
 
     /**
+     * Renders a shift close receipt.
+     */
+    public byte[] buildShiftCloseReceipt(ShiftCloseData data) throws IOException {
+        return renderer.renderShiftClose(data);
+    }
+
+    /**
      * Checks if a printer is reachable via TCP.
      */
     public boolean isPrinterReachable(String ip, int port) {
@@ -86,6 +93,7 @@ public class ReceiptBuilder {
         public String taxLabel;
         public String taxAmount;
         public String unit;
+        public boolean isReprint;
 
         @SuppressWarnings("unchecked")
         public static FuelReceiptData fromMap(Map<String, Object> request) {
@@ -141,6 +149,7 @@ public class ReceiptBuilder {
                 d.taxLabel = strParam(fuel, "taxLabel");
                 d.taxAmount = strParam(fuel, "taxAmount");
                 d.unit = strParam(fuel, "unit");
+                d.isReprint = Boolean.TRUE.equals(fuel.get("isReprint"));
             }
 
             return d;
@@ -174,6 +183,7 @@ public class ReceiptBuilder {
         public String userName;
         public String amount;
         public String observation;
+        public boolean isReprint;
 
         @SuppressWarnings("unchecked")
         public static CashMovementData fromMap(Map<String, Object> request) {
@@ -198,7 +208,85 @@ public class ReceiptBuilder {
             d.userName = str(data, "userName", str(data, "user_name", ""));
             d.amount = str(data, "amount", "0.00");
             d.observation = str(data, "observation", "");
+            d.isReprint = Boolean.TRUE.equals(data.get("isReprint"));
 
+            return d;
+        }
+
+        private static String str(Map<String, Object> map, String key, String def) {
+            Object v = map.get(key);
+            return v != null ? v.toString() : def;
+        }
+    }
+
+    // ── Shift close receipt data ─────────────────────────
+
+    public static class ShiftCloseData {
+        public String locationName, locationAddress, locationRuc, locationPhone;
+        public String date, time, userName;
+        public String shiftId, openedAt, closedAt;
+        public String openingCash;
+        // Cash breakdown
+        public String salesCash, salesCashCount;
+        public String income, incomeCount;
+        public String expense, expenseCount;
+        public String deposits, depositsCount;
+        public String transfersOut, transfersOutCount;
+        public String transfersIn, transfersInCount;
+        public String safeDrops, safeDropsCount;
+        // Result
+        public String surplus, shortage;
+        public String totalCash, totalSales;
+        // Non-cash sales (formatted as multi-line string)
+        public String nonCashLines;
+
+        @SuppressWarnings("unchecked")
+        public static ShiftCloseData fromMap(Map<String, Object> request) {
+            ShiftCloseData d = new ShiftCloseData();
+            Map<String, Object> data = (Map<String, Object>) request.get("shiftData");
+            if (data == null) data = request;
+
+            d.locationName = str(data, "locationName", "GASOLINERA");
+            d.locationAddress = str(data, "locationAddress", "");
+            d.locationRuc = str(data, "locationRuc", "");
+            d.locationPhone = str(data, "locationPhone", "");
+            d.date = str(data, "date", "");
+            d.time = str(data, "time", "");
+            d.userName = str(data, "userName", "");
+            d.shiftId = str(data, "shiftId", "");
+            d.openedAt = str(data, "openedAt", "");
+            d.closedAt = str(data, "closedAt", "");
+            d.openingCash = str(data, "openingCash", "0.00");
+            d.salesCash = str(data, "salesCash", "0.00");
+            d.salesCashCount = str(data, "salesCashCount", "0");
+            d.income = str(data, "income", "0.00");
+            d.incomeCount = str(data, "incomeCount", "0");
+            d.expense = str(data, "expense", "0.00");
+            d.expenseCount = str(data, "expenseCount", "0");
+            d.deposits = str(data, "deposits", "0.00");
+            d.depositsCount = str(data, "depositsCount", "0");
+            d.transfersOut = str(data, "transfersOut", "0.00");
+            d.transfersOutCount = str(data, "transfersOutCount", "0");
+            d.transfersIn = str(data, "transfersIn", "0.00");
+            d.transfersInCount = str(data, "transfersInCount", "0");
+            d.safeDrops = str(data, "safeDrops", "0.00");
+            d.safeDropsCount = str(data, "safeDropsCount", "0");
+            d.surplus = str(data, "surplus", "");
+            d.shortage = str(data, "shortage", "");
+            d.totalCash = str(data, "totalCash", "0.00");
+            d.totalSales = str(data, "totalSales", "0.00");
+            // Non-cash: format as "METODO (N): $ X.XX" lines
+            java.util.List<Map<String, Object>> nonCash = (java.util.List<Map<String, Object>>) data.get("nonCashSales");
+            if (nonCash != null && !nonCash.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (Map<String, Object> nc : nonCash) {
+                    String name = String.valueOf(nc.getOrDefault("method_name", nc.getOrDefault("methodName", "")));
+                    String total = String.valueOf(nc.getOrDefault("total", "0"));
+                    String count = String.valueOf(nc.getOrDefault("count", "0"));
+                    if (!name.isEmpty()) sb.append(name).append(" (").append(count).append("): $ ").append(total).append("\n");
+                }
+                d.nonCashLines = sb.toString().trim();
+            }
             return d;
         }
 

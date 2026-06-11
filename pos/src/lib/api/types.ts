@@ -32,6 +32,9 @@ export interface AppConfig {
 		emission_type?: number;
 	};
 	printer_policy?: string;
+	max_cash_in_hand?: number;
+	cash_printer_ip?: string;
+	cash_printer_port?: number;
 	dispensers: DispenserConfig[];
 	grades: GradeConfig[];
 	price_lists: PriceListConfig[];
@@ -189,7 +192,6 @@ export interface OpenShiftRequest {
 }
 
 export interface CloseShiftRequest {
-	closing_cash: number;
 	notes: string;
 }
 
@@ -197,12 +199,26 @@ export interface CloseShiftResponse {
 	shift_id: number;
 	closed_at: string;
 	opening_cash: number;
-	closing_cash: number;
-	expected_cash: number;
-	difference: number;
+	surplus: number;
+	shortage: number;
 	total_sales: number;
 	total_volume: number;
 	dispatch_count: number;
+	cash_income: number;
+	cash_income_count: number;
+	cash_expense: number;
+	cash_expense_count: number;
+	cash_deposits: number;
+	cash_deposits_count: number;
+	cash_transfers_out: number;
+	cash_transfers_out_count: number;
+	cash_transfers_in: number;
+	cash_transfers_in_count: number;
+	cash_safe_drops: number;
+	cash_safe_drops_count: number;
+	sales_cash: number;
+	sales_cash_count: number;
+	non_cash_sales: { method_code: string; method_name: string; total: number; count: number }[];
 }
 
 export interface DispatchOrder {
@@ -222,6 +238,7 @@ export interface DispatchOrder {
 	customer_name?: string;
 	customer_address?: string;
 	customer_phone?: string;
+	customer_email?: string;
 	plate?: string;
 	status: 'PENDING' | 'AUTHORIZED' | 'FUELLING' | 'COMPLETED' | 'CANCELLED' | 'COLLECTED';
 	created_at: string;
@@ -284,6 +301,12 @@ export interface CollectDispatchResponse {
 	payment_method: string;
 	collected_amount: number;
 	change_amount: number;
+	receipt_data?: {
+		printerIp: string;
+		printerPort: number;
+		dispenserId: number;
+		fuelData: Record<string, unknown>;
+	};
 }
 
 export interface AuthorizeData {
@@ -377,7 +400,7 @@ export interface SaleCompletedEvent {
 export const SAFE_VAULT_USER_ID = 0;
 export const SAFE_VAULT_ROLE = 'SAFE_VAULT';
 
-export type CashMovementType = 'INCOME' | 'EXPENSE' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'SAFE_DROP';
+export type CashMovementType = 'INCOME' | 'EXPENSE' | 'DEPOSIT' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'SAFE_DROP';
 
 export interface CashMovement {
 	movement_id: number;
@@ -425,7 +448,7 @@ export interface ShiftCashSummary {
 
 export interface CreateCashMovementRequest {
 	shift_id: number;
-	type: 'INCOME' | 'EXPENSE';
+	type: 'INCOME' | 'EXPENSE' | 'DEPOSIT';
 	amount: number;
 	observation: string;
 }

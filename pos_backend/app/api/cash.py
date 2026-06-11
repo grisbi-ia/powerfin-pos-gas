@@ -32,12 +32,17 @@ async def _available_cash(db: AsyncSession, shift_id: int) -> Decimal:
 
     income = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id, CashMovement.type == "INCOME"
+            CashMovement.shift_id == shift_id, CashMovement.type.in_(["INCOME", "TRANSFER_IN"])
         )
     ) or 0.0
     expense = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
             CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE"
+        )
+    ) or 0.0
+    deposits = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "DEPOSIT"
         )
     ) or 0.0
     transfers_out = await db.scalar(
@@ -58,7 +63,7 @@ async def _available_cash(db: AsyncSession, shift_id: int) -> Decimal:
     ) or 0.0
 
     opening = Decimal(str(shift.opening_cash))
-    result = opening + Decimal(str(income)) + Decimal(str(sales_cash)) - Decimal(str(expense)) - Decimal(str(transfers_out)) - Decimal(str(safe_drops))
+    result = opening + Decimal(str(income)) + Decimal(str(sales_cash)) - Decimal(str(expense)) - Decimal(str(deposits)) - Decimal(str(transfers_out)) - Decimal(str(safe_drops))
     return max(result, Decimal("0"))
 
 
@@ -68,17 +73,7 @@ async def create_cash_movement(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Record a cash movement (income or expense).
-    Blocks expenses that would result in negative cash balance."""
-    # Calculate available cash before this movement
-    available = await _available_cash(db, body.shift_id)
-
-    if body.type == "EXPENSE" and Decimal(str(body.amount)) > available:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo insuficiente. Disponible: ${float(available):.2f}, Egreso: ${body.amount:.2f}"
-        )
-
+    """Record a cash movement (income, expense, deposit)."""
     # Calculate running balance
     last = await db.execute(
         select(CashMovement)
@@ -186,12 +181,17 @@ async def get_cash_summary(
 
     income = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id, CashMovement.type == "INCOME"
+            CashMovement.shift_id == shift_id, CashMovement.type.in_(["INCOME", "TRANSFER_IN"])
         )
     ) or 0.0
     expense = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
             CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE"
+        )
+    ) or 0.0
+    deposits = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "DEPOSIT"
         )
     ) or 0.0
     transfers_out = await db.scalar(
@@ -206,8 +206,7 @@ async def get_cash_summary(
     ) or 0.0
     transfers_received = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id, CashMovement.type == "INCOME",
-            CashMovement.related_user_id.isnot(None)
+            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN"
         )
     ) or 0.0
     sales_cash = await db.scalar(
@@ -219,7 +218,7 @@ async def get_cash_summary(
 
     opening = float(shift.opening_cash)
     # Cast all to float — Numeric columns return Decimal from asyncpg
-    balance = opening + float(income or 0) + float(sales_cash or 0) - float(expense or 0) - float(transfers_out or 0) - float(safe_drops or 0)
+    balance = opening + float(income or 0) + float(sales_cash or 0) - float(expense or 0) - float(deposits or 0) - float(transfers_out or 0) - float(safe_drops or 0)
 
     return CashSummaryResponse(
         shift_id=shift_id,
@@ -227,6 +226,7 @@ async def get_cash_summary(
         current_balance=round(balance, 2),
         total_income=round(income, 2),
         total_expense=round(expense, 2),
+        total_deposits=round(deposits, 2),
         total_sales_cash=round(sales_cash, 2),
         total_transfers_received=round(transfers_received, 2),
         total_transfers_sent=round(transfers_out, 2),
@@ -240,16 +240,7 @@ async def create_transfer(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Transfer money between users or to Caja Fuerte (to_user_id=0).
-    Blocks transfers/safe-drops that would result in negative cash balance."""
-    # Calculate available cash before transfer
-    available = await _available_cash(db, body.from_shift_id)
-
-    if Decimal(str(body.amount)) > available:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Saldo insuficiente. Disponible: ${float(available):.2f}, Transferencia: ${body.amount:.2f}"
-        )
+    """Transfer money between users with open shifts."""
 
     from_shift = (await db.execute(
         select(Shift).where(Shift.shift_id == body.from_shift_id)
@@ -258,26 +249,33 @@ async def create_transfer(
     if not from_shift:
         raise HTTPException(status_code=404, detail="Turno origen no encontrado")
 
-    # Determine recipient name
-    to_name = "Caja Fuerte" if body.to_user_id == 0 else "Despachador"
-    if body.to_user_id != 0:
-        to_user = (await db.execute(
-            select(User).where(User.user_id == body.to_user_id)
-        )).scalar_one_or_none()
-        if to_user:
-            to_name = to_user.name
+    to_user = (await db.execute(
+        select(User).where(User.user_id == body.to_user_id)
+    )).scalar_one_or_none()
+    if not to_user:
+        raise HTTPException(status_code=404, detail="Usuario destino no encontrado")
+    to_name = to_user.name
+
+    # Verify target user has an open shift
+    to_shift = (await db.execute(
+        select(Shift).where(
+            Shift.user_id == body.to_user_id,
+            Shift.status == "OPEN",
+        )
+    )).scalar_one_or_none()
+    if not to_shift:
+        raise HTTPException(status_code=400, detail="El usuario destino no tiene un turno abierto")
 
     transfer = Transfer(
         from_shift_id=body.from_shift_id,
-        to_user_id=body.to_user_id if body.to_user_id != 0 else None,
+        to_user_id=body.to_user_id,
         to_user_name=to_name,
         amount=float(body.amount),
         observation=body.observation,
     )
     db.add(transfer)
 
-    # Create cash movement for sender
-    mv_type = "SAFE_DROP" if body.to_user_id == 0 else "TRANSFER_OUT"
+    # Create TRANSFER_OUT for sender
     last = await db.execute(
         select(CashMovement)
         .where(CashMovement.shift_id == body.from_shift_id)
@@ -289,45 +287,44 @@ async def create_transfer(
 
     mv = CashMovement(
         shift_id=body.from_shift_id,
-        type=mv_type,
+        type="TRANSFER_OUT",
         amount=float(body.amount),
         observation=body.observation,
-        related_user_id=body.to_user_id if body.to_user_id != 0 else None,
+        related_user_id=body.to_user_id,
         related_user_name=to_name,
         running_balance=last_balance - float(body.amount),
     )
     db.add(mv)
 
-    # Create INCOME movement for receiver (user-to-user only, not SAFE_DROP)
-    if body.to_user_id != 0:
-        to_shift_result = await db.execute(
-            select(Shift).where(
-                Shift.user_id == body.to_user_id,
-                Shift.status == "OPEN",
-            )
+    # Create INCOME movement for receiver
+    to_shift_result = await db.execute(
+        select(Shift).where(
+            Shift.user_id == body.to_user_id,
+            Shift.status == "OPEN",
         )
-        to_shift = to_shift_result.scalar_one_or_none()
-        if to_shift:
-            # Calculate receiver's running balance
-            to_last = await db.execute(
-                select(CashMovement)
-                .where(CashMovement.shift_id == to_shift.shift_id)
-                .order_by(CashMovement.movement_id.desc())
-                .limit(1)
-            )
-            to_last_mv = to_last.scalar_one_or_none()
-            to_last_balance = float(to_last_mv.running_balance) if to_last_mv else 0.0
+    )
+    to_shift = to_shift_result.scalar_one_or_none()
+    if to_shift:
+        # Calculate receiver's running balance
+        to_last = await db.execute(
+            select(CashMovement)
+            .where(CashMovement.shift_id == to_shift.shift_id)
+            .order_by(CashMovement.movement_id.desc())
+            .limit(1)
+        )
+        to_last_mv = to_last.scalar_one_or_none()
+        to_last_balance = float(to_last_mv.running_balance) if to_last_mv else 0.0
 
-            to_mv = CashMovement(
-                shift_id=to_shift.shift_id,
-                type="INCOME",
-                amount=float(body.amount),
-                observation=f"Transferencia recibida de {from_shift.user_id}",
-                related_user_id=from_shift.user_id,
-                related_user_name=str(from_shift.user_id),
-                running_balance=to_last_balance + float(body.amount),
-            )
-            db.add(to_mv)
+        to_mv = CashMovement(
+            shift_id=to_shift.shift_id,
+            type="TRANSFER_IN",
+            amount=float(body.amount),
+            observation=f"Transferencia recibida de {from_shift.user_id}",
+            related_user_id=from_shift.user_id,
+            related_user_name=str(from_shift.user_id),
+            running_balance=to_last_balance + float(body.amount),
+        )
+        db.add(to_mv)
 
     await db.commit()
     await db.refresh(transfer)
@@ -379,15 +376,5 @@ async def get_users_online(
             sales_count=sales_count,
             total_amount=round(total_amount, 2),
         ))
-
-    # Add Caja Fuerte
-    online.append(OnlineUserResponse(
-        user_id=0,
-        name="Caja Fuerte",
-        role="SAFE_VAULT",
-        shift_id=0,
-        sales_count=0,
-        total_amount=0,
-    ))
 
     return online

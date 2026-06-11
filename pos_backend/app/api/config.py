@@ -165,6 +165,30 @@ async def get_config(
     if policy_cfg:
         printer_policy = policy_cfg.value
 
+    # Max cash in hand limit (alert only, not restrictive)
+    max_cash_in_hand = 300.0
+    max_cfg = (await db.execute(
+        select(SystemConfig).where(SystemConfig.key == "max_cash_in_hand")
+    )).scalar_one_or_none()
+    if max_cfg:
+        try: max_cash_in_hand = float(max_cfg.value)
+        except (ValueError, TypeError): pass
+
+    # Cash printer IP (separate from dispenser printers)
+    cash_printer_ip = ""
+    cash_printer_port = 9100
+    cp_ip = (await db.execute(
+        select(SystemConfig).where(SystemConfig.key == "cash_printer_ip")
+    )).scalar_one_or_none()
+    if cp_ip and cp_ip.value:
+        cash_printer_ip = cp_ip.value
+    cp_port = (await db.execute(
+        select(SystemConfig).where(SystemConfig.key == "cash_printer_port")
+    )).scalar_one_or_none()
+    if cp_port and cp_port.value:
+        try: cash_printer_port = int(cp_port.value)
+        except (ValueError, TypeError): pass
+
     return ConfigResponse(
         location=location,
         dispensers=dispensers,
@@ -172,5 +196,8 @@ async def get_config(
         price_lists=price_lists,
         payment_methods=payment_methods,
         printer_policy=printer_policy,
+        max_cash_in_hand=max_cash_in_hand,
+        cash_printer_ip=cash_printer_ip,
+        cash_printer_port=cash_printer_port,
         polling=polling,
     )

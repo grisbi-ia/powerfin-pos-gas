@@ -84,7 +84,7 @@ export async function getCurrentShift(token: string): Promise<Shift | null> {
 }
 
 export async function closeShift(
-	token: string, shiftId: number, data: { closing_cash: number; notes: string }
+	token: string, shiftId: number, data: { notes: string }
 ): Promise<CloseShiftResponse> {
 	if (USE_MOCKS_POWERFIN) return mock.closeShift(token, shiftId, data);
 	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/close`), {

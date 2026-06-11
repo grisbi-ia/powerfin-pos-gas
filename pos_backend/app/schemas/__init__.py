@@ -95,6 +95,9 @@ class ConfigResponse(BaseModel):
     price_lists: list[PriceListResponse]
     payment_methods: list[PaymentMethodResponse]
     printer_policy: str = "ASK"
+    max_cash_in_hand: float = 300.0
+    cash_printer_ip: str = ""
+    cash_printer_port: int = 9100
     polling: PollingConfig
 
 
@@ -198,7 +201,6 @@ class ShiftResponse(BaseModel):
 
 
 class CloseShiftRequest(BaseModel):
-    closing_cash: Decimal = Decimal("0")
     notes: str = ""
 
 
@@ -206,13 +208,30 @@ class CloseShiftResponse(BaseModel):
     shift_id: int
     closed_at: datetime
     opening_cash: Decimal
-    closing_cash: Decimal
-    expected_cash: Decimal
-    difference: Decimal
+    surplus: Decimal = Decimal("0")
+    shortage: Decimal = Decimal("0")
     total_sales: int = 0
     total_volume: Decimal = Decimal("0")
     dispatch_count: int = 0
     accounting_cash_code: Optional[str] = None
+    # Cash movement breakdown
+    cash_income: Decimal = Decimal("0")
+    cash_income_count: int = 0
+    cash_expense: Decimal = Decimal("0")
+    cash_expense_count: int = 0
+    cash_deposits: Decimal = Decimal("0")
+    cash_deposits_count: int = 0
+    cash_transfers_out: Decimal = Decimal("0")
+    cash_transfers_out_count: int = 0
+    cash_transfers_in: Decimal = Decimal("0")
+    cash_transfers_in_count: int = 0
+    cash_safe_drops: Decimal = Decimal("0")
+    cash_safe_drops_count: int = 0
+    # Cash sales
+    sales_cash: Decimal = Decimal("0")
+    sales_cash_count: int = 0
+    # Non-cash sales breakdown
+    non_cash_sales: list = []
     accounting_branch_code: Optional[str] = None
 
 
@@ -280,6 +299,7 @@ class CollectDispatchResponse(BaseModel):
     payment_method: str
     collected_amount: Decimal
     change_amount: Decimal
+    receipt_data: dict | None = None  # Full data for printing (from DB)
 
 
 class BillingRequest(BaseModel):
@@ -341,6 +361,7 @@ class CashSummaryResponse(BaseModel):
     current_balance: Decimal
     total_income: Decimal
     total_expense: Decimal
+    total_deposits: Decimal = Decimal("0")
     total_sales_cash: Decimal
     total_transfers_received: Decimal = Decimal("0")
     total_transfers_sent: Decimal = Decimal("0")

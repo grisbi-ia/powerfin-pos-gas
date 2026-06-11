@@ -144,7 +144,7 @@ class CashMovement(Base):
     __tablename__ = "cash_movements"
     __table_args__ = (
         CheckConstraint(
-            "type IN ('INCOME', 'EXPENSE', 'SAFE_DROP', 'TRANSFER_OUT')",
+            "type IN ('INCOME', 'EXPENSE', 'SAFE_DROP', 'TRANSFER_OUT', 'TRANSFER_IN', 'DEPOSIT')",
             name="ck_cash_movements_type",
         ),
     )

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.config import ECUADOR_TZ
 from app.database import get_db
-from app.models import CashMovement, Dispatch, Shift
+from app.models import CashMovement, Dispatch, DispatchPayment, Shift
 from app.models.payment import PaymentMethod
 from app.models.user import User
 from app.schemas import (
@@ -104,7 +104,6 @@ async def close_shift(
 
     shift.status = "CLOSED"
     shift.closed_at = datetime.now(ECUADOR_TZ)
-    shift.closing_cash = float(body.closing_cash)
 
     # Count dispatches
     dispatch_count = await db.scalar(
@@ -128,18 +127,30 @@ async def close_shift(
             Dispatch.status == "COLLECTED",
         )
     ) or 0.0
+    sales_cash_count = await db.scalar(
+        select(func.count()).where(
+            Dispatch.shift_id == shift_id,
+            Dispatch.status == "COLLECTED",
+        )
+    ) or 0
 
     # Cash movements — income, expense, transfers, safe drops
     income = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
             CashMovement.shift_id == shift_id,
-            CashMovement.type == "INCOME",
+            CashMovement.type.in_(["INCOME", "TRANSFER_IN"]),
         )
     ) or 0.0
     expense = await db.scalar(
         select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
             CashMovement.shift_id == shift_id,
             CashMovement.type == "EXPENSE",
+        )
+    ) or 0.0
+    deposits = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id,
+            CashMovement.type == "DEPOSIT",
         )
     ) or 0.0
     transfers_out = await db.scalar(
@@ -155,10 +166,74 @@ async def close_shift(
         )
     ) or 0.0
 
-    # Income already includes transfers received (created as INCOME for receiver)
-    # Cast all to float — Numeric columns return Decimal from asyncpg
-    expected = float(shift.opening_cash) + float(income) + float(sales_cash) - float(expense) - float(transfers_out) - float(safe_drops)
-    diff = float(body.closing_cash) - expected
+    # Counts for each cash movement type
+    income_count = await db.scalar(
+        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type.in_(["INCOME", "TRANSFER_IN"]))
+    ) or 0
+    expense_count = await db.scalar(
+        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE")
+    ) or 0
+    deposit_count = await db.scalar(
+        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "DEPOSIT")
+    ) or 0
+    transfer_out_count = await db.scalar(
+        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_OUT")
+    ) or 0
+    safe_drop_count = await db.scalar(
+        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP")
+    ) or 0
+    # Transfers received (INCOME with related_user_id)
+    transfers_recv_amount = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN"
+        )
+    ) or 0.0
+    transfers_recv_count = await db.scalar(
+        select(func.count()).where(
+            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN"
+        )
+    ) or 0
+
+    # Non-cash sales breakdown by payment method
+    non_cash_sales = []
+    pay_breakdown = await db.execute(
+        select(
+            PaymentMethod.code, PaymentMethod.name,
+            func.coalesce(func.sum(DispatchPayment.amount), 0),
+            func.count()
+        )
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+        .where(
+            Dispatch.shift_id == shift_id,
+            Dispatch.status == "COLLECTED",
+            PaymentMethod.code != "EFECTIVO"
+        )
+        .group_by(PaymentMethod.code, PaymentMethod.name)
+    )
+    for row in pay_breakdown:
+        non_cash_sales.append({
+            "method_code": row[0],
+            "method_name": row[1],
+            "total": float(row[2] or 0),
+            "count": int(row[3] or 0),
+        })
+
+    # Expected cash balance: opening + income + sales - expenses - deposits - transfers - safe_drops
+    # Employee must zero out their cash BEFORE closing (via deposits/transfers).
+    # POSITIVE expected → money NOT deposited → FALTANTE (shortage)
+    # NEGATIVE expected → MORE money deposited than expected → SOBRANTE (surplus)
+    expected = float(shift.opening_cash) + float(income) + float(sales_cash) - float(expense) - float(deposits) - float(transfers_out) - float(safe_drops)
+
+    if expected > 0:
+        shift.shortage = round(expected, 2)
+        shift.surplus = 0
+    elif expected < 0:
+        shift.surplus = round(abs(expected), 2)
+        shift.shortage = 0
+    else:
+        shift.surplus = 0
+        shift.shortage = 0
 
     # System config for branch code
     from app.models.company import SystemConfig
@@ -172,14 +247,28 @@ async def close_shift(
         shift_id=shift_id,
         closed_at=shift.closed_at,
         opening_cash=shift.opening_cash,
-        closing_cash=body.closing_cash,
-        expected_cash=round(expected, 2),
-        difference=round(diff, 2),
+        surplus=shift.surplus or 0,
+        shortage=shift.shortage or 0,
         total_sales=dispatch_count,
         total_volume=0,
         dispatch_count=dispatch_count,
         accounting_cash_code=current_user.accounting_cash_code,
         accounting_branch_code=branch_code,
+        cash_income=round(float(income), 2),
+        cash_income_count=income_count,
+        cash_expense=round(float(expense), 2),
+        cash_expense_count=expense_count,
+        cash_deposits=round(float(deposits), 2),
+        cash_deposits_count=deposit_count,
+        cash_transfers_out=round(float(transfers_out), 2),
+        cash_transfers_out_count=transfer_out_count,
+        cash_transfers_in=round(float(transfers_recv_amount), 2),
+        cash_transfers_in_count=transfers_recv_count,
+        cash_safe_drops=round(float(safe_drops), 2),
+        cash_safe_drops_count=safe_drop_count,
+        sales_cash=round(float(sales_cash), 2),
+        sales_cash_count=sales_cash_count,
+        non_cash_sales=non_cash_sales,
     )
 
 
@@ -257,6 +346,7 @@ async def get_shift_dispatches(
             "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
             "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,
             "customer_phone": person_map[d.person_id].phone if d.person_id and d.person_id in person_map else None,
+            "customer_email": person_map[d.person_id].email if d.person_id and d.person_id in person_map else None,
             "plate": vehicle_map[d.vehicle_id].plate if d.vehicle_id and d.vehicle_id in vehicle_map else None,
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,

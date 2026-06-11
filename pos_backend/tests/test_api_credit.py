@@ -93,12 +93,17 @@ class TestCashAPI:
 
     async def test_transfer(self, client, auth_headers):
         shift_id = await self._open_shift(client, auth_headers)
+        # Open a shift for admin (user_id=1) so we can transfer to them
+        admin_login = await client.post("/api/pos/auth/login", json={"username": "admin", "pin": "1234"})
+        admin_token = admin_login.json()["access_token"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        await client.post("/api/pos/shifts/open", headers=admin_headers, json={"opening_cash": 0, "user_name": "Admin"})
+        # Transfer from carlos to admin
         r = await client.post("/api/pos/transfers", headers=auth_headers, json={
-            "from_shift_id": shift_id, "to_user_id": 0, "amount": 50, "observation": "A caja fuerte"
+            "from_shift_id": shift_id, "to_user_id": 1, "amount": 50, "observation": "A admin"
         })
         assert r.status_code == 201
         data = r.json()
-        assert data["to_user_name"] == "Caja Fuerte"
         assert float(data["amount"]) == 50.0
 
     async def test_users_online(self, client, auth_headers):
@@ -106,8 +111,7 @@ class TestCashAPI:
         r = await client.get("/api/pos/users/online", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
-        # Should have at least the current user + Caja Fuerte
-        assert len(data) >= 2
+        # Should have at least the current user (Caja Fuerte removed, use Depósito instead)
+        assert len(data) >= 1
         names = [u["name"] for u in data]
         assert "Carlos Sarmiento" in names
-        assert "Caja Fuerte" in names

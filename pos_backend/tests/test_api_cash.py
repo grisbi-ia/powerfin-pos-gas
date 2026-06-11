@@ -1,66 +1,40 @@
-"""Tests for cash movements — negative balance prevention."""
-
 import pytest
+from httpx import AsyncClient
 
 
-class TestCash:
-    """Cash movement validation tests."""
+@pytest.mark.asyncio
+class TestCashBalanceValidation:
+    """Cash movements — no longer restrict negative balance (employee can deposit all physical cash)."""
 
-    async def _open_shift(self, client, auth_headers, opening=50.0):
-        r = await client.post("/api/pos/shifts/open", headers=auth_headers, json={
-            "opening_cash": opening
+    async def _open_shift(self, client: AsyncClient, headers: dict, opening: float = 0.0):
+        r = await client.post("/api/pos/shifts/open", headers=headers, json={
+            "opening_cash": opening, "user_name": "Test"
         })
-        assert r.status_code in (200, 201)
-        data = r.json()
-        return data["shift_id"]
+        return r.json()["shift_id"]
 
-    async def test_expense_rejected_when_insufficient_balance(self, client, auth_headers):
-        """Block EXPENSE that exceeds available cash."""
+    async def test_expense_allows_negative_balance(self, client, auth_headers):
+        """EXPENSE is now always allowed — negative balance shows as shortage at close."""
         shift_id = await self._open_shift(client, auth_headers, opening=50.0)
 
-        # Try expense of $100 → should fail (only $50 available)
+        # Expense of $100 with only $50 available → now allowed (balance goes to -$50)
         r = await client.post("/api/pos/cash-movements", headers=auth_headers, json={
             "shift_id": shift_id, "type": "EXPENSE", "amount": 100.0,
-            "observation": "Should fail"
-        })
-        assert r.status_code == 400
-        assert "Saldo insuficiente" in r.json()["detail"]
-
-    async def test_expense_allowed_within_balance(self, client, auth_headers):
-        """Allow EXPENSE within available cash."""
-        shift_id = await self._open_shift(client, auth_headers, opening=50.0)
-
-        # Add income first
-        await client.post("/api/pos/cash-movements", headers=auth_headers, json={
-            "shift_id": shift_id, "type": "INCOME", "amount": 30.0,
-            "observation": "Venta aceite"
-        })
-
-        # Now expense $60 (available: $50 + $30 = $80) → should work
-        r = await client.post("/api/pos/cash-movements", headers=auth_headers, json={
-            "shift_id": shift_id, "type": "EXPENSE", "amount": 60.0,
-            "observation": "Pago proveedor"
+            "observation": "Allowed — negative balance OK"
         })
         assert r.status_code == 201
 
-        # Remaining balance: $80 - $60 = $20
-        # Try expense $30 → should fail
-        r = await client.post("/api/pos/cash-movements", headers=auth_headers, json={
-            "shift_id": shift_id, "type": "EXPENSE", "amount": 30.0,
-            "observation": "Should fail"
-        })
-        assert r.status_code == 400
-        assert "Saldo insuficiente" in r.json()["detail"]
+    async def test_deposit_allows_negative_balance(self, client, auth_headers):
+        """DEPOSIT is now always allowed."""
+        shift_id = await self._open_shift(client, auth_headers, opening=10.0)
 
-        # Expense $15 → should work
         r = await client.post("/api/pos/cash-movements", headers=auth_headers, json={
-            "shift_id": shift_id, "type": "EXPENSE", "amount": 15.0,
-            "observation": "Compra material"
+            "shift_id": shift_id, "type": "DEPOSIT", "amount": 200.0,
+            "observation": "All cash deposited"
         })
         assert r.status_code == 201
 
     async def test_income_always_allowed(self, client, auth_headers):
-        """INCOME movements are always allowed (no balance check)."""
+        """INCOME movements are always allowed."""
         shift_id = await self._open_shift(client, auth_headers, opening=0.0)
 
         r = await client.post("/api/pos/cash-movements", headers=auth_headers, json={
@@ -69,30 +43,21 @@ class TestCash:
         })
         assert r.status_code == 201
 
-    async def test_transfer_rejected_when_insufficient_balance(self, client, auth_headers):
-        """Block transfer that exceeds available cash."""
+    async def test_transfer_allows_negative_balance(self, client, auth_headers):
+        """Transfer is now always allowed — negative balance OK."""
         shift_id = await self._open_shift(client, auth_headers, opening=30.0)
 
-        # Try transfer of $50 → should fail (only $30 available)
+        # Need a recipient with an open shift
+        admin_login = await client.post("/api/pos/auth/login", json={"username": "admin", "pin": "1234"})
+        admin_token = admin_login.json()["access_token"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        await client.post("/api/pos/shifts/open", headers=admin_headers, json={"opening_cash": 0, "user_name": "Admin"})
+
+        # Transfer $50 with only $30 available → now allowed
         r = await client.post("/api/pos/transfers", headers=auth_headers, json={
             "from_shift_id": shift_id,
             "to_user_id": 1,
             "amount": 50.0,
-            "observation": "Should fail"
+            "observation": "Allowed — negative OK"
         })
-        assert r.status_code == 400
-        assert "Saldo insuficiente" in r.json()["detail"]
-
-    async def test_safe_drop_rejected_when_insufficient_balance(self, client, auth_headers):
-        """Block safe drop that exceeds available cash."""
-        shift_id = await self._open_shift(client, auth_headers, opening=30.0)
-
-        # Try safe drop of $50 → should fail (only $30 available)
-        r = await client.post("/api/pos/transfers", headers=auth_headers, json={
-            "from_shift_id": shift_id,
-            "to_user_id": 0,
-            "amount": 50.0,
-            "observation": "Should fail"
-        })
-        assert r.status_code == 400
-        assert "Saldo insuficiente" in r.json()["detail"]
+        assert r.status_code == 201
