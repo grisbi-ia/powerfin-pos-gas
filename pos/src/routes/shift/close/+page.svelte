@@ -12,6 +12,8 @@
 	let error = '';
 	let showConfirm = false;
 	let closed = false;
+	let printing = false;
+	let printed = false;
 	let result: CloseShiftResponse | null = null;
 
 	function formatCurrency(v: number | string): string {
@@ -37,7 +39,8 @@
 	}
 
 	async function handlePrint() {
-		if (!result || !$config) return;
+		if (!result || !$config || printing) return;
+		printing = true;
 		const loc = $config.location;
 		const totalCash = result.opening_cash + result.cash_income + result.sales_cash - result.cash_expense - result.cash_deposits - result.cash_transfers_out + result.cash_transfers_in - result.cash_safe_drops;
 		const totalSales = result.sales_cash + result.non_cash_sales.reduce((s, n) => s + n.total, 0);
@@ -83,7 +86,12 @@
 					})),
 				}
 			});
-		} catch { /* */ }
+			printed = true;
+		} catch {
+			error = 'Error al imprimir — revise la impresora';
+		} finally {
+			printing = false;
+		}
 	}
 
 	function handleBack() { goto('/'); }
@@ -238,9 +246,21 @@
 		{/if}
 
 		<!-- Botones -->
+		{#if printing}
+			<div class="mb-4 text-center text-sm text-blue-600 animate-pulse">Enviando a impresora…</div>
+		{:else if printed}
+			<div class="mb-4 bg-green-50 text-green-700 text-sm text-center rounded-xl py-3 flex items-center justify-center gap-2">
+				<span>✅</span> Impresión enviada — puede volver a imprimir si lo necesita
+			</div>
+		{/if}
+
+		{#if error}
+			<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-3">{error}</div>
+		{/if}
+
 		<div class="grid grid-cols-2 gap-3">
-			<button class="touch-btn bg-primary text-white rounded-xl py-4 font-semibold" on:click={handlePrint}>
-				🖨 Imprimir
+			<button class="touch-btn bg-primary text-white rounded-xl py-4 font-semibold disabled:opacity-50" on:click={handlePrint} disabled={printing}>
+				{printing ? 'Imprimiendo…' : printed ? '🖨 Reimprimir' : '🖨 Imprimir'}
 			</button>
 			<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-4 font-semibold" on:click={handleBack}>
 				Ir al inicio

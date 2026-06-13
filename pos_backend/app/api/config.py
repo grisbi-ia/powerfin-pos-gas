@@ -1,6 +1,6 @@
 """Config endpoint — full station configuration."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -28,6 +28,7 @@ from app.schemas import (
     PaymentMethodResponse,
     PollingConfig,
     PriceListResponse,
+    StationInfoResponse,
 )
 
 router = APIRouter(prefix="/api/pos", tags=["config"])
@@ -165,7 +166,6 @@ async def get_config(
     if policy_cfg:
         printer_policy = policy_cfg.value
 
-    # Max cash in hand limit (alert only, not restrictive)
     max_cash_in_hand = 300.0
     max_cfg = (await db.execute(
         select(SystemConfig).where(SystemConfig.key == "max_cash_in_hand")
@@ -201,3 +201,17 @@ async def get_config(
         cash_printer_port=cash_printer_port,
         polling=polling,
     )
+
+
+@router.get("/station-info", response_model=StationInfoResponse)
+async def get_station_info(
+    db: AsyncSession = Depends(get_db),
+):
+    """Public endpoint — returns station name for the login page."""
+    company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
+    if company:
+        return StationInfoResponse(
+            name=company.name or "Powerfin GAS",
+            commercial_name=company.commercial_name,
+        )
+    return StationInfoResponse(name="Powerfin GAS")

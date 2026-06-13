@@ -24,11 +24,6 @@
 		}
 	}
 
-	function formatCurrency(value: number | string | undefined | null): string {
-		const num = typeof value === 'number' ? value : Number(value ?? 0);
-		return '$ ' + num.toFixed(2);
-	}
-
 	function userIcon(role: string): string {
 		switch (role) {
 			case SAFE_VAULT_ROLE: return '🏦';
@@ -70,33 +65,11 @@
 			<p class="text-gray-500">No hay usuarios en línea</p>
 		</div>
 	{:else}
-		<!-- Resumen general -->
-		<div class="card p-4 mb-4 bg-gradient-to-br from-gray-700 to-gray-900 text-white">
-			<div class="grid grid-cols-3 gap-3 text-center">
-				<div>
-					<div class="text-2xl font-bold">{users.filter(u => u.role !== SAFE_VAULT_ROLE).length}</div>
-					<div class="text-xs text-gray-400">En línea</div>
-				</div>
-				<div>
-					<div class="text-2xl font-bold">
-						{users.filter(u => u.role !== SAFE_VAULT_ROLE).reduce((s, u) => s + u.sales_count, 0)}
-					</div>
-					<div class="text-xs text-gray-400">Ventas totales</div>
-				</div>
-				<div>
-					<div class="text-2xl font-bold">
-						{formatCurrency(users.filter(u => u.role !== SAFE_VAULT_ROLE).reduce((s, u) => s + u.total_amount, 0))}
-					</div>
-					<div class="text-xs text-gray-400">Monto total</div>
-				</div>
-			</div>
-		</div>
-
 		<!-- Lista de usuarios -->
 		<div class="space-y-3">
 			{#each users as user}
 				<div class="card p-4" class:opacity-60={user.role === SAFE_VAULT_ROLE}>
-					<div class="flex items-center gap-3 mb-3">
+					<div class="flex items-center gap-3">
 						<div class="text-2xl">{userIcon(user.role)}</div>
 						<div class="flex-1 min-w-0">
 							<div class="text-sm font-semibold text-gray-800">{user.name}</div>
@@ -114,23 +87,6 @@
 							</div>
 						{/if}
 					</div>
-
-					{#if user.role !== SAFE_VAULT_ROLE}
-						<div class="grid grid-cols-2 gap-3 bg-gray-50 rounded-lg p-3">
-							<div class="text-center">
-								<div class="text-lg font-bold text-gray-800">{user.sales_count}</div>
-								<div class="text-xs text-gray-400">Ventas</div>
-							</div>
-							<div class="text-center">
-								<div class="text-lg font-bold text-primary">{formatCurrency(user.total_amount)}</div>
-								<div class="text-xs text-gray-400">Total facturado</div>
-							</div>
-						</div>
-					{:else}
-						<div class="bg-gray-50 rounded-lg p-3 text-center">
-							<span class="text-xs text-gray-400">Depósitos y transferencias recibidas</span>
-						</div>
-					{/if}
 				</div>
 			{/each}
 		</div>

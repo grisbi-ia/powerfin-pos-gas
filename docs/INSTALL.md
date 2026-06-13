@@ -25,7 +25,7 @@ apt update && apt upgrade -y
 timedatectl set-timezone America/Guayaquil
 
 # Herramientas básicas
-apt install -y curl wget git ufw nginx certbot python3-certbot-nginx rsync netcat-openbsd
+apt install -y curl wget git ufw rsync netcat-openbsd
 ```
 
 ---
@@ -60,8 +60,8 @@ apt install -y python3 python3-pip python3-venv python3-dev build-essential libp
 
 # Usuario único para todos los servicios (si no existe)
 id app &>/dev/null || useradd -r -m -s /bin/bash app
-mkdir -p /opt/powerfin/pos/backend /opt/powerfin/pos/fusion-bridge /var/lib/powerfin/pos
-chown -R app:app /opt/powerfin/pos /var/lib/powerfin/pos
+mkdir -p /opt/powerfin/pos/backend /opt/powerfin/pos/fusion-bridge /opt/powerfin/pos/pos
+chown -R app:app /opt/powerfin/pos
 
 # Copiar código del backend (desde repo)
 cd /opt/powerfin/pos/backend
@@ -127,19 +127,27 @@ apt install -y openjdk-21-jdk-headless
 # Verificar
 java -version
 # openjdk version "21.0.x"
-
-# Directorio de datos (ya creado en sección 4)
-chmod 755 /var/lib/powerfin/pos
 ```
 
-### Compilar (en máquina de desarrollo)
+### Compilar y desplegar (en máquina de desarrollo)
+
+El VPS solo necesita el JAR compilado, no el código fuente ni Maven.
 
 ```bash
+# En tu máquina de desarrollo
 cd fusion-bridge
 ./mvnw package -DskipTests
-# Copiar al VPS:
-scp -r target/quarkus-app/* root@VPS:/opt/powerfin/pos/fusion-bridge/
+
+# Copiar SOLO el JAR y dependencias al VPS
+scp -r target/quarkus-app/* root@192.168.1.10:/opt/powerfin/pos/fusion-bridge/
+
+# En el VPS
+systemctl restart fusion-bridge
 ```
+
+> **Importante:** No usar `rsync` del código fuente completo al VPS.
+>
+> Solo se necesita `target/quarkus-app/` (el JAR compilado).
 
 ### Servicio systemd
 
@@ -164,7 +172,6 @@ RestartSec=10
 Environment="FUSION_IP=192.168.1.20"
 Environment="FUSION_PORT=3011"
 Environment="POWERFIN_URL=http://localhost:8080"
-Environment="POWERFIN_API_KEY="
 Environment="PRINTER_POLICY=ASK"
 
 StandardOutput=journal
@@ -182,31 +189,442 @@ systemctl start fusion-bridge
 
 ---
 
-## 6. Powerfin POS (SvelteKit — estáticos)
+## 6. Powerfin POS (SvelteKit — desarrollo local)
+
+El POS corre en modo desarrollo (`npm run dev`) directamente en el servidor.
+
+Los dispositivos en la LAN acceden vía `http://<IP-DEL-SERVIDOR>:5173`.
 
 ```bash
 # Node.js 22 (desde NodeSource para Debian 13)
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
 
-# Directorio web
-mkdir -p /var/www/pos
-chown -R root:www-data /var/www/pos
-```
-
-### Compilar (en máquina de desarrollo)
-
-```bash
-cd pos
+cd /opt/powerfin/pos/pos
 npm install
-npm run build
-# Copiar al VPS:
-rsync -av --delete build/ root@VPS:/var/www/pos/
+
+# El servicio systemd arranca con --host 0.0.0.0 para aceptar
+# conexiones desde cualquier IP de la LAN.
+cat > /etc/systemd/system/pos-frontend.service << 'EOF'
+[Unit]
+Description=Powerfin POS Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=app
+WorkingDirectory=/opt/powerfin/pos/pos
+ExecStart=/usr/bin/npm run dev -- --host 0.0.0.0 --port 5173
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pos-frontend
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable pos-frontend
+systemctl start pos-frontend
 ```
 
 ---
 
-## 7. Nginx
+## 7. Archivos de configuración
+
+Antes de arrancar los servicios, completar los siguientes archivos.
+
+### POS Backend — `/opt/powerfin/pos/backend/.env`
+
+```bash
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=powerfin_gas
+DATABASE_USER=postgres
+DATABASE_PASSWORD=<CONTRASEÑA-DE-POSTGRES>
+JWT_SECRET=<GENERAR-CLAVE-LARGA-Y-ALEATORIA>
+JWT_EXPIRE_MINUTES=480
+```
+
+> Generar JWT_SECRET: `openssl rand -hex 32`
+
+### POS Backend — `/opt/powerfin/pos/backend/app/config.py`
+
+Verificar que `database_password` y `jwt_secret` estén vacíos o
+
+sobreescritos por el `.env`. No dejar valores por defecto en código.
+
+### POS Frontend — `/opt/powerfin/pos/pos/.env`
+
+```bash
+VITE_USE_MOCKS_POWERFIN=false
+VITE_USE_MOCKS_BRIDGE=false
+```
+
+### FusionBridge — systemd service
+
+Las variables de entorno se configuran en el archivo de servicio
+
+(`/etc/systemd/system/fusion-bridge.service`):
+
+```ini
+Environment="FUSION_IP=192.168.1.20"    # IP del Wayne Synergy
+Environment="FUSION_PORT=3011"           # Puerto TCP del Wayne
+Environment="POWERFIN_URL=http://localhost:8080"
+Environment="PRINTER_POLICY=ASK"        # ALWAYS | ASK | NEVER
+```
+
+### FusionBridge — `/opt/powerfin/pos/fusion-bridge/src/main/resources/application.properties`
+
+Las propiedades vienen dentro del JAR compilado. Las variables de entorno
+
+del systemd service las sobreescriben automáticamente. No se crea ningún
+
+archivo de configuración en el VPS.
+
+```properties
+# Estos son los defaults dentro del JAR:
+fusion.ip=${FUSION_IP}
+fusion.port=${FUSION_PORT}
+powerfin.url=${POWERFIN_URL}
+printer.policy=${PRINTER_POLICY:ASK}
+```
+
+---
+
+## 8. Firewall — acceso restringido a la LAN
+
+El POS, backend y FusionBridge solo deben ser accesibles desde
+
+la red local de la gasolinera. Nada desde el exterior.
+
+```bash
+apt install -y ufw
+
+# Política por defecto: denegar todo lo entrante
+ufw default deny incoming
+ufw default allow outgoing
+
+# SSH — permitido desde cualquier IP (incluye Tailscale 100.x.y.z)
+# Tailscale ya provee cifrado y autenticación, no se necesita filtrar por IP.
+ufw allow 22
+
+# POS Frontend (:5173) — solo LAN
+ufw allow from 192.168.1.0/24 to any port 5173
+
+# POS Backend (:8080) — solo LAN
+ufw allow from 192.168.1.0/24 to any port 8080
+
+# FusionBridge (:8090) — solo LAN
+ufw allow from 192.168.1.0/24 to any port 8090
+
+# Activar
+ufw enable
+
+# Verificar
+ufw status verbose
+```
+
+**Nota:** Si se requiere acceso solo desde IPs específicas de los
+
+dispositivos de despachadores (más seguro que toda la subnet):
+
+```bash
+# Reemplazar las reglas de subnet por IPs individuales:
+ufw allow from 192.168.1.31 to any port 5173
+ufw allow from 192.168.1.32 to any port 5173
+ufw deny 5173   # bloquea a cualquier otra IP
+```
+
+---
+
+## 9. Base de datos — schema y datos iniciales
+
+### Crear tablas (desde el backend)
+
+```bash
+cd /opt/powerfin/pos/backend
+source venv/bin/activate
+python3 -c "
+from app.database import engine, Base
+import app.models  # necesario: registra todos los modelos en Base.metadata
+import asyncio
+async def init():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+asyncio.run(init())
+"
+```
+
+### Seed — system_config
+
+```bash
+psql -h localhost -U postgres -d powerfin_gas << 'SQL'
+INSERT INTO system_config (key, value, description) VALUES
+  ('accounting_branch_code', '001', 'Código de sucursal contable'),
+  ('default_currency', 'USD', 'Moneda por defecto'),
+  ('invoice_footer_message', 'Gracias por su compra', 'Mensaje pie de factura'),
+  ('printer_policy', 'ASK', 'ALWAYS, ASK, or NEVER'),
+  ('max_cash_in_hand', '300.00', 'Límite máximo de efectivo en bolsillo (USD)'),
+  ('cash_printer_ip', '192.168.1.21', 'IP de impresora para comprobantes de caja'),
+  ('cash_printer_port', '9100', 'Puerto de impresora para comprobantes de caja'),
+  ('key49_api_key', '', 'Key49 API key (k49_...)'),
+  ('key49_base_url', 'https://key49.apx5.com/v1', 'Key49 API base URL'),
+  ('key49_enabled', 'false', 'Enable automatic SRI invoicing via Key49')
+ON CONFLICT (key) DO NOTHING;
+SQL
+```
+
+### Seed — company_info
+
+```bash
+psql -h localhost -U postgres -d powerfin_gas << 'SQL'
+INSERT INTO company_info (company_id, ruc, name, commercial_name, address, phone, email,
+  city, province, country, fiscal_regime, sri_environment, emission_type, is_active)
+VALUES (
+  1, '1103875439001', 'PATRICIO VALAREZO', 'NEOGAS',
+  'Av. Principal 123, Cuenca', '072345678', 'info@neogas.com',
+  'PAUTE', 'AZUAY', 'ECUADOR',
+  'OBLIGADO A LLEVAR CONTABILIDAD', 1, 1, true
+)
+ON CONFLICT DO NOTHING;
+SQL
+```
+
+### Seed — impresoras (dispensers)
+
+```bash
+psql -h localhost -U postgres -d powerfin_gas << 'SQL'
+UPDATE dispensers SET printer_ip = '192.168.1.21', printer_port = 9100;
+SQL
+```
+
+---
+
+## 10. Verificación final
+
+```bash
+# Health checks
+curl -s http://localhost:8080/health
+curl -s http://localhost:8090/health
+curl -s http://localhost:5173
+
+# Servicios
+systemctl status pos-backend
+systemctl status fusion-bridge
+systemctl status pos-frontend
+systemctl status postgresql
+
+# Logs
+journalctl -u pos-backend -f
+journalctl -u fusion-bridge -f
+```
+
+---
+
+## 11. Comandos útiles
+
+```bash
+# Reiniciar todo
+systemctl restart pos-backend fusion-bridge pos-frontend
+
+# Logs en vivo
+journalctl -u pos-backend -u fusion-bridge -f
+
+# Conectividad con dispensador Wayne
+echo -n "00012|5|2||ECHO||||^" | nc -v 192.168.1.20 3011
+
+# Conectividad con impresora
+nc -zv 192.168.1.21 9100
+
+# Backup de BD
+pg_dump -U postgres powerfin_gas > backup_$(date +%Y%m%d).sql
+```
+
+### Desplegar actualizaciones
+
+**FusionBridge** (compilar en dev, copiar JAR al VPS):
+
+```bash
+cd fusion-bridge && ./mvnw package -DskipTests
+scp -r target/quarkus-app/* root@192.168.1.10:/opt/powerfin/pos/fusion-bridge/
+ssh root@192.168.1.10 systemctl restart fusion-bridge
+```
+
+**POS Backend** (solo código Python, se reinicia solo con systemd):
+
+```bash
+rsync -av pos_backend/app/ root@192.168.1.10:/opt/powerfin/pos/backend/app/
+ssh root@192.168.1.10 systemctl restart pos-backend
+```
+
+**POS Frontend** (SvelteKit, modo dev):
+
+```bash
+rsync -av pos/src/ root@192.168.1.10:/opt/powerfin/pos/pos/src/
+ssh root@192.168.1.10 systemctl restart pos-frontend
+```
+
+---
+
+## 12. Estructura de directorios
+
+```
+/opt/powerfin/pos/
+├── backend/                  # Python FastAPI
+│   ├── venv/
+│   ├── .env
+│   └── app/
+├── fusion-bridge/            # Java Quarkus
+│   └── quarkus-app/
+└── pos/                      # SvelteKit Frontend
+    └── src/
+
+/etc/systemd/system/
+├── pos-backend.service
+├── fusion-bridge.service
+└── pos-frontend.service
+```
+
+---
+
+## 13. Nginx + HTTPS — PWA instalable en fullscreen
+
+Sin HTTPS, el POS se abre como bookmark (con barra de URL).
+
+Con HTTPS, Chrome/iOS permiten instalar la PWA como app nativa:
+
+ícono en el home, fullscreen, sin barra del navegador.
+
+Como es una red local sin dominio público, usamos un **certificado**
+
+**auto-firmado** (gratuito, 365 días de validez).
+
+### Instalar Nginx
+
+```bash
+apt install -y nginx
+mkdir -p /etc/nginx/ssl
+```
+
+### Generar certificado auto-firmado
+
+```bash
+# Ajustar 192.168.1.10 a la IP real del servidor
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/pos-key.pem \
+  -out /etc/nginx/ssl/pos-cert.pem \
+  -subj "/CN=192.168.1.10"
+
+chmod 600 /etc/nginx/ssl/pos-key.pem
+chmod 644 /etc/nginx/ssl/pos-cert.pem
+```
+
+### Configurar Nginx como proxy inverso
+
+Nginx recibe HTTPS en :443 y enruta al POS (:5173), backend (:8080)
+
+y FusionBridge (:8090). Todo pasa por un solo puerto.
+
+```bash
+cat > /etc/nginx/sites-available/powerfin-pos << 'EOF'
+server {
+    listen 443 ssl;
+    ssl_certificate     /etc/nginx/ssl/pos-cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/pos-key.pem;
+
+    # IP whitelist — solo LAN de la gasolinera
+    allow 192.168.1.0/24;
+    deny all;
+
+    # POS Frontend (SvelteKit dev server con HMR y SSE)
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 3600s;
+    }
+}
+EOF
+
+ln -sf /etc/nginx/sites-available/powerfin-pos /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl enable nginx
+systemctl reload nginx
+```
+
+### Actualizar firewall
+
+Con Nginx, todo el tráfico entra por :443. Cerrar los puertos directos:
+
+```bash
+ufw delete allow from 192.168.1.0/24 to any port 5173
+ufw delete allow from 192.168.1.0/24 to any port 8080
+ufw delete allow from 192.168.1.0/24 to any port 8090
+ufw allow from 192.168.1.0/24 to any port 443
+```
+
+> **Tailscale:** SSH está abierto para cualquier IP (`ufw allow 22`),
+>
+> lo que cubre tanto la LAN (`192.168.1.x`) como Tailscale (`100.x.y.z`).
+>
+> El resto de puertos (5173, 8080, 8090, 443) siguen restringidos a la LAN.
+
+### Instalar la PWA en el celular/tablet
+
+```
+1. Abrir https://192.168.1.10 en Chrome
+2. Chrome advierte "Conexión no segura" → "Avanzado" → "Continuar a 192.168.1.10"
+   (solo la primera vez — certificado auto-firmado)
+3. Aparece banner: "Instalar Powerfin GAS"  ← automático
+   o tocar ⋮ → "Agregar a pantalla de inicio"
+4. Ícono en el home → abre FULLSCREEN, sin barra de navegador ✅
+```
+
+> En **iPhone/Safari:** Abrir `https://192.168.1.10` → ⬆ Compartir →
+>
+> "Agregar a la pantalla de inicio".
+
+**Nota:** Si no necesitás PWA fullscreen, podés usar el acceso directo
+
+sin Nginx vía `http://192.168.1.10:5173` (modo desarrollo).
+
+---
+
+## Opcional: Nginx + Let's Encrypt (dominio real)
+
+Si se requiere HTTPS, un nombre de dominio amigable, o servir el POS
+
+como archivos estáticos compilados en vez de `npm run dev`, instalar
+
+Nginx como proxy inverso:
+
+```bash
+apt install -y nginx certbot python3-certbot-nginx
+```
+
+### POS compilado (estáticos)
+
+```bash
+# En máquina de desarrollo
+cd pos
+npm install
+npm run build
+rsync -av --delete build/ root@VPS:/var/www/pos/
+
+# En el VPS
+mkdir -p /var/www/pos
+chown -R root:www-data /var/www/pos
+```
+
+### Configuración Nginx
 
 ```bash
 cat > /etc/nginx/sites-available/powerfin-pos << 'EOF'
@@ -216,6 +634,10 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/pos.gasolinera.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/pos.gasolinera.com/privkey.pem;
+
+    # IP whitelist — solo dispositivos de la LAN
+    allow 192.168.1.0/24;
+    deny all;
 
     # Powerfin POS — estáticos
     location / {
@@ -259,153 +681,24 @@ nginx -t
 systemctl enable nginx
 systemctl reload nginx
 
-# SSL
+# SSL con Let's Encrypt (requiere dominio público y DNS apuntando al servidor)
 certbot --nginx -d pos.gasolinera.com
 ```
 
----
+Con Nginx, el acceso cambia a:
 
-## 8. Firewall
+```
+https://pos.gasolinera.com    ← nombre de dominio local
+```
+
+**Nota:** Con Nginx activo, cerrar los puertos directos en ufw y solo
+
+dejar 443:
 
 ```bash
-apt install -y ufw
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow ssh
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw enable
+ufw delete allow from 192.168.1.0/24 to any port 5173
+ufw delete allow from 192.168.1.0/24 to any port 8080
+ufw delete allow from 192.168.1.0/24 to any port 8090
+ufw allow from 192.168.1.0/24 to any port 443
 ```
 
----
-
-## 9. Base de datos — schema y datos iniciales
-
-### Crear tablas (desde el backend)
-
-```bash
-cd /opt/powerfin/pos/backend
-source venv/bin/activate
-python3 -c "
-from app.database import engine, Base
-import asyncio
-async def init():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-asyncio.run(init())
-"
-```
-
-### Seed — system_config
-
-```bash
-psql -h localhost -U postgres -d powerfin_gas << 'SQL'
-INSERT INTO system_config (key, value, description) VALUES
-  ('accounting_branch_code', '001', 'Código de sucursal contable'),
-  ('default_currency', 'USD', 'Moneda por defecto'),
-  ('invoice_footer_message', 'Gracias por su compra', 'Mensaje pie de factura'),
-  ('printer_policy', 'ASK', 'ALWAYS, ASK, or NEVER'),
-  ('max_cash_in_hand', '300.00', 'Límite máximo de efectivo en bolsillo (USD)'),
-  ('cash_printer_ip', '192.168.1.21', 'IP de impresora para comprobantes de caja'),
-  ('cash_printer_port', '9100', 'Puerto de impresora para comprobantes de caja'),
-  ('key49_api_key', '', 'Key49 API key (k49_...)'),
-  ('key49_base_url', 'https://key49.apx5.com/v1', 'Key49 API base URL'),
-  ('key49_enabled', 'false', 'Enable automatic SRI invoicing via Key49')
-ON CONFLICT (key) DO NOTHING;
-SQL
-```
-
-### Seed — company_info
-
-```bash
-psql -h localhost -U postgres -d powerfin_gas << 'SQL'
-INSERT INTO company_info (ruc, name, commercial_name, address, phone, email,
-  city, province, country, fiscal_regime, sri_environment, emission_type, is_active)
-VALUES (
-  '1103875439001', 'PATRICIO VALAREZO', 'NEOGAS',
-  'Av. Principal 123, Cuenca', '072345678', 'info@neogas.com',
-  'PAUTE', 'AZUAY', 'ECUADOR',
-  'OBLIGADO A LLEVAR CONTABILIDAD', 1, 1, true
-)
-ON CONFLICT DO NOTHING;
-SQL
-```
-
-### Seed — impresoras (dispensers)
-
-```bash
-psql -h localhost -U postgres -d powerfin_gas << 'SQL'
-UPDATE dispensers SET printer_ip = '192.168.1.21', printer_port = 9100;
-SQL
-```
-
----
-
-## 10. Verificación final
-
-```bash
-# Health checks
-curl -s http://localhost:8080/health
-curl -s http://localhost:8090/health
-curl -s https://pos.gasolinera.com
-
-# Servicios
-systemctl status pos-backend
-systemctl status fusion-bridge
-systemctl status nginx
-systemctl status postgresql
-
-# Logs
-journalctl -u pos-backend -f
-journalctl -u fusion-bridge -f
-```
-
----
-
-## 11. Comandos útiles
-
-```bash
-# Reiniciar todo
-systemctl restart pos-backend fusion-bridge nginx
-
-# Logs en vivo
-journalctl -u pos-backend -u fusion-bridge -f
-
-# Conectividad con dispensador Wayne
-echo -n "00012|5|2||ECHO||||^" | nc -v 192.168.1.20 3011
-
-# Conectividad con impresora
-nc -zv 192.168.1.21 9100
-
-# Backup de BD
-pg_dump -U postgres powerfin_gas > backup_$(date +%Y%m%d).sql
-```
-
----
-
-## 12. Estructura de directorios
-
-```
-/opt/powerfin/pos/
-├── backend/                  # Python FastAPI
-│   ├── venv/
-│   ├── .env
-│   └── app/
-└── fusion-bridge/            # Java Quarkus
-    └── quarkus-app/
-
-/var/lib/powerfin/pos/        # Datos persistentes
-├── pending_sales.json
-└── receipt-template.txt
-
-/var/www/pos/                 # POS estáticos (SvelteKit)
-├── index.html
-└── _app/
-
-/etc/systemd/system/
-├── pos-backend.service
-└── fusion-bridge.service
-
-/etc/nginx/sites-available/
-└── powerfin-pos
-```

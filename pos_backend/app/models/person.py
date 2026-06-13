@@ -1,6 +1,6 @@
 """Persons (customers) and vehicles."""
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -21,6 +21,10 @@ class Person(Base):
     )
     yalobox_wallet: Mapped[str | None] = mapped_column(String(50))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (
+        UniqueConstraint("id_type", "id_number", name="persons_id_type_id_number_key"),
+    )
 
 
 class Vehicle(Base):

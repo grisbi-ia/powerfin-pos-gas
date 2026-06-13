@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-10)
+## Estado actual (2026-06-12)
 
 ### ✅ Fases completadas
 
@@ -28,19 +28,62 @@
 | **10d** | **v0.16.0** | **Phase 10 — Key49: facturación electrónica SRI, fire-and-forget, polling, reintentos** |
 | **10e** | **v0.16.1** | **Phase 10 — Correcciones: zona horaria, clave Key49, IPs impresora, subtotal→total, reimpresión** |
 | **10f** | **v0.17.0** | **Phase 10 — Cierre de turno completo: cuadre, surplus/shortage, depósito, template impresión** |
+| **10g** | **—** | **Phase 10 — RecoveryService: reconexión FusionBridge durante despacho activo** |
 
 ### 📊 Tests
 
 ```bash
 FusionBridge — 67 tests    ./mvnw test    # BUILD SUCCESS
 POS Backend  — 92 tests    pytest          # 92 passed
-Powerfin POS — 41 tests    npm run test    # 41 passed
-Total: 200 tests pasando
+Powerfin POS — 0 errors    npm run check   # svelte-check OK
+Total: 159 tests pasando
 ```
 
 ---
 
-## Logros de la sesión (2026-06-11) — v0.17.0
+## Logros de la sesión (2026-06-12) — Reconexión FusionBridge
+
+### 61. RecoveryService — Recuperación de ventas durante caída TCP ✅
+
+**Nuevo archivo:** `fusion-bridge/.../recovery/RecoveryService.java`
+
+**Problema:** Si el TCP entre FusionBridge y Wayne cae mientras un despacho está
+en FUELLING y se completa durante la caída, el `EVT_PUMP_NEW_TRANSACTION` se pierde.
+Nadie llama a `completeDispatchOnBackend` → el dispatch queda AUTHORIZED en el
+backend → auto-cancel a los 5 min → venta perdida.
+
+**Solución:** RecoveryService usa `PAY_AL` (alarma de venta sin cobrar del Wayne)
+y `REQ_GET_PUMP_SALES` (consulta de últimas ventas) para recuperar:
+
+```
+Reconnect → REQ_PUMP_STATUS_ID_000 → Wayne responde PAY_AL=ON
+→ Timer 4s → REQ_GET_PUMP_SALES(PM=N, QT=5)
+→ Wayne responde con EVT_PUMP_NEW_TRANSACTION (histórico)
+→ FusionEventHandler.handleNewTransaction() (EL MISMO DE SIEMPRE)
+→ completeDispatchOnBackend(orderId, amount, volume, unitPrice)
+→ Backend: AUTHORIZED → COMPLETED ✅
+→ POS reconcileWithPowerFin() (3s) → Pendiente de Cobro visible
+```
+
+**Diseño clave:** Reutiliza el handler `handleNewTransaction` existente — no se
+duplica lógica de parseo ni de completado. La primera conexión (arranque en frío)
+no dispara recovery, solo reconexiones.
+
+**Modificaciones mínimas:**
+- `FusionTcpClient.java`: +3 líneas (inyectar RecoveryService, llamar onReconnect)
+- `FusionEventHandler.java`: +6 líneas (capturar PAY_AL, constructor param)
+- `RecoveryService.java`: NUEVO (~110 líneas)
+
+### Archivos modificados (esta sesión)
+
+```
+FusionBridge (3):
+  recovery/RecoveryService.java  ← NUEVO: lógica de recuperación post-reconexión
+  fusion/FusionTcpClient.java    ← +@Inject RecoveryService, +onReconnect() call
+  fusion/FusionEventHandler.java ← +captura PAY_AL, +log WARN para eventos SALE nuevos
+```
+
+---
 
 ### 48. max_cash_in_hand + alerta en dashboard ✅
 
@@ -649,68 +692,25 @@ pos/src/routes/(pos)/new-dispatch/+page.svelte ← lookupPerson, token real, val
 
 ## Pendiente para próxima sesión
 
-### 🔴 Urgente — Mejorar plantilla de impresión de factura
+### 🟡 Backlog
 
 ```
-☐ 1. Revisar y mejorar la plantilla de ticket (TemplateRenderer.java)
-     — El formato actual es funcional pero debe revisarse:
-       · Layout y espaciado general del ticket
-       · Información de la empresa (nombre, dirección, RUC, teléfono)
-       · Datos del cliente (nombre, cédula/RUC, dirección, teléfono, email)
-       · Detalle del despacho (producto, cantidad, precio unitario, subtotal, IVA, total)
-       · Clave de acceso SRI (49 dígitos) — legible y bien posicionada
-       · Fecha y hora de emisión
-       · Punto de emisión y secuencial
-       · Mensaje de pie ("Gracias por su compra", etc.)
-       · Código QR si aplica
-     — Validar contra un ticket fiscal real del SRI
-     — Probar con datos reales: empresa NEOGAS, cliente con cédula/RUC
-     — Asegurar que la clave de acceso sea legible ( fuente, tamaño, sin corte)
+☐ 1. Pago mixto (efectivo + tarjeta)
+☐ 2. identity_service.py — mover URL y token a .env o system_config
+   (están quemados: IDENTITY_API_URL, IDENTITY_API_TOKEN)
+☐ 3. Roles/permisos — implementar enforcement real:
+   · ADMIN: todo
+   · SUPERVISOR: ventas, reportes, cierre de turno, SRI retry
+   · DISPATCHER: ventas, cierre de turno
+   (Actualmente solo se validan en 2 endpoints SRI, el resto es libre)
 ```
 
-### 🔴 Prioridad — Cierre de turno con cuadre en CERO
-
-```
-☐ 1. Refactorizar cierre de turno (close_shift)
-     — REGLA: el usuario SIEMPRE debe cerrar en CERO
-     — Todo el efectivo debe entregarse vía TRANSFERENCIA a Caja Fuerte
-       o vía EGRESO a otro compañero antes de cerrar
-     — Validación fuerte: si saldo != 0 → RECHAZAR cierre con mensaje claro
-
-☐ 2. Pantalla de cierre de turno (POS)
-     — Sección 1: RESUMEN DE EFECTIVO
-       · Ventas en efectivo (total + cantidad)
-       · Ingresos (total + cantidad)
-       · Egresos (total + cantidad)
-       · Transferencias enviadas/recibidas
-       · Safe drops
-       · SALDO ESPERADO (sumatoria)
-     — Sección 2: OTRAS FORMAS DE PAGO (no efectivo)
-       · Tarjeta, QR, Crédito, Transferencia, etc.
-       · Cantidad de transacciones y total por cada una
-     — Campo: "Efectivo contado" (lo que el usuario cuenta físicamente)
-     — Indicador: DIFERENCIA entre saldo esperado y contado
-     — Botón: CERRAR TURNO E IMPRIMIR
-
-☐ 3. Template de cierre de turno (FusionBridge)
-     — Plantilla completa con resumen de caja
-     · Apertura, ingresos, egresos, ventas efectivo, transferencias, safe drops
-     · Totales por forma de pago
-     · Efectivo contado vs esperado + diferencia
-     · Fecha, hora, usuario, turno
-     · Firma del supervisor (espacio en blanco)
-```
-
-### 🟡 Backlog Phase 10c
-
-```
-☐ 2. Pago mixto (efectivo + tarjeta)
-☐ 3. Reconexión FusionBridge durante despacho activo
-☐ 4. Múltiples despachos simultáneos
-☐ 5. Prueba de cuadre de caja end-to-end con hardware real
-☐ 6. Ajustar ATO en consola Wayne de 0 → 180s
-☐ 7. Migración Alembic para schema acumulado
-```
+**Ya resueltos:**
+- ~~Ajustar ATO en consola Wayne de 0 → 180s~~ — Ajustado vía GUI del Fusion
+- ~~Reconexión FusionBridge durante despacho activo~~ — RecoveryService implementado (Phase 10g)
+- ~~Múltiples despachos simultáneos~~ — Validado funcionalmente
+- ~~Prueba de cuadre de caja end-to-end con hardware real~~ — Realizado, todo cuadró
+- ~~Migración Alembic para schema acumulado~~ — Revisiones `8c005ee89373` (initial) + `b261e8ceb69f` (accumulated). Modelo y DB 100% sincronizados (`alembic check` limpio). UNIQUE(id_type, id_number) agregado al modelo Person.
 
 ---
 

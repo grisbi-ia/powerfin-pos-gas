@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
-	export let title = 'Powerfin POS';
+	export let title = 'Powerfin GAS';
 	export let showBack = false;
 	export let onBack: (() => void) | null = null;
 	export let onRefresh: (() => Promise<void>) | null = null;

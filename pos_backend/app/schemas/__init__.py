@@ -101,6 +101,12 @@ class ConfigResponse(BaseModel):
     polling: PollingConfig
 
 
+class StationInfoResponse(BaseModel):
+    """Public station info — no auth required (login page)."""
+    name: str
+    commercial_name: str | None = None
+
+
 # ── Vehicles ─────────────────────────────────────────────────────
 
 class VehicleOwner(BaseModel):

@@ -1,5 +1,6 @@
 package com.powerfin.pos.bridge.fusion;
 
+import com.powerfin.pos.bridge.recovery.RecoveryService;
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
@@ -23,6 +24,9 @@ public class FusionTcpClient {
     @Inject
     com.powerfin.pos.bridge.sse.StationEventBus eventBus;
 
+    @Inject
+    RecoveryService recoveryService;
+
     @ConfigProperty(name = "fusion.ip")
     String fusionIp;
 
@@ -42,6 +46,7 @@ public class FusionTcpClient {
     };
 
     void onStart(@Observes StartupEvent ev) {
+        recoveryService.setTcpClient(this);
         connect();
     }
 
@@ -64,6 +69,7 @@ public class FusionTcpClient {
 
                     sendSubscriptions();
                     sendPumpStatusRequest();
+                    recoveryService.onReconnect();
                     eventBus.broadcastConnected(true);
 
                 } else {

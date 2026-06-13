@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     database_port: int = 5433
     database_name: str = "powerfin_gas"
     database_user: str = "postgres"
-    database_password: str = "1234abcd"
+    database_password: str = ""
 
     # Auth
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
 

@@ -1,6 +1,7 @@
 package com.powerfin.pos.bridge.fusion;
 
 import com.powerfin.pos.bridge.dispenser.DispenserStatusCache;
+import com.powerfin.pos.bridge.recovery.RecoveryService;
 import com.powerfin.pos.bridge.sse.StationEventBus;
 
 import io.quarkus.logging.Log;
@@ -20,14 +21,17 @@ public class FusionEventHandler {
 
     private final DispenserStatusCache statusCache;
     private final StationEventBus eventBus;
+    private final RecoveryService recoveryService;
     private final String powerfinUrl;
     private final HttpClient httpClient;
 
     public FusionEventHandler(DispenserStatusCache statusCache, StationEventBus eventBus,
-                              @ConfigProperty(name = "powerfin.url") String powerfinUrl) {
+                              @ConfigProperty(name = "powerfin.url") String powerfinUrl,
+                              RecoveryService recoveryService) {
         this.statusCache = statusCache;
         this.eventBus = eventBus;
         this.powerfinUrl = powerfinUrl;
+        this.recoveryService = recoveryService;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
@@ -60,7 +64,15 @@ public class FusionEventHandler {
                     handleConfigChange(msg);
                     break;
                 default:
-                    Log.debug(String.format("Unhandled event: %s", msg.eventType));
+                    // Log at WARN level for SALE-related events and RES_ responses
+                    // from the Wayne — these may indicate new event types that
+                    // need dedicated handlers (e.g. REQ_GET_PUMP_SALES responses).
+                    if (msg.eventType.contains("SALE") || msg.eventType.startsWith("RES_")) {
+                        Log.warnf("Unhandled event (new Wayne event type?): %s params=%s",
+                            msg.eventType, msg.params);
+                    } else {
+                        Log.debug(String.format("Unhandled event: %s", msg.eventType));
+                    }
             }
         }
     }
@@ -106,6 +118,10 @@ public class FusionEventHandler {
 
         Log.info(String.format("Dispenser %d status: %s (sub: %s, hose: %d)",
             pumpNumber, status, subStatus, activeHose));
+
+        // ── Recovery: track PAY_ALARM for reconnection recovery ──────
+        String payAlarm = msg.params.getOrDefault("PAY_AL", "");
+        recoveryService.onPumpStatus(pumpNumber, "ON".equalsIgnoreCase(payAlarm));
     }
 
     private void handleNewTransaction(FusionMessage msg) {

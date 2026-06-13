@@ -202,6 +202,16 @@ async def create_dispatch(
             # Also link person if not already set
             if not person_id and vehicle.person_id:
                 person_id = vehicle.person_id
+        elif person_id:
+            # Auto-create vehicle if person is known but vehicle doesn't exist yet
+            new_vehicle = Vehicle(
+                plate=cleaned_plate,
+                person_id=person_id,
+                is_active=True,
+            )
+            db.add(new_vehicle)
+            await db.flush()
+            vehicle_id = new_vehicle.vehicle_id
 
     dispatch = Dispatch(
         order_id=order_id,

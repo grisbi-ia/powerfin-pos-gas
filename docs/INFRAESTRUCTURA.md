@@ -100,10 +100,6 @@ sudo useradd -r -s /bin/false powerfin-pos
 sudo mkdir -p /opt/powerfin/pos/fusion-bridge
 sudo chown powerfin-pos:powerfin-pos /opt/powerfin/pos/fusion-bridge
 
-# Directorio para datos persistentes (cola de ventas pendientes)
-sudo mkdir -p /var/lib/powerfin-pos
-sudo chown powerfin-pos:powerfin-pos /var/lib/powerfin-pos
-
 # Directorio para Powerfin POS estáticos
 sudo mkdir -p /var/www/pos
 sudo chown $USER:www-data /var/www/pos
@@ -202,15 +198,9 @@ StartLimitBurst=5
 Environment="FUSION_IP=192.168.1.20"
 Environment="FUSION_PORT=3011"
 Environment="POWERFIN_URL=http://localhost:8080"
-Environment="POWERFIN_API_KEY=cambiar-en-produccion"
-Environment="PENDING_SALES_FILE=/var/lib/powerfin/pos/pending_sales.json"
 
-# Variables de impresión
+# Impresión
 Environment="PRINTER_POLICY=ASK"
-Environment="PRINTER_ISLAND1_IP=192.168.1.31"
-Environment="PRINTER_ISLAND1_PORT=9100"
-Environment="PRINTER_ISLAND2_IP=192.168.1.32"
-Environment="PRINTER_ISLAND2_PORT=9100"
 
 StandardOutput=journal
 StandardError=journal
@@ -372,7 +362,7 @@ sudo ufw enable
 ```
 Si FusionBridge cae:
   systemd reinicia en 10 segundos (Restart=always)
-  Al reiniciar carga pending_sales.json y reintenta con PowerFin
+  Al reconectar, RecoveryService recupera ventas perdidas
   Powerfin POS reconecta SSE automáticamente (nativo del browser)
 
 Si el servidor se reinicia:

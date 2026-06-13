@@ -73,12 +73,25 @@ function createPendingOrdersStore() {
 
 		/**
 		 * Mark order as completed when Fusion reports sale done.
-		 * Matches by (fusionPumpId, fusionHoseId) to support multi-hose pumps.
-		 * Optionally updates finalAmount and finalVolume from the actual dispense.
+		 * Matches by orderId when available, falls back to pump/hose match.
+		 * Only the FIRST matching FUELLING order is updated.
 		 */
-		completeOrder(fusionPumpId: number, fusionHoseId?: number, finalAmount?: number, finalVolume?: string) {
+		completeOrder(fusionPumpId: number, fusionHoseId?: number, finalAmount?: number, finalVolume?: string, orderId?: string) {
 			update(state => {
 				const next = new Map(state);
+				// Prefer exact orderId match
+				if (orderId) {
+					const exactOrder = next.get(orderId);
+					if (exactOrder && exactOrder.status === 'FUELLING') {
+						const updates: Partial<PendingOrder> = { status: 'COMPLETED' as const };
+						if (finalAmount !== undefined && finalAmount > 0) updates.finalAmount = finalAmount;
+						if (finalVolume !== undefined && finalVolume !== '0.00' && finalVolume !== '0') updates.finalVolume = finalVolume;
+						next.set(orderId, { ...exactOrder, ...updates });
+						saveToStorage(next);
+						return next;
+					}
+				}
+				// Fallback: match by pump/hose (only first match, not all)
 				for (const [id, order] of next) {
 					const matchesPump = order.fusionPumpId === fusionPumpId;
 					const matchesHose = fusionHoseId != null ? order.fusionHoseId === fusionHoseId : true;
@@ -87,6 +100,7 @@ function createPendingOrdersStore() {
 						if (finalAmount !== undefined && finalAmount > 0) updates.finalAmount = finalAmount;
 						if (finalVolume !== undefined && finalVolume !== '0.00' && finalVolume !== '0') updates.finalVolume = finalVolume;
 						next.set(id, { ...order, ...updates });
+						break;  // only the first match
 					}
 				}
 				saveToStorage(next);

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher, onDestroy } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 	import { get } from 'svelte/store';
 	import { config } from '$lib/stores/config';
 	import { shift } from '$lib/stores/shift';
@@ -76,10 +76,6 @@
 
 	$: changeBillingValid = changeBillingIdType === 'CED' ? changeBillingIdNumber.length === 10 : changeBillingIdNumber.length === 13;
 
-	onDestroy(() => {
-		if (autoReturnTimer) clearTimeout(autoReturnTimer);
-	});
-
 	// Form fields
 	let incompleteEmail = '';
 	let incompletePhone = '';
@@ -130,7 +126,7 @@
 
 	async function selectHose(hose: HoseConfig) {
 		selectedHose = hose;
-		step = 'billing';  // advance immediately to prevent reactive re-fire
+		step = 'presetType';  // billing already done, go to preset
 
 		let price = hose.unit_price || 3.103;
 		const owner = billingCustomer ?? confirmedOwner ?? vehicleResult?.billing_person ?? vehicleResult?.owner;
@@ -154,7 +150,7 @@
 			billingCustomer = null;  // Reset billing override on new plate search
 			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'plate'; }
 			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
-			else { confirmedOwner = result.owner; step = 'product'; }
+			else { confirmedOwner = result.owner; step = 'billing'; }
 		} catch { error = 'Error al buscar placa'; }
 		finally { loading = false; }
 	}
@@ -170,7 +166,7 @@
 				.catch(() => {});  // fire-and-forget, non-blocking
 		}
 
-		step = 'presetType';
+		step = 'product';  // confirm customer, now select product
 	}
 	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'billing'; saveBillingPreferential = false; }
 
@@ -179,7 +175,7 @@
 		try {
 			await powerfin.registerCustomer(token(), formData);
 			if (vehicleResult) { vehicleResult.incomplete_fields = []; if (vehicleResult.owner) vehicleResult.owner.email = formData.email; confirmedOwner = vehicleResult.owner; }
-			step = 'product';
+			step = 'billing';
 		} catch { error = 'Error al actualizar datos'; }
 		finally { loading = false; }
 	}
@@ -206,7 +202,7 @@
 					credit_balance: 0,
 					plates: result.data.plates
 				};
-				step = 'product';
+				step = 'billing';
 			} else {
 				regIdNumber = idNumber;
 				regName = '';
@@ -240,9 +236,9 @@
 	}
 	function handleRegistrationCancel() { regName = ''; regEmail = ''; regPhone = ''; regAddress = ''; step = 'idLookup'; }
 
-	function handleProductBack() { step = 'plate'; }
-	function handleBillingBack() { step = 'product'; }
-	function handlePresetTypeBack() { step = 'billing'; }
+	function handleProductBack() { step = 'billing'; }
+	function handleBillingBack() { step = 'plate'; }
+	function handlePresetTypeBack() { step = 'product'; }
 	function handlePresetValueBack() { step = 'presetType'; }
 
 	function startEditCustomer() {
@@ -436,7 +432,7 @@
 		presetValue = '';
 		unitPrice = 3.103;
 		error = '';
-		step = 'product';
+		step = 'billing';
 	}
 
 	// ── Change billing (collect mode) ──────────────────────
@@ -510,8 +506,8 @@
 		{#if mode === 'sale'}
 			<div class="flex items-center gap-1 mb-4 text-xs text-gray-400">
 				<span class={step === 'plate' || step === 'idLookup' || step === 'registration' ? 'text-primary font-medium' : ''}>Placa</span><span>→</span>
-				<span class={step === 'product' ? 'text-primary font-medium' : ''}>Producto</span><span>→</span>
 				<span class={step === 'billing' || step === 'incomplete' ? 'text-primary font-medium' : ''}>Cliente</span><span>→</span>
+				<span class={step === 'product' ? 'text-primary font-medium' : ''}>Producto</span><span>→</span>
 				<span class={step === 'presetType' || step === 'presetValue' ? 'text-primary font-medium' : ''}>Monto</span><span>→</span>
 				<span class={step === 'authorizing' || step === 'done' ? 'text-primary font-medium' : ''}>Autorizar</span>
 			</div>
@@ -745,11 +741,8 @@
 				<div class="text-center py-8">
 					<div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><span class="text-3xl">✅</span></div>
 					<h3 class="text-lg font-semibold text-gray-800 mb-1">Despacho Autorizado</h3>
-					<p class="text-sm text-gray-500 mb-4">El cliente puede cargar combustible.<br />Redirigiendo al inicio en 1.5s...</p>
-					<div class="grid grid-cols-2 gap-2">
-						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-4 font-medium" on:click={handleBackToDashboard}>Volver al Inicio</button>
-						<button class="touch-btn bg-primary text-white rounded-xl py-4 font-semibold" on:click={handleNewSaleSamePlate}>Nueva Venta<br /><span class="text-xs opacity-80">misma placa</span></button>
-					</div>
+					<p class="text-sm text-gray-500 mb-4">El cliente puede cargar combustible.</p>
+					<button class="touch-btn w-full bg-gray-100 text-gray-700 rounded-xl py-4 font-medium" on:click={handleBackToDashboard}>Volver al Inicio</button>
 				</div>
 			{/if}
 		{/if}

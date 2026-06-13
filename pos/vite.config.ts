@@ -1,5 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * Strip the Origin header from proxied requests so backends treat them
@@ -17,7 +18,33 @@ function stripOriginHeader(proxy: any) {
 }
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: [
+		sveltekit(),
+		VitePWA({
+			registerType: 'autoUpdate',
+			devOptions: { enabled: true },
+			includeAssets: ['favicon.png', 'icons/icon-512.png'],
+			manifest: {
+				name: 'Powerfin GAS',
+				short_name: 'Powerfin GAS',
+				description: 'Sistema de despacho de combustible',
+				theme_color: '#1E3A5F',
+				background_color: '#1E3A5F',
+				display: 'standalone',
+				orientation: 'portrait',
+				scope: '/',
+				start_url: '/',
+				icons: [
+					{
+						src: 'icons/icon-512.png',
+						sizes: '512x512',
+						type: 'image/png',
+						purpose: 'any maskable'
+					}
+				]
+			}
+		})
+	],
 	server: {
 		port: 5173,
 		host: true,

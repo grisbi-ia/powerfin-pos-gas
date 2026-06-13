@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -351,6 +352,7 @@ async def get_users_online(
         select(Shift, User)
         .join(User, Shift.user_id == User.user_id)
         .where(Shift.status == "OPEN")
+        .options(selectinload(User.role))
     )).all()
 
     online = []

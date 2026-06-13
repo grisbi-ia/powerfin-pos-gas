@@ -230,9 +230,9 @@ async def _get_plate(db: AsyncSession, dispatch: Dispatch) -> str:
         v = (await db.execute(
             select(Vehicle).where(Vehicle.vehicle_id == dispatch.vehicle_id)
         )).scalar_one_or_none()
-        if v:
+        if v and v.plate:
             return v.plate
-    return ""
+    return "SIN PLACA"
 
 
 # ── Key49 API calls ───────────────────────────────────────

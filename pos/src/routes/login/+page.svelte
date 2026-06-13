@@ -2,14 +2,30 @@
 	import { auth } from '$lib/stores/auth';
 	import PinKeyboard from '$lib/components/PinKeyboard.svelte';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 
 	// Mock imports — swap to real imports when PowerFin ERP is available
 	import * as powerfin from '$lib/api/powerfin';
 
-	let username = 'carlos';
+	let username = '';
+	let stationName = 'Powerfin GAS';
+	let stationSubtitle = '';
 	let pin = '';
 	let error = '';
 	let loading = false;
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/pos/station-info');
+			if (res.ok) {
+				const info = await res.json();
+				stationName = info.commercial_name || info.name || 'Powerfin GAS';
+				if (info.commercial_name && info.commercial_name !== info.name) {
+					stationSubtitle = info.name;
+				}
+			}
+		} catch { /* keep defaults */ }
+	});
 
 	async function handleLogin() {
 		if (pin.length < 3) {
@@ -45,8 +61,10 @@
 	<div class="w-full max-w-sm">
 		<!-- Logo -->
 		<div class="text-center mb-10">
-			<h1 class="text-3xl font-bold text-white">Powerfin POS</h1>
-			<p class="text-blue-200 mt-1 text-sm">Gasolinera NEOPAUTE</p>
+			<h1 class="text-3xl font-bold text-white">{stationName}</h1>
+			{#if stationSubtitle}
+				<p class="text-blue-200 mt-1 text-sm">{stationSubtitle}</p>
+			{/if}
 		</div>
 
 		<!-- Username -->
@@ -91,7 +109,6 @@
 		/>
 
 		<div class="text-center mt-6">
-			<p class="text-blue-300 text-xs">PIN demo: <span class="font-mono text-white">1234</span></p>
 		</div>
 	</div>
 </div>
