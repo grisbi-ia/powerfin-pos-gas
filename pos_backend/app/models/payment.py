@@ -14,5 +14,6 @@ class PaymentMethod(Base):
     )
     code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    sri_code: Mapped[str] = mapped_column(String(3), nullable=False, default="20")
     requires_reference: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

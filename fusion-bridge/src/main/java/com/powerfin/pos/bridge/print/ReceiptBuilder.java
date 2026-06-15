@@ -94,6 +94,8 @@ public class ReceiptBuilder {
         public String taxAmount;
         public String unit;
         public boolean isReprint;
+        public String shiftId;
+        public String cashierName;
 
         @SuppressWarnings("unchecked")
         public static FuelReceiptData fromMap(Map<String, Object> request) {
@@ -150,6 +152,8 @@ public class ReceiptBuilder {
                 d.taxAmount = strParam(fuel, "taxAmount");
                 d.unit = strParam(fuel, "unit");
                 d.isReprint = Boolean.TRUE.equals(fuel.get("isReprint"));
+                d.shiftId = strParam(fuel, "shiftId");
+                d.cashierName = strParam(fuel, "cashierName");
             }
 
             return d;
@@ -178,6 +182,8 @@ public class ReceiptBuilder {
         public String locationRuc;
         public String locationPhone;
         public String movementType;   // INGRESO, EGRESO, TRANSFERENCIA
+        public String movementId;     // movement_id from DB
+        public String shiftId;        // shift_id
         public String date;
         public String time;
         public String userName;
@@ -203,6 +209,8 @@ public class ReceiptBuilder {
             d.locationRuc = str(data, "locationRuc", str(data, "location_ruc", ""));
             d.locationPhone = str(data, "locationPhone", str(data, "location_phone", ""));
             d.movementType = str(data, "movementType", str(data, "movement_type", ""));
+            d.movementId = str(data, "movementId", str(data, "movement_id", ""));
+            d.shiftId = str(data, "shiftId", str(data, "shift_id", ""));
             d.date = str(data, "date", "");
             d.time = str(data, "time", "");
             d.userName = str(data, "userName", str(data, "user_name", ""));

@@ -10,9 +10,27 @@ from app.database import get_db
 from app.models import Person, Vehicle
 from app.models.pricing import PriceList
 from app.models.user import User
-from app.schemas import VehicleOwner, VehicleResponse, SetBillingPersonRequest
+from app.schemas import VehicleOwner, VehicleResponse, SetBillingPersonRequest, PredefinedVehicleResponse
 
 router = APIRouter(prefix="/api/pos", tags=["vehicles"])
+
+
+@router.get("/vehicles/predefined", response_model=list[PredefinedVehicleResponse])
+async def get_predefined_vehicles(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get vehicles flagged for container sales (customer has no vehicle)."""
+    result = await db.execute(
+        select(Vehicle.vehicle_id, Vehicle.plate, Person.name)
+        .join(Person, Vehicle.person_id == Person.person_id)
+        .where(Vehicle.allow_container_sale == True, Vehicle.is_active == True)
+        .order_by(Vehicle.plate)
+    )
+    return [
+        PredefinedVehicleResponse(vehicle_id=vid, plate=plate, owner_name=name or "")
+        for vid, plate, name in result
+    ]
 
 
 @router.get("/vehicles", response_model=VehicleResponse)

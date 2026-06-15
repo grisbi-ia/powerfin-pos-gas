@@ -450,22 +450,22 @@ pg_dump -U postgres powerfin_gas > backup_$(date +%Y%m%d).sql
 
 ```bash
 cd fusion-bridge && ./mvnw package -DskipTests
-scp -r target/quarkus-app/* root@192.168.1.10:/opt/powerfin/pos/fusion-bridge/
-ssh root@192.168.1.10 systemctl restart fusion-bridge
+scp -r target/quarkus-app/* app@192.168.1.25:/opt/powerfin/pos/fusion-bridge/
+ssh app@192.168.1.25 sudo systemctl restart fusion-bridge
 ```
 
 **POS Backend** (solo código Python, se reinicia solo con systemd):
 
 ```bash
-rsync -av pos_backend/app/ root@192.168.1.10:/opt/powerfin/pos/backend/app/
-ssh root@192.168.1.10 systemctl restart pos-backend
+rsync -av pos_backend/app/ app@192.168.1.25:/opt/powerfin/pos/backend/app/
+ssh app@192.168.1.25 sudo systemctl restart pos-backend
 ```
 
 **POS Frontend** (SvelteKit, modo dev):
 
 ```bash
-rsync -av pos/src/ root@192.168.1.10:/opt/powerfin/pos/pos/src/
-ssh root@192.168.1.10 systemctl restart pos-frontend
+rsync -av pos/src/ app@192.168.1.25:/opt/powerfin/pos/pos/src/
+ssh app@192.168.1.25 sudo systemctl restart pos-frontend
 ```
 
 ---

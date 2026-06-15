@@ -59,7 +59,6 @@ class HoseResponse(BaseModel):
 
 class DispenserConfigResponse(BaseModel):
     dispenser_id: int
-    fusion_pump_id: int
     name: str
     printer_ip: Optional[str] = None
     printer_port: int = 9100
@@ -81,6 +80,7 @@ class PaymentMethodResponse(BaseModel):
     code: str
     name: str
     requires_reference: bool
+    sri_code: str = "20"
 
 
 class PollingConfig(BaseModel):
@@ -134,6 +134,13 @@ class VehicleResponse(BaseModel):
 class SetBillingPersonRequest(BaseModel):
     """Set or clear the preferred billing person for a vehicle."""
     person_id: Optional[int] = None  # None = clear, use owner
+
+
+class PredefinedVehicleResponse(BaseModel):
+    """Vehicle flagged for container sales (customer has no vehicle)."""
+    vehicle_id: int
+    plate: str
+    owner_name: str
 
 
 # ── Customers / Persons ──────────────────────────────────────────
@@ -385,6 +392,7 @@ class CreateTransferRequest(BaseModel):
 
 class TransferResponse(BaseModel):
     transfer_id: int
+    sender_movement_id: int
     from_shift_id: int
     from_user_name: str
     to_user_id: int

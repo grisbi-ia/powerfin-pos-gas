@@ -50,6 +50,9 @@
 	let idNumber = '';
 	let idLookupError = '';
 	let idLookupFrom: 'plate' | 'billing' = 'plate';  // track where we came from
+	let idLookupMode: 'id' | 'name' = 'id';  // CED/RUC vs name search
+	let nameSearchQuery = '';
+	let nameSearchResults: Array<{ customer_id: string; person_id?: number | null; id_type: string; id_number: string; name: string; address?: string | null; email: string | null; phone: string | null; price_list: string; price_list_name: string; credit_active: boolean; credit_balance: number; plates: string[] }> = [];
 
 	$: idValid = idType === 'CED' ? idNumber.length === 10 : idNumber.length === 13;
 
@@ -213,6 +216,23 @@
 			}
 		} catch { idLookupError = 'Error al buscar'; }
 		finally { loading = false; }
+	}
+
+	async function handleNameSearch() {
+		const q = nameSearchQuery.trim();
+		if (q.length < 2) { idLookupError = 'Ingrese al menos 2 caracteres'; return; }
+		loading = true; idLookupError = ''; nameSearchResults = [];
+		try {
+			nameSearchResults = await powerfin.searchCustomers(token(), q);
+			if (nameSearchResults.length === 0) idLookupError = 'No se encontraron resultados';
+		} catch { idLookupError = 'Error al buscar'; }
+		finally { loading = false; }
+	}
+
+	function selectNameResult(customer: { customer_id: string; person_id?: number | null; id_type: string; id_number: string; name: string; address?: string | null; email: string | null; phone: string | null; price_list: string; price_list_name: string; credit_active: boolean; credit_balance: number; plates: string[] }) {
+		billingPersonId = customer.person_id ?? null;
+		billingCustomer = { ...customer };
+		step = 'billing';
 	}
 	function handleIdLookupBack() {
 		if (idLookupFrom === 'billing') {
@@ -400,6 +420,8 @@
 						plate: collectOrder?.plate ?? vehicleResult?.plate ?? '',
 						date: new Date().toLocaleDateString('es-EC'),
 						time: new Date().toLocaleTimeString('es-EC'),
+						shiftId: String($shift?.shift_id ?? ''),
+						cashierName: $shift?.user_name ?? '',
 					}
 				});
 			}
@@ -629,22 +651,56 @@
 			{#if step === 'idLookup'}
 				<div class="card p-4 mb-4">
 					<h3 class="text-sm font-semibold text-gray-700 mb-1">{!vehicleResult?.vehicle_found ? '❌ Vehículo no encontrado' : 'Datos de facturación diferentes'}</h3>
-					<p class="text-xs text-gray-400 mb-3">{!vehicleResult?.vehicle_found ? 'Ingrese la identificación para buscar en PowerFin' : 'Ingrese la identificación para la factura'}</p>
+					<p class="text-xs text-gray-400 mb-3">{!vehicleResult?.vehicle_found ? 'Busque al cliente por identificación o nombre' : 'Ingrese la identificación para la factura'}</p>
 					{#if plate}
 						<div class="bg-gray-50 rounded-xl p-3 mb-3 text-center"><span class="text-xs text-gray-500">Placa: </span><span class="font-mono font-bold text-gray-700">{plate}</span></div>
 					{/if}
+
+					<!-- Search mode tabs -->
 					<div class="flex gap-2 mb-3">
-						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'CED' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'CED'}>Cédula</button>
-						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'RUC'}>RUC</button>
+						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idLookupMode === 'id' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => { idLookupMode = 'id'; idLookupError = ''; }}>Por Cédula/RUC</button>
+						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idLookupMode === 'name' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => { idLookupMode = 'name'; idLookupError = ''; nameSearchQuery = ''; nameSearchResults = []; }}>Por Nombre</button>
 					</div>
-					<input type="text" inputmode="numeric" bind:value={idNumber} maxlength={idType === 'CED' ? 10 : 13}
-						placeholder={idType === 'CED' ? '0912345678' : '1790012345001'}
-						class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none"
-						on:keydown={(e) => e.key === 'Enter' && handleIdLookup()} />
+
+					{#if idLookupMode === 'id'}
+						<!-- CED/RUC mode -->
+						<div class="flex gap-2 mb-3">
+							<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'CED' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'CED'}>Cédula</button>
+							<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'RUC'}>RUC</button>
+						</div>
+						<input type="text" inputmode="numeric" bind:value={idNumber} maxlength={idType === 'CED' ? 10 : 13}
+							placeholder={idType === 'CED' ? '0912345678' : '1790012345001'}
+							class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none"
+							on:keydown={(e) => e.key === 'Enter' && handleIdLookup()} />
+					{:else}
+						<!-- Name search mode (local DB only) -->
+						<div class="flex gap-2 mb-3">
+							<input type="text" bind:value={nameSearchQuery} placeholder="Buscar por nombre..."
+								class="flex-1 rounded-xl border border-gray-200 px-4 py-3 focus:border-primary focus:outline-none text-sm"
+								on:keydown={(e) => e.key === 'Enter' && handleNameSearch()} />
+							<button class="touch-btn bg-primary text-white rounded-xl px-4 py-3 font-semibold disabled:opacity-50" on:click={handleNameSearch} disabled={loading || nameSearchQuery.trim().length < 2}>
+								{loading ? '...' : '🔍'}
+							</button>
+						</div>
+						{#if nameSearchResults.length > 0}
+							<div class="space-y-2 max-h-48 overflow-y-auto mb-3">
+								{#each nameSearchResults as c}
+									<button class="touch-btn w-full p-3 rounded-xl border border-gray-200 hover:border-primary text-left" on:click={() => selectNameResult(c)}>
+										<div class="text-sm font-semibold text-gray-800">{c.name}</div>
+										<div class="text-xs text-gray-500">{c.id_type}: {c.id_number}{#if c.plates.length > 0} · {c.plates[0]}{/if}</div>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+
 					{#if idLookupError}<div class="text-red-500 text-xs text-center mb-3">{idLookupError}</div>{/if}
+
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={handleIdLookupBack}>Volver</button>
+						{#if idLookupMode === 'id'}
 						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50" on:click={handleIdLookup} disabled={loading || !idValid}>{loading ? 'Buscando...' : 'Buscar'}</button>
+						{/if}
 					</div>
 				</div>
 			{/if}

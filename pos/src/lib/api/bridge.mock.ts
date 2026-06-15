@@ -17,28 +17,28 @@ function buildHose(hoseId: number, dispenserId: number, side: 'A' | 'B',
 
 const DEFAULT_DISPENSERS: DispenserState[] = [
 	{
-		dispenserId: 1, fusionPumpId: 1, name: 'Surtidor 1', connected: true, online: true,
+		dispenserId: 1, name: 'Surtidor 1', connected: true, online: true,
 		sides: {
 			A: [buildHose(1,1,'A',1,'SUPER','Gasolina Super'), buildHose(2,1,'A',2,'EXTRA','Gasolina Extra'), buildHose(3,1,'A',3,'DIESEL','Diesel'), buildHose(4,1,'A',4,'SUPER','Gasolina Super')],
 			B: [buildHose(5,1,'B',5,'SUPER','Gasolina Super'), buildHose(6,1,'B',6,'EXTRA','Gasolina Extra'), buildHose(7,1,'B',7,'DIESEL','Diesel'), buildHose(8,1,'B',8,'SUPER','Gasolina Super')]
 		}
 	},
 	{
-		dispenserId: 2, fusionPumpId: 2, name: 'Surtidor 2', connected: true, online: true,
+		dispenserId: 2, name: 'Surtidor 2', connected: true, online: true,
 		sides: {
 			A: [buildHose(9,2,'A',1,'SUPER','Gasolina Super'), buildHose(10,2,'A',2,'EXTRA','Gasolina Extra'), buildHose(11,2,'A',3,'DIESEL','Diesel'), buildHose(12,2,'A',4,'SUPER','Gasolina Super')],
 			B: [buildHose(13,2,'B',5,'SUPER','Gasolina Super'), buildHose(14,2,'B',6,'EXTRA','Gasolina Extra'), buildHose(15,2,'B',7,'DIESEL','Diesel'), buildHose(16,2,'B',8,'SUPER','Gasolina Super')]
 		}
 	},
 	{
-		dispenserId: 3, fusionPumpId: 3, name: 'Surtidor 3', connected: true, online: true,
+		dispenserId: 3, name: 'Surtidor 3', connected: true, online: true,
 		sides: {
 			A: [buildHose(17,3,'A',1,'SUPER','Gasolina Super'), buildHose(18,3,'A',2,'DIESEL','Diesel')],
 			B: [buildHose(19,3,'B',3,'EXTRA','Gasolina Extra'), buildHose(20,3,'B',4,'SUPER','Gasolina Super')]
 		}
 	},
 	{
-		dispenserId: 4, fusionPumpId: 4, name: 'Surtidor 4', connected: true, online: true,
+		dispenserId: 4, name: 'Surtidor 4', connected: true, online: true,
 		sides: {
 			A: [buildHose(21,4,'A',1,'SUPER','Gasolina Super'), buildHose(22,4,'A',2,'DIESEL','Diesel')],
 			B: [buildHose(23,4,'B',3,'EXTRA','Gasolina Extra'), buildHose(24,4,'B',4,'SUPER','Gasolina Super')]

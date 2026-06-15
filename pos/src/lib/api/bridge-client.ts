@@ -44,7 +44,7 @@ export function convertToDispenserState(
 	for (const cfg of configDispensers) {
 		for (const sideKey of ['A', 'B'] as const) {
 			for (const h of cfg.sides[sideKey]) {
-				const pumpId = h.fusion_pump_id ?? cfg.fusion_pump_id;
+				const pumpId = h.fusion_pump_id;
 				pumpToDispenser.set(pumpId, { dispenserId: cfg.dispenser_id, side: sideKey, hose: h });
 			}
 		}
@@ -60,7 +60,6 @@ export function convertToDispenserState(
 		});
 		dispenserMap.set(cfg.dispenser_id, {
 			dispenserId: cfg.dispenser_id,
-			fusionPumpId: cfg.fusion_pump_id,
 			name: cfg.name,
 			connected: true,
 			online: true,
@@ -100,7 +99,7 @@ export function convertToDispenserState(
 		// Update each hose that belongs to this pump
 		for (const sideKey of ['A', 'B'] as const) {
 			for (const h of d.sides[sideKey]) {
-				const belongsToPump = (cfg.sides[sideKey].find(sh => sh.hose_id === h.hoseId)?.fusion_pump_id ?? cfg.fusion_pump_id) === fb.dispenserId;
+				const belongsToPump = cfg.sides[sideKey].find(sh => sh.hose_id === h.hoseId)?.fusion_pump_id === fb.dispenserId;
 				if (!belongsToPump) continue;
 
 				const isActiveHose = activeFusionHose > 0 && h.fusionHoseId === activeFusionHose;

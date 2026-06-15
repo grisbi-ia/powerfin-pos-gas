@@ -112,25 +112,26 @@ async def close_shift(
         )
     ) or 0
 
-    # Sum sales by payment method
-    cash_method = await db.execute(
-        select(PaymentMethod).where(PaymentMethod.code == "EFECTIVO")
-    )
-    cash_method_id = cash_method.scalar_one_or_none()
-    cash_method_id = cash_method_id.payment_method_id if cash_method_id else None
-
-    # Sum sales paid in cash — all COLLECTED dispatches in this shift
+    # Sum sales paid in cash — payment_method_id=1 is always EFECTIVO
     # (shift_id is updated to collector's shift at collection time)
     sales_cash = await db.scalar(
-        select(func.coalesce(func.sum(Dispatch.total), 0)).where(
+        select(func.coalesce(func.sum(DispatchPayment.amount), 0))
+        .select_from(DispatchPayment)
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .where(
             Dispatch.shift_id == shift_id,
             Dispatch.status == "COLLECTED",
+            DispatchPayment.payment_method_id == 1
         )
     ) or 0.0
     sales_cash_count = await db.scalar(
-        select(func.count()).where(
+        select(func.count())
+        .select_from(DispatchPayment)
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .where(
             Dispatch.shift_id == shift_id,
             Dispatch.status == "COLLECTED",
+            DispatchPayment.payment_method_id == 1
         )
     ) or 0
 
@@ -202,12 +203,13 @@ async def close_shift(
             func.coalesce(func.sum(DispatchPayment.amount), 0),
             func.count()
         )
+        .select_from(DispatchPayment)
         .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
         .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
         .where(
             Dispatch.shift_id == shift_id,
             Dispatch.status == "COLLECTED",
-            PaymentMethod.code != "EFECTIVO"
+            DispatchPayment.payment_method_id != 1
         )
         .group_by(PaymentMethod.code, PaymentMethod.name)
     )

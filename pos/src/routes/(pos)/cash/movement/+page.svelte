@@ -35,12 +35,13 @@
 		error = '';
 
 		try {
-			await powerfin.createCashMovement($auth.token, {
+			const result = await powerfin.createCashMovement($auth.token, {
 				shift_id: $shift.shift_id,
 				type,
 				amount: amount!,
 				observation: observation.trim()
 			});
+			createdMovementId = result.movement_id;
 			showPrintModal = true;
 		} catch (err: any) {
 			error = err?.message || 'Error al registrar el movimiento';
@@ -61,6 +62,8 @@
 				printerPort: defaultPort,
 				cashData: {
 					movementType: type,
+					movementId: String(createdMovementId ?? ''),
+					shiftId: String($shift?.shift_id ?? ''),
 					date: new Date().toLocaleDateString('es-EC'),
 					time: new Date().toLocaleTimeString('es-EC'),
 					userName: ($shift as any)?.user_name || '',
@@ -85,6 +88,7 @@
 	}
 
 	let printing = false;
+	let createdMovementId: number | null = null;
 </script>
 
 <Header

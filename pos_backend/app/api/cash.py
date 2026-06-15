@@ -332,6 +332,7 @@ async def create_transfer(
 
     return TransferResponse(
         transfer_id=transfer.transfer_id,
+        sender_movement_id=mv.movement_id,
         from_shift_id=transfer.from_shift_id,
         from_user_name=str(from_shift.user_id),
         to_user_id=body.to_user_id,

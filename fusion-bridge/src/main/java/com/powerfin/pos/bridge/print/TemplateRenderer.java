@@ -277,7 +277,9 @@ public class TemplateRenderer {
             .replace("{{subtotal}}", nvl(data.subtotal, ""))
             .replace("{{tax_label}}", nvl(data.taxLabel, "IVA"))
             .replace("{{tax_amount}}", nvl(data.taxAmount, ""))
-            .replace("{{unit}}", nvl(data.unit, "GAL"));
+            .replace("{{unit}}", nvl(data.unit, "GAL"))
+            .replace("{{shift_id}}", nvl(data.shiftId, ""))
+            .replace("{{cashier_name}}", nvl(data.cashierName, ""));
     }
 
     private static String nvl(String s, String def) {
@@ -338,6 +340,8 @@ public class TemplateRenderer {
                     .replace("{{location_ruc}}", nvl(data.locationRuc, ""))
                     .replace("{{location_phone}}", nvl(data.locationPhone, ""))
                     .replace("{{movement_type}}", movementLabel(data.movementType))
+                    .replace("{{movement_id}}", nvl(data.movementId, ""))
+                    .replace("{{shift_id}}", nvl(data.shiftId, ""))
                     .replace("{{date}}", nvl(data.date, ""))
                     .replace("{{time}}", nvl(data.time, ""))
                     .replace("{{user_name}}", nvl(data.userName, ""))
@@ -560,6 +564,8 @@ CIERRE: {{closed_at}}
 ---
 [CENTER][BOLD]{{movement_type}}[/BOLD][/CENTER]
 ---
+TRANSACCION: {{movement_id}}
+TURNO:       {{shift_id}}
 FECHA: {{date}}
 HORA: {{time}}
 USUARIO: {{user_name}}
@@ -604,6 +610,8 @@ CED/RUC: {{customer_id}}
 {/customer_address}TELEFONO: {{customer_phone}}  PLACA: {{plate}}
 {#customer_email}EMAIL: {{customer_email}}
 {/customer_email}{/customer}---
+TURNO: {{shift_id}}  CAJERO: {{cashier_name}}
+---
 MANGUERA: {{hose_id}}
 PRODUCTO: {{grade}}
 CANTIDAD: {{volume}} {{unit}}

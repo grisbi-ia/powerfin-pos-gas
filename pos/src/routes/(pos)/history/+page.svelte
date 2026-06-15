@@ -21,9 +21,6 @@
 	let reprintingCashId: number | null = null;
 	let refreshTimer: ReturnType<typeof setInterval> | null = null;
 	let dispatchCount = 0;
-	let dispatchTotal = 0;
-	let incomeTotal = 0;
-	let expenseTotal = 0;
 
 	async function loadData() {
 		if (!$auth.token || !$shift) return;
@@ -45,17 +42,8 @@
 			// Sort dispatches newest first
 			dispatches.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-			// Calculate totals
+			// Calculate count for tab label
 			dispatchCount = dispatches.filter(d => d.status === 'COMPLETED' || d.status === 'COLLECTED').length;
-			dispatchTotal = dispatches
-				.filter(d => d.status === 'COMPLETED' || d.status === 'COLLECTED')
-				.reduce((s, d) => s + (d.final_amount ?? 0), 0);
-			incomeTotal = movements
-				.filter(m => m.type === 'INCOME')
-				.reduce((s, m) => s + m.amount, 0);
-			expenseTotal = movements
-				.filter(m => m.type === 'EXPENSE' || m.type === 'SAFE_DROP' || m.type === 'TRANSFER_OUT')
-				.reduce((s, m) => s + m.amount, 0);
 
 			error = '';
 		} catch {
@@ -109,7 +97,9 @@
 			case 'INCOME': return '💰';
 			case 'EXPENSE': return '💸';
 			case 'TRANSFER_OUT': return '📤';
+			case 'TRANSFER_IN': return '📥';
 			case 'SAFE_DROP': return '🏦';
+			case 'DEPOSIT': return '🏦';
 			default: return '📋';
 		}
 	}
@@ -119,7 +109,9 @@
 			case 'INCOME': return 'Ingreso';
 			case 'EXPENSE': return 'Egreso';
 			case 'TRANSFER_OUT': return 'Transferencia enviada';
+			case 'TRANSFER_IN': return 'Transferencia recibida';
 			case 'SAFE_DROP': return 'Depósito caja fuerte';
+			case 'DEPOSIT': return 'Depósito';
 			default: return type;
 		}
 	}
@@ -181,6 +173,8 @@
 					// Date/time
 					date: new Date().toLocaleDateString('es-EC'),
 					time: new Date().toLocaleTimeString('es-EC'),
+					shiftId: String(order.shift_id ?? ''),
+					cashierName: order.cashier_name ?? '',
 					isReprint: true,
 				}
 			});
@@ -205,6 +199,8 @@
 				printerPort: defaultPort,
 				cashData: {
 					movementType: m.type === 'TRANSFER_IN' ? 'INCOME' : m.type,
+					movementId: String(m.movement_id),
+					shiftId: String(m.shift_id),
 					date: new Date(m.created_at).toLocaleDateString('es-EC'),
 					time: new Date(m.created_at).toLocaleTimeString('es-EC'),
 					userName: ($shift as any)?.user_name || '',
@@ -252,13 +248,13 @@
 		<div class="card p-4 mb-4">
 			<div class="text-xs text-gray-500 mb-2">Turno #{$shift.shift_id} · {$shift.status === 'OPEN' ? 'En curso' : 'Cerrado'}</div>
 			<div class="grid grid-cols-2 gap-3">
-				<div class="bg-gray-50 rounded-lg p-3 text-center">
-					<div class="text-lg font-bold text-gray-800">{dispatchCount}</div>
-					<div class="text-xs text-gray-400">Despachos</div>
+				<div class="bg-gray-50 rounded-lg p-3">
+					<div class="text-xs text-gray-400 mb-1">Usuario</div>
+					<div class="text-sm font-semibold text-gray-800">{$shift.user_name}</div>
 				</div>
-				<div class="bg-gray-50 rounded-lg p-3 text-center">
-					<div class="text-lg font-bold text-primary">{formatCurrency(dispatchTotal)}</div>
-					<div class="text-xs text-gray-400">Total ventas</div>
+				<div class="bg-gray-50 rounded-lg p-3">
+					<div class="text-xs text-gray-400 mb-1">Apertura</div>
+					<div class="text-sm font-semibold text-gray-800">{new Date($shift.opened_at).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date($shift.opened_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}</div>
 				</div>
 			</div>
 		</div>
@@ -380,8 +376,8 @@
 									{/if}
 								</div>
 							</div>
-							<div class="text-sm font-semibold {m.type === 'INCOME' ? 'text-green-600' : 'text-red-600'} text-right">
-								<div>{m.type === 'INCOME' ? '+' : '-'}{formatCurrency(m.amount)}</div>
+							<div class="text-sm font-semibold {m.type === 'INCOME' || m.type === 'TRANSFER_IN' ? 'text-green-600' : 'text-red-600'} text-right">
+								<div>{m.type === 'INCOME' || m.type === 'TRANSFER_IN' ? '+' : '-'}{formatCurrency(m.amount)}</div>
 								<button
 								class="touch-btn text-gray-400 hover:text-blue-600 px-1 text-sm"
 								title="Reimprimir comprobante"

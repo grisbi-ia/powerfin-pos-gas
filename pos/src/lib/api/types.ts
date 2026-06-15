@@ -48,12 +48,12 @@ export interface AppConfig {
 export interface PaymentMethodConfig {
 	code: string;
 	name: string;
+	sri_code: string;
 	requires_reference: boolean;
 }
 
 export interface DispenserConfig {
 	dispenser_id: number;
-	fusion_pump_id: number;
 	name: string;
 	printer_ip?: string | null;
 	printer_port?: number;
@@ -129,6 +129,12 @@ export interface VehicleResult {
 	} | null;
 	price_list: string;
 	price_list_name: string;
+}
+
+export interface PredefinedVehicle {
+	vehicle_id: number;
+	plate: string;
+	owner_name: string;
 }
 
 export interface CustomerFormData {
@@ -243,6 +249,7 @@ export interface DispatchOrder {
 	status: 'PENDING' | 'AUTHORIZED' | 'FUELLING' | 'COMPLETED' | 'CANCELLED' | 'COLLECTED';
 	created_at: string;
 	shift_id: number;
+	cashier_name?: string;
 	authorized_by_user_id?: number;
 	final_amount?: number;
 	final_volume?: string;
@@ -341,7 +348,6 @@ export interface HoseState {
 /** Estado completo de un surtidor con sus dos lados */
 export interface DispenserState {
 	dispenserId: number;
-	fusionPumpId: number;
 	name: string;
 	connected: boolean;
 	online: boolean;
@@ -416,6 +422,7 @@ export interface CashMovement {
 
 export interface CashTransfer {
 	transfer_id: number;
+	sender_movement_id: number;
 	from_shift_id: number;
 	from_user_name: string;
 	to_user_id: number;

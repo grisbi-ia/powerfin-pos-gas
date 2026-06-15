@@ -148,10 +148,10 @@ async def _seed_data(db: AsyncSession):
     db.add(Vehicle(vehicle_id=2, plate="XYZ5678", person_id=2, price_list_id=1))
 
     db.add_all([
-        PaymentMethod(payment_method_id=1, code="EFECTIVO", name="Efectivo", requires_reference=False),
-        PaymentMethod(payment_method_id=2, code="TARJETA", name="Tarjeta", requires_reference=True),
-        PaymentMethod(payment_method_id=3, code="CREDITO", name="Crédito", requires_reference=False),
-        PaymentMethod(payment_method_id=4, code="YALOBOX", name="Yalobox", requires_reference=False),
+        PaymentMethod(payment_method_id=1, code="EFECTIVO", name="Efectivo", sri_code="01", requires_reference=False),
+        PaymentMethod(payment_method_id=2, code="TARJETA", name="Tarjeta", sri_code="19", requires_reference=True),
+        PaymentMethod(payment_method_id=3, code="CREDITO", name="Crédito", sri_code="20", requires_reference=False),
+        PaymentMethod(payment_method_id=4, code="YALOBOX", name="Yalobox", sri_code="20", requires_reference=False),
     ])
 
     db.add(EmissionPoint(
@@ -160,7 +160,7 @@ async def _seed_data(db: AsyncSession):
     ))
     await db.flush()
 
-    d1 = Dispenser(dispenser_id=1, emission_point_id=1, code="SURT-01", name="Surtidor DIESEL", fusion_pump_id=1, printer_ip="192.168.1.31")
+    d1 = Dispenser(dispenser_id=1, emission_point_id=1, code="SURT-01", name="Surtidor DIESEL", printer_ip="192.168.1.31")
     db.add(d1)
     await db.flush()
 

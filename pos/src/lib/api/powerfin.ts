@@ -170,6 +170,18 @@ export async function lookupVehicle(
 	return res.json();
 }
 
+/** Get vehicles flagged for container sales (customer has no vehicle). */
+export async function getPredefinedVehicles(
+	token: string
+): Promise<import('./types').PredefinedVehicle[]> {
+	if (USE_MOCKS_POWERFIN) return mock.getPredefinedVehicles(token);
+	const res = await fetch(powerfinUrl('/api/pos/vehicles/predefined'), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error cargando vehículos predefinidos');
+	return res.json();
+}
+
 /** Set or clear the preferred billing person for a vehicle. */
 export async function setVehicleBillingPerson(
 	token: string,

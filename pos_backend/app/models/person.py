@@ -43,6 +43,7 @@ class Vehicle(Base):
         comment="Preferred billing person. NULL = use owner (person_id)."
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    allow_container_sale: Mapped[bool] = mapped_column(Boolean, default=False, comment="Allow this vehicle to be used when customer has no vehicle")
 
     person: Mapped["Person"] = relationship(lazy="selectin", foreign_keys=[person_id])
     billing_person: Mapped["Person | None"] = relationship(lazy="selectin", foreign_keys=[billing_person_id])

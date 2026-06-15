@@ -91,7 +91,7 @@ async def create_dispatch(
     # Validate credit if applicable
     credit_contract_id = body.credit_contract_id
     credit_status = None
-    if body.dispatch_type_code == "CREDIT":
+    if dispatch_type.dispatch_type_id == 2:
         # If credit_contract_id not provided, try to find one for the vehicle
         if not credit_contract_id and body.plate:
             from app.services.credit_service import find_active_contract_for_vehicle
@@ -121,7 +121,7 @@ async def create_dispatch(
     # Consume sequential for SALE/CREDIT — each dispenser has its own emission point
     sequential_number = None
     ep = None
-    if dispatch_type.affects_cash or dispatch_type.code == "CREDIT":
+    if dispatch_type.affects_cash or dispatch_type.dispatch_type_id == 2:
         dispenser_result = await db.execute(
             select(Dispenser).where(Dispenser.dispenser_id == body.dispenser_id)
         )
@@ -552,6 +552,15 @@ async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch) -> dict:
         )
         dispenser = d_result.scalar_one_or_none()
 
+    # Collector info (shift owner = the cashier who collected)
+    cashier_name = ""
+    if dispatch.shift_id:
+        shift_result = await db.execute(
+            select(User.name).join(Shift, Shift.user_id == User.user_id)
+            .where(Shift.shift_id == dispatch.shift_id)
+        )
+        cashier_name = shift_result.scalar_one_or_none() or ""
+
     # Computed financials (IVA 15%)
     total = float(dispatch.total or 0)
     subtotal = round(total / 1.15, 2)
@@ -595,6 +604,8 @@ async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch) -> dict:
             "fiscalRegime": company.fiscal_regime or "",
             "sriEnvironment": company.sri_environment or 0,
             "emissionType": company.emission_type or 0,
+            "shiftId": str(dispatch.shift_id) if dispatch.shift_id else "",
+            "cashierName": cashier_name,
         },
     }
 
@@ -750,6 +761,18 @@ async def get_active_dispatches(
         for v in vehicles_result.scalars():
             vehicle_map[v.vehicle_id] = v
 
+    # Build shift → cashier name lookup (collector = shift owner)
+    shift_ids = list(set(d.shift_id for d in dispatches if d.shift_id))
+    cashier_map = {}
+    if shift_ids:
+        shifts_result = await db.execute(
+            select(Shift.shift_id, User.name)
+            .join(User, Shift.user_id == User.user_id)
+            .where(Shift.shift_id.in_(shift_ids))
+        )
+        for sid, uname in shifts_result:
+            cashier_map[sid] = uname or ""
+
     return [
         {
             "order_id": d.order_id,
@@ -774,6 +797,7 @@ async def get_active_dispatches(
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
+            "cashier_name": cashier_map.get(d.shift_id, "") if d.shift_id else "",
             "authorized_by_user_id": d.authorized_by_user_id,
             "final_amount": float(d.total or 0),
             "final_volume": str(detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity else None,

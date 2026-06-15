@@ -162,14 +162,14 @@ async def seed():
 
         # ── Payment methods ──
         methods = [
-            PaymentMethod(code="EFECTIVO", name="Efectivo", requires_reference=False),
-            PaymentMethod(code="TARJETA", name="Tarjeta Crédito/Débito", requires_reference=True),
-            PaymentMethod(code="QR", name="QR / Transferencia", requires_reference=False),
-            PaymentMethod(code="CREDITO", name="Crédito", requires_reference=False),
-            PaymentMethod(code="DEUNA", name="DeUna", requires_reference=True),
-            PaymentMethod(code="JEPFAST", name="JepFast", requires_reference=True),
-            PaymentMethod(code="SIPY", name="Sipy", requires_reference=True),
-            PaymentMethod(code="YALOBOX", name="Yalobox", requires_reference=False),
+            PaymentMethod(code="EFECTIVO", name="Efectivo", sri_code="01", requires_reference=False),
+            PaymentMethod(code="TARJETA", name="Tarjeta Crédito/Débito", sri_code="19", requires_reference=True),
+            PaymentMethod(code="QR", name="QR / Transferencia", sri_code="20", requires_reference=False),
+            PaymentMethod(code="CREDITO", name="Crédito", sri_code="20", requires_reference=False),
+            PaymentMethod(code="DEUNA", name="DeUna", sri_code="20", requires_reference=True),
+            PaymentMethod(code="JEPFAST", name="JepFast", sri_code="20", requires_reference=True),
+            PaymentMethod(code="SIPY", name="Sipy", sri_code="20", requires_reference=True),
+            PaymentMethod(code="YALOBOX", name="Yalobox", sri_code="20", requires_reference=False),
         ]
         db.add_all(methods)
         await db.flush()

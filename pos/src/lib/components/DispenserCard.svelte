@@ -143,6 +143,7 @@
 
 			<button
 				class="touch-btn p-3 text-left transition-colors
+					{info.side === 'A' ? 'bg-blue-50/20' : 'bg-amber-50/20'}
 					{info.allIdle && !isVerifying ? 'hover:bg-green-50 active:bg-green-100' : ''}
 					{info.isPendingCollection && !isVerifying ? 'bg-green-50 hover:bg-green-100 ring-1 ring-green-300' : ''}
 					{isBusy && !isVerifying ? 'bg-yellow-50' : ''}
@@ -152,7 +153,7 @@
 				disabled={!isOnline || (!info.allIdle && !isBusy && !info.isPendingCollection) || isVerifying}
 			>
 				<!-- Side label -->
-				<div class="text-xs text-gray-400 mb-1">Lado {info.side}</div>
+				<div class="text-lg font-bold mb-1 {info.side === 'A' ? 'text-blue-700' : 'text-amber-700'}">Lado {dispenser.dispenserId}{info.side}</div>
 
 				<!-- Status dot + label -->
 				<div class="flex items-center gap-1.5 mb-2">
@@ -224,17 +225,6 @@
 					</div>
 				{/if}
 
-				<!-- Available: show grades -->
-				{#if info.allIdle && !isVerifying}
-					<div class="flex flex-wrap gap-1 mt-1">
-						{#each dispenser.sides[info.side] as h}
-							<span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
-								{h.gradeName}
-							</span>
-						{/each}
-					</div>
-					<div class="text-xs text-primary font-medium mt-1">Vender →</div>
-				{/if}
 			</button>
 		{/each}
 	</div>

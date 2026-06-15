@@ -8,6 +8,7 @@ import type {
 	CreateCashMovementRequest, CreateTransferRequest
 } from './types';
 import { SAFE_VAULT_USER_ID, SAFE_VAULT_ROLE } from './types';
+import type { PredefinedVehicle } from './types';
 
 // ── Mock data ────────────────────────────────────────────────
 
@@ -28,7 +29,6 @@ const MOCK_CONFIG: AppConfig = {
 	dispensers: [
 		{
 			dispenser_id: 1,
-			fusion_pump_id: 1,
 			name: 'Surtidor DIESEL',
 			printer_ip: '192.168.1.21',
 		printer_port: 9100,
@@ -50,13 +50,13 @@ const MOCK_CONFIG: AppConfig = {
 		{ code: 'VIP', name: 'Cliente VIP' }
 	],
 	payment_methods: [
-		{ code: 'EFECTIVO', name: 'Efectivo', requires_reference: false },
-		{ code: 'TARJETA', name: 'Tarjeta Crédito/Débito', requires_reference: true },
-		{ code: 'QR', name: 'QR / Transferencia', requires_reference: false },
-		{ code: 'CREDITO', name: 'Crédito', requires_reference: false },
-		{ code: 'DEUNA', name: 'DeUna', requires_reference: true },
-		{ code: 'JEPFAST', name: 'JepFast', requires_reference: true },
-		{ code: 'SIPY', name: 'Sipy', requires_reference: true }
+		{ code: 'EFECTIVO', name: 'Efectivo', sri_code: '01', requires_reference: false },
+		{ code: 'TARJETA', name: 'Tarjeta Crédito/Débito', sri_code: '19', requires_reference: true },
+		{ code: 'QR', name: 'QR / Transferencia', sri_code: '20', requires_reference: false },
+		{ code: 'CREDITO', name: 'Crédito', sri_code: '20', requires_reference: false },
+		{ code: 'DEUNA', name: 'DeUna', sri_code: '20', requires_reference: true },
+		{ code: 'JEPFAST', name: 'JepFast', sri_code: '20', requires_reference: true },
+		{ code: 'SIPY', name: 'Sipy', sri_code: '20', requires_reference: true }
 	],
 	polling: {
 		interval_ms: 2000,
@@ -320,6 +320,7 @@ export async function createDispatch(
 		status: 'AUTHORIZED',
 		created_at: new Date().toISOString(),
 		shift_id: mockShift?.shift_id ?? 0,
+		cashier_name: mockShift?.user_name ?? '',
 		authorized_by_user_id: mockShift?.user_id
 	};
 	mockOrders.push(order);
@@ -437,6 +438,15 @@ export async function setVehicleBillingPerson(
 	} else {
 		delete _mockVehicleBilling['ABC1234'];
 	}
+}
+
+export async function getPredefinedVehicles(_token: string): Promise<PredefinedVehicle[]> {
+	await delay(100);
+	return [
+		{ vehicle_id: 1, plate: 'ABC001', owner_name: 'Juan Pérez' },
+		{ vehicle_id: 2, plate: 'ABC002', owner_name: 'María López' },
+		{ vehicle_id: 3, plate: 'ABC003', owner_name: 'Empresa Tanques S.A.' },
+	];
 }
 
 export async function updatePerson(
@@ -684,6 +694,7 @@ export async function createTransfer(
 	transferSeq++;
 	const transfer: CashTransfer = {
 		transfer_id: transferSeq,
+		sender_movement_id: movementSeq + 1,
 		from_shift_id: data.from_shift_id,
 		from_user_name: fromUser?.name ?? 'Desconocido',
 		to_user_id: data.to_user_id,

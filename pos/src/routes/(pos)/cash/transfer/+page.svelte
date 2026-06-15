@@ -20,6 +20,7 @@
 	let showPrintModal = false;
 	let showConfirmModal = false;
 	let printing = false;
+	let createdMovementId: number | null = null;
 
 	$: selectedUser = users.find(u => u.user_id === selectedUserId);
 	$: isSafeVault = selectedUser?.role === SAFE_VAULT_ROLE;
@@ -60,12 +61,13 @@
 		error = '';
 
 		try {
-			await powerfin.createTransfer($auth.token, {
+			const result = await powerfin.createTransfer($auth.token, {
 				from_shift_id: $shift.shift_id,
 				to_user_id: selectedUserId!,
 				amount: amount!,
 				observation: observation.trim()
 			});
+			createdMovementId = result.sender_movement_id;
 			showPrintModal = true;
 		} catch (err: any) {
 			error = err?.message || 'Error al realizar la transferencia';
@@ -87,6 +89,8 @@
 				printerPort: defaultPort,
 				cashData: {
 					movementType: movType,
+					movementId: String(createdMovementId ?? ''),
+					shiftId: String($shift?.shift_id ?? ''),
 					date: new Date().toLocaleDateString('es-EC'),
 					time: new Date().toLocaleTimeString('es-EC'),
 					userName: ($shift as any)?.user_name || '',

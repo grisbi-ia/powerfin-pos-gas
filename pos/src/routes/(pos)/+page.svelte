@@ -314,7 +314,8 @@
 		const cfg = get(config);
 		const dispCfg = cfg?.dispensers?.find(d => d.dispenser_id === dispenserId);
 		const hoseCfg = dispCfg?.sides[side]?.find(h => h.hose_id === hose.hoseId);
-		const fusionPumpId = hoseCfg?.fusion_pump_id ?? dispCfg?.fusion_pump_id ?? dispenserId;
+		const fusionPumpId = hoseCfg?.fusion_pump_id;
+		if (!fusionPumpId) { console.error('[cancel] No fusion_pump_id for hose', dispenserId, side, hose.hoseId); return; }
 
 		cancelConfirm = {
 			dispenserId,
@@ -370,7 +371,8 @@
 		const cfg = get(config);
 		const dispCfg = cfg?.dispensers?.find(d => d.dispenser_id === dispenserId);
 		const hoseCfg = dispCfg?.sides[side]?.find(h => h.hose_id === hose.hoseId);
-		const fusionPumpId = hoseCfg?.fusion_pump_id ?? dispCfg?.fusion_pump_id ?? dispenserId;
+		const fusionPumpId = hoseCfg?.fusion_pump_id;
+		if (!fusionPumpId) { console.error('[stop] No fusion_pump_id for hose', dispenserId, side, hose.hoseId); return; }
 
 		stopConfirm = {
 			dispenserId, side, hoseId: hose.hoseId, fusionPumpId,
@@ -426,21 +428,9 @@
 			</div>
 		</div>
 	{:else}
-		<!-- Surtidores -->
-		<div class="grid gap-3 {!$shift ? 'opacity-50 pointer-events-none' : ''}">
-			{#each $dispenserList as d (d.dispenserId)}
-				<DispenserCard dispenser={d} onSideClick={handleSideClick} onCancelClick={handleCancelClick} onStopClick={handleStopClick} {verifyingSide} />
-			{:else}
-				<div class="text-center py-12 text-gray-400"><p>No hay surtidores configurados</p></div>
-			{/each}
-		</div>
-
-		{#if error}
-			<div class="mt-4 bg-red-50 text-red-600 text-sm text-center rounded-xl py-3">{error}</div>
-		{/if}
-
+		<!-- Turno -->
 		{#if $shift}
-			<div class="card mt-4 p-4">
+			<div class="card p-4 mb-3">
 				<div class="flex items-center justify-between">
 					<div class="text-xs text-gray-500">Turno #{$shift.shift_id}</div>
 					{#if cashOverLimit}
@@ -453,7 +443,7 @@
 				{/if}
 			</div>
 		{:else}
-			<div class="card mt-4 p-4 bg-amber-50 border border-amber-200">
+			<div class="card p-4 mb-3 bg-amber-50 border border-amber-200">
 				<div class="flex items-center gap-2">
 					<span class="text-lg">🔒</span>
 					<div>
@@ -462,6 +452,19 @@
 					</div>
 				</div>
 			</div>
+		{/if}
+
+		<!-- Surtidores -->
+		<div class="grid gap-3 {!$shift ? 'opacity-50 pointer-events-none' : ''}">
+			{#each $dispenserList as d (d.dispenserId)}
+				<DispenserCard dispenser={d} onSideClick={handleSideClick} onCancelClick={handleCancelClick} onStopClick={handleStopClick} {verifyingSide} />
+			{:else}
+				<div class="text-center py-12 text-gray-400"><p>No hay surtidores configurados</p></div>
+			{/each}
+		</div>
+
+		{#if error}
+			<div class="mt-4 bg-red-50 text-red-600 text-sm text-center rounded-xl py-3">{error}</div>
 		{/if}
 	{/if}
 
@@ -478,7 +481,7 @@
 					</div>
 					<h3 class="text-lg font-bold text-gray-800">¿Cancelar autorización?</h3>
 					<p class="text-sm text-gray-500 mt-1">
-						Surtidor {cancelConfirm.dispenserId} — Lado {cancelConfirm.side}
+						Surtidor {cancelConfirm.dispenserId} — Lado {cancelConfirm.dispenserId}{cancelConfirm.side}
 					</p>
 				</div>
 

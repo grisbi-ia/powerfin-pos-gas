@@ -132,7 +132,6 @@ async def get_config(
         dispensers.append(
             DispenserConfigResponse(
                 dispenser_id=d.dispenser_id,
-                fusion_pump_id=d.fusion_pump_id,
                 name=d.name,
                 printer_ip=d.printer_ip,
                 printer_port=d.printer_port,
@@ -150,7 +149,8 @@ async def get_config(
     ).scalars().all()
     payment_methods = [
         PaymentMethodResponse(
-            code=pm.code, name=pm.name, requires_reference=pm.requires_reference
+            code=pm.code, name=pm.name, requires_reference=pm.requires_reference,
+            sri_code=pm.sri_code
         )
         for pm in pm_result
     ]

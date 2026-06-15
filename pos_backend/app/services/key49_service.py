@@ -37,19 +37,9 @@ TAX_RATE_MAP = {
 # Rate to code
 RATE_CODE_BY_PERCENT = {0: "0", 12: "2", 15: "4"}
 
-# Payment method mapping (our code → SRI code)
-PAYMENT_METHOD_SRI = {
-    "EFECTIVO": "01",
-    "TARJETA": "19",  # Crédito
-    "TRANSFERENCIA": "20",
-    "DEBITO": "16",
-    "QR": "20",
-    "CREDITO": "20",
-    "DEUNA": "20",
-    "JEPFAST": "20",
-    "SIPY": "20",
-    "YALOBOX": "20",
-}
+# All SRI payment codes come from the payment_methods.sri_code column.
+# No hardcoded mapping — new payment methods only need a DB INSERT.
+
 
 TERMINAL_OUT_OF_SERVICE = (
     httpx.ConnectError, httpx.TimeoutException,
@@ -70,10 +60,6 @@ async def _get_key49_config(db: AsyncSession) -> dict:
         "api_key": configs.get("key49_api_key", ""),
         "base_url": configs.get("key49_base_url", "https://key49.apx5.com/v1"),
     }
-
-
-def _sri_payment_code(method_code: str) -> str:
-    return PAYMENT_METHOD_SRI.get(method_code.upper(), "20")
 
 
 def _sri_id_type(person_id_type: str) -> str:
@@ -172,13 +158,13 @@ async def _build_invoice_payload(
     if payments:
         for p in payments:
             pm = (await db.execute(
-                select(PaymentMethod).where(
+                select(PaymentMethod.sri_code).where(
                     PaymentMethod.payment_method_id == p.payment_method_id
                 )
             )).scalar_one_or_none()
-            pm_code = pm.code if pm else "EFECTIVO"
+            sri_code = pm if pm else "20"
             pay_list.append({
-                "payment_method": _sri_payment_code(pm_code),
+                "payment_method": sri_code,
                 "total": float(p.amount),
                 "term": 0,
                 "time_unit": "days",
