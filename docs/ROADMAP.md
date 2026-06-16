@@ -556,4 +556,5 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 | Fase 10d     | `v0.16.0`| Key49: facturación electrónica SRI |
 | Fase 11a     | `v0.19.0`| UX, refactors, ID-based, SRI code, name search, predefined plates |
 | Fase 11b     | `v0.19.1`| Bugfix: recovery AUTHORIZED dispatch cuando PAY_IN no eco-devuelto (phone-off) |
+| Fase 11c     | `v0.19.2`| Bugfix: doble autorización mismo dispensador — 409 Conflict en create_dispatch |
 | Fase 11      | `v1.0.0` | Producción GASOLINERA              |

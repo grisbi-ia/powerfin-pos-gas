@@ -107,7 +107,16 @@ export async function createDispatch(
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(data)
 	});
-	if (!res.ok) throw new Error('Error creando despacho');
+	if (!res.ok) {
+		let detail = 'Error creando despacho';
+		try {
+			const body = await res.json();
+			detail = body.detail || detail;
+		} catch { /* use default */ }
+		const err = new Error(detail);
+		(err as any).status = res.status;
+		throw err;
+	}
 	return res.json();
 }
 

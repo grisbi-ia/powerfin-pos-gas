@@ -71,6 +71,27 @@ async def create_dispatch(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new dispatch order."""
+    # ═══ Guard: prevent double-authorization on the same hose ═══
+    # Two dispatchers may open the sale wizard for the same dispenser.
+    # If A authorizes first, B must be blocked from authorizing again.
+    # pg_advisory_xact_lock prevents the theoretical race condition
+    # (both checking simultaneously) — released automatically on commit/rollback.
+    from sqlalchemy import text
+    await db.execute(text("SELECT pg_advisory_xact_lock(:hose_id)"), {"hose_id": body.hose_id})
+
+    active_result = await db.execute(
+        select(Dispatch).where(
+            Dispatch.hose_id == body.hose_id,
+            Dispatch.status.in_(["AUTHORIZED", "COMPLETED"]),
+        )
+    )
+    if active_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail="Este dispensador ya tiene un despacho en curso. "
+                   "Cobre o cancele el despacho existente antes de autorizar uno nuevo."
+        )
+
     # Find active shift
     shift_result = await db.execute(
         select(Shift).where(

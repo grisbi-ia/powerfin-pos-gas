@@ -331,12 +331,18 @@
 			autoReturnTimer = setTimeout(() => {
 				dispatch('done');
 			}, 1500);
-		} catch {
+		} catch (err: any) {
 			// Rollback: if dispatch was created but preset failed, cancel the dispatch
 			if (orderId) {
 				try { await powerfin.cancelDispatch(token(), orderId); } catch { /* reconciliation will clean up */ }
 			}
-			error = 'Error al autorizar'; step = 'presetValue';
+			// 409 Conflict: another dispatcher already authorized this hose
+			if (err?.status === 409) {
+				error = err.message || 'Este dispensador ya tiene un despacho en curso. Regrese al inicio para ver el estado actual.';
+			} else {
+				error = err?.message || 'Error al autorizar';
+			}
+			step = 'presetValue';
 		}
 		finally { loading = false; }
 	}

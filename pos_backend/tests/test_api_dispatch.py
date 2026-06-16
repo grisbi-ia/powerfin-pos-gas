@@ -68,6 +68,27 @@ class TestDispatchAPI:
         assert data["status"] == "PENDING"
         assert data["order_id"].startswith("OV-")
 
+    async def test_create_dispatch_conflict_same_hose(self, client, auth_headers):
+        """409 Conflict when two dispatchers try to authorize the same hose."""
+        await self._open_shift(client, auth_headers)
+        body = {
+            "dispenser_id": 1, "hose_id": 1, "side": "A",
+            "preset_type": "MONEY", "preset_value": "20.00",
+            "unit_price": 3.103, "payment_method": "EFECTIVO",
+            "dispatch_type_code": "SALE",
+            "items": [
+                {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
+            ]
+        }
+        # First dispatch — should succeed
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json=body)
+        assert r.status_code == 201
+
+        # Second dispatch on same hose — should be rejected with 409
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json=body)
+        assert r.status_code == 409
+        assert "en curso" in r.json()["detail"]
+
     async def test_complete_dispatch(self, client, auth_headers):
         await self._open_shift(client, auth_headers)
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
