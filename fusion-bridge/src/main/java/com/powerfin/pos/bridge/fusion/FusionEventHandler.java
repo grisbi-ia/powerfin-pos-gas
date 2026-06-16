@@ -158,6 +158,12 @@ public class FusionEventHandler {
         // serves as a double-safe (idempotent).
         if (orderId != null && !orderId.isEmpty()) {
             completeDispatchOnBackend(orderId, saleId, volume, amount, unitPrice);
+        } else {
+            // Fallback: PAY_IN not echoed by Wayne on PRESET flows.
+            // Match dispatch by pump + hose and complete it.
+            Log.warnf("NEW_TRANSACTION without orderId — falling back to pump+hose match: pump=%d hose=%d",
+                pumpId, hoseId);
+            completeDispatchByPumpOnBackend(pumpId, hoseId, volume, amount, unitPrice);
         }
     }
 
@@ -207,6 +213,55 @@ public class FusionEventHandler {
             }
             Log.errorf("completeDispatch %s FAILED after 3 attempts — sale may need manual reconciliation",
                     orderId);
+        });
+    }
+
+    /**
+     * Fallback: complete dispatch by pump + hose when PAY_IN orderId is
+     * not echoed by the Wayne in EVT_PUMP_NEW_TRANSACTION (PRESET flows).
+     *
+     * Calls POST /api/pos/dispatches/complete-by-pump on the POS Backend.
+     * Retries up to 3 times with 1s backoff. Fire-and-forget.
+     */
+    private void completeDispatchByPumpOnBackend(int pumpId, int hoseId,
+                                                   String volume, String amount, String unitPrice) {
+        String url = powerfinUrl + "/api/pos/dispatches/complete-by-pump";
+        String body = String.format(
+            "{\"fusion_pump_id\":%d,\"fusion_hose_number\":%d,\"volume\":\"%s\"," +
+            "\"amount\":\"%s\",\"unit_price\":\"%s\"}",
+            pumpId, hoseId, volume, amount, unitPrice);
+
+        Thread.startVirtualThread(() -> {
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create(url))
+                            .timeout(Duration.ofSeconds(10))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(body))
+                            .build();
+
+                    HttpResponse<String> response = httpClient.send(request,
+                            HttpResponse.BodyHandlers.ofString());
+
+                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                        Log.infof("completeDispatchByPump OK: pump=%d hose=%d (attempt %d)",
+                            pumpId, hoseId, attempt);
+                        return;
+                    }
+                    Log.warnf("completeDispatchByPump pump=%d hose=%d returned %d (attempt %d)",
+                            pumpId, hoseId, response.statusCode(), attempt);
+                } catch (Exception e) {
+                    Log.warnf("completeDispatchByPump pump=%d hose=%d failed (attempt %d): %s",
+                            pumpId, hoseId, attempt, e.getMessage());
+                }
+
+                if (attempt < 3) {
+                    try { Thread.sleep(1000); } catch (InterruptedException ie) { break; }
+                }
+            }
+            Log.errorf("completeDispatchByPump pump=%d hose=%d FAILED after 3 attempts",
+                    pumpId, hoseId);
         });
     }
 

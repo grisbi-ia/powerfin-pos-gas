@@ -553,4 +553,7 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 | Fase 10a     | `v0.13.0`| Edge cases: STOP, phone-off, Gap D |
 | Fase 10b     | `v0.14.0`| Impresión, clave SRI, DB config    |
 | Fase 10c     | `v0.15.0`| Correcciones: IVA, aleatorio, corte, saldo, comprobantes ✅ |
+| Fase 10d     | `v0.16.0`| Key49: facturación electrónica SRI |
+| Fase 11a     | `v0.19.0`| UX, refactors, ID-based, SRI code, name search, predefined plates |
+| Fase 11b     | `v0.19.1`| Bugfix: recovery AUTHORIZED dispatch cuando PAY_IN no eco-devuelto (phone-off) |
 | Fase 11      | `v1.0.0` | Producción GASOLINERA              |

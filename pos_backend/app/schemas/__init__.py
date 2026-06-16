@@ -289,6 +289,16 @@ class CompleteDispatchRequest(BaseModel):
     completed_at: Optional[str] = None
 
 
+class CompleteByPumpRequest(BaseModel):
+    """Complete the AUTHORIZED dispatch for a given pump+hose.
+    Fallback when PAY_IN orderId is not echoed by Wayne in PRESET flows."""
+    fusion_pump_id: int
+    fusion_hose_number: int
+    volume: str = "0"
+    amount: Decimal = Decimal("0")
+    unit_price: Decimal = Decimal("0")
+
+
 class CollectDispatchRequest(BaseModel):
     collected_by_shift_id: int
     payment_method: str = "EFECTIVO"

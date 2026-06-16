@@ -52,13 +52,15 @@
 		const allIdle = hoses.every(h => h.status === 'IDLE');
 		const busyHose = hoses.find(h => isHoseBusy(h));
 
-		// Check for pending collection on any hose of this side
+		// Check for pending collection on any hose of this side.
+		// Also catches AUTHORIZED dispatches stuck on IDLE hoses (phone-off bug).
 		let pendingCollectionHose: HoseState | null = null;
 		let pendingOrder: PendingOrder | undefined;
 		for (const h of hoses) {
 			const key = `${dispenser.dispenserId}-${h.hoseId}`;
 			const order = orders.get(key);
-			if (order?.status === 'COMPLETED' && h.status === 'IDLE') {
+			// Normal: COMPLETED + IDLE → collect. Bug recovery: FUELLING + IDLE → collect.
+			if ((order?.status === 'COMPLETED' || order?.status === 'FUELLING') && h.status === 'IDLE') {
 				pendingCollectionHose = h;
 				pendingOrder = order;
 				break;

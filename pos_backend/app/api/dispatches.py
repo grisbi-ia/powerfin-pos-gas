@@ -27,6 +27,7 @@ from app.schemas import (
     BillingRequest,
     CollectDispatchRequest,
     CollectDispatchResponse,
+    CompleteByPumpRequest,
     CompleteDispatchRequest,
     CreateDispatchRequest,
     CreateDispatchResponse,
@@ -409,6 +410,99 @@ async def complete_dispatch(
 
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/complete-by-pump")
+async def complete_dispatch_by_pump(
+    body: CompleteByPumpRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Complete the AUTHORIZED dispatch for a given pump+hose.
+
+    Fallback when PAY_IN (and thus orderId) is not echoed by the Wayne
+    in EVT_PUMP_NEW_TRANSACTION for PRESET flows. FusionBridge calls this
+    with the pump and hose numbers from the NEW_TRANSACTION event.
+
+    No auth — internal service call from FusionBridge.
+    """
+    from app.models.dispenser import Hose
+
+    # Map fusion_pump_id + fusion_hose_number to hose_id
+    hose_result = await db.execute(
+        select(Hose).where(
+            Hose.fusion_pump_id == body.fusion_pump_id,
+            Hose.fusion_hose_number == body.fusion_hose_number
+        )
+    )
+    hose = hose_result.scalar_one_or_none()
+    if not hose:
+        return {"status": "ok", "detail": "no hose found"}
+
+    # Find the AUTHORIZED dispatch for this hose (most recent first)
+    dispatch_result = await db.execute(
+        select(Dispatch).where(
+            Dispatch.hose_id == hose.hose_id,
+            Dispatch.status == "AUTHORIZED"
+        ).order_by(Dispatch.created_at.desc()).limit(1)
+    )
+    dispatch = dispatch_result.scalar_one_or_none()
+    if not dispatch:
+        return {"status": "ok", "detail": "no authorized dispatch"}
+
+    dispatch.status = "COMPLETED"
+    dispatch.completed_at = datetime.now(ECUADOR_TZ)
+
+    # Update amounts from the Wayne's NEW_TRANSACTION data
+    if body.amount and float(body.amount) > 0:
+        amount_dec = Decimal(str(body.amount))
+        volume_dec = Decimal(str(body.volume)) if body.volume and body.volume != "0" else Decimal("0")
+
+        detail_result = await db.execute(
+            select(DispatchDetail).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
+        )
+        details = detail_result.scalars().all()
+        if details:
+            first_detail = details[0]
+            unit_price_dec = Decimal(str(body.unit_price)) if body.unit_price and float(body.unit_price) > 0 else Decimal(str(first_detail.unit_price))
+            tax_rate_dec = Decimal(str(first_detail.tax_rate))
+
+            if float(volume_dec) > 0:
+                vol_per_detail = float(volume_dec) / len(details)
+                for det in details:
+                    det.quantity = vol_per_detail
+
+            total_dec = amount_dec
+            subtotal_dec = total_dec / (1 + tax_rate_dec)
+            tax_dec = total_dec - subtotal_dec
+
+            for i, det in enumerate(details):
+                share = Decimal("1") / len(details) if len(details) > 0 else Decimal("1")
+                det.subtotal = float(subtotal_dec * share)
+                det.tax_amount = float(tax_dec * share)
+                det.total = float(total_dec * share)
+                det.subsidy_amount = 0
+
+            dispatch.subtotal = float(subtotal_dec)
+            dispatch.tax_amount = float(tax_dec)
+            dispatch.total = float(total_dec)
+        else:
+            dispatch.total = float(amount_dec)
+            dispatch.subtotal = float(amount_dec)
+            dispatch.tax_amount = 0
+    else:
+        # Keep existing totals (from preset) — better than zero
+        pass
+
+    if dispatch.credit_contract_id:
+        from app.models.credit import CreditContract
+        contract = (await db.execute(
+            select(CreditContract).where(CreditContract.contract_id == dispatch.credit_contract_id)
+        )).scalar_one_or_none()
+        if contract:
+            dispatch.credit_status = "PENDING_INVOICE"
+
+    await db.commit()
+    return {"status": "completed", "order_id": dispatch.order_id}
 
 
 @router.post("/{order_id}/collect", response_model=CollectDispatchResponse)

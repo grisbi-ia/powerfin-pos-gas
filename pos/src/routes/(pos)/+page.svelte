@@ -249,8 +249,10 @@
 			const key = `${dispenserId}-${hose.hoseId}`;
 			const pendingOrder = get(orderByHose).get(key);
 
-			if (pendingOrder?.status === 'COMPLETED') {
-				console.log(`[verify] Pending collection found for ${dispenserId}-${side}: ${pendingOrder.orderId}`);
+			// Detect pending collection: COMPLETED+IDLE (normal) or FUELLING+IDLE (phone-off recovery)
+			if (pendingOrder && (pendingOrder.status === 'COMPLETED' ||
+				(pendingOrder.status === 'FUELLING' && freshHose?.status === 'IDLE'))) {
+				console.log(`[verify] Pending collection found for ${dispenserId}-${side}: ${pendingOrder.orderId} (status=${pendingOrder.status})`);
 				goto(`/sale?dispenser=${dispenserId}&side=${side}&hose=${hose.hoseId}&mode=collect&order=${pendingOrder.orderId}`);
 				return;
 			}
@@ -263,7 +265,8 @@
 			// On error, fall back to local state (existing behavior)
 			const key = `${dispenserId}-${hose.hoseId}`;
 			const pendingOrder = get(orderByHose).get(key);
-			const isPendingCollection = pendingOrder?.status === 'COMPLETED' && hose.status === 'IDLE';
+			const isPendingCollection = pendingOrder && (pendingOrder.status === 'COMPLETED' ||
+				(pendingOrder.status === 'FUELLING' && hose.status === 'IDLE'));
 
 			if (isPendingCollection && pendingOrder) {
 				goto(`/sale?dispenser=${dispenserId}&side=${side}&hose=${hose.hoseId}&mode=collect&order=${pendingOrder.orderId}`);
