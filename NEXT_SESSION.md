@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-15)
+## Estado actual (2026-06-16)
 
 ### ✅ Fases completadas
 
@@ -30,125 +30,83 @@
 | 10f | `v0.17.0` | Phase 10 — Cierre de turno completo: cuadre, surplus/shortage, depósito, template impresión |
 | 10g | `v0.18.0` | Phase 10 — RecoveryService: reconexión FusionBridge durante despacho activo |
 | **11** | **v0.19.0** | **Phase 11 — UX, refactors, bugfixes: dashboard visual, IDs vs strings, SRI column, búsqueda por nombre, placas predefinidas** |
+| 11b | `v0.19.1` | Bugfix: recovery despacho AUTHORIZED cuando PAY_IN no eco-devuelto (phone-off) |
+| 11c | `v0.19.2` | Bugfix: doble autorización mismo dispensador → 409 Conflict en create_dispatch |
+| 11d | `v0.19.3` | Bugfix: preset_value persistido en BD + bloqueo cobro $0.00 (cross-page race condition) |
 
 ### 📊 Tests
 
 ```bash
-FusionBridge — 67 tests    ./mvnw test    # BUILD SUCCESS
-POS Backend  — 92 tests    pytest          # 92 passed
-Powerfin POS — 0 errors    npm run check   # svelte-check OK
-Total: 159 tests pasando
+FusionBridge — 67 tests    /opt/maven/bin/mvn test    # BUILD SUCCESS
+POS Backend  — 93 tests    pytest                     # 93 passed
+Powerfin POS — 0 errors    npm run check              # svelte-check OK
+Total: 160 tests pasando
 ```
 
 ---
 
-## Logros de la sesión (2026-06-15) — v0.19.0
+## Logros de la sesión (2026-06-16) — v0.19.1, v0.19.2, v0.19.3
 
-### 62. Dashboard UX ✅
+### 72. Recovery despacho AUTHORIZED cuando PAY_IN no eco-devuelto ✅ — v0.19.1
 
-- **Lado 1A/1B**: etiquetas con `dispenserId` en vez de "A"/"B" genérico
-- **Colores por lado**: Lado A → azul sutil (`bg-blue-50/20`), Lado B → ámbar (`bg-amber-50/20`)
-- **Sin productos**: removidos los tags de `gradeName` en tarjetas de dispensadores
-- **Sin "Vender →"**: removido texto decorativo redundante
-- **Turno al inicio**: card de turno movida arriba de los dispensadores
+**Problema**: Celular apagado durante despacho → Wayne envía NEW_TRANSACTION pero
+si PAY_IN no trae OV, `completeDispatchOnBackend` nunca se llama → dispatch
+queda AUTHORIZED para siempre (irrecuperable).
 
-### 63. Eliminación `dispensers.fusion_pump_id` ✅
+**Solución — defensa en 3 capas**:
+- **Backend**: Nuevo endpoint `POST /api/pos/dispatches/complete-by-pump` (sin auth).
+  Encuentra dispatch AUTHORIZED por `fusion_pump_id` + `fusion_hose_number`.
+- **FusionBridge**: `handleNewTransaction()` con fallback: si `orderId` es null,
+  llama `completeDispatchByPumpOnBackend()` con pump+hose.
+- **POS Frontend**: `DispenserCard` y `+page.svelte` detectan `FUELLING+IDLE`
+  (no solo `COMPLETED+IDLE`) como cobro pendiente.
 
-Columna obsoleta y peligrosa como fallback. Solo `hoses.fusion_pump_id` es el real.
-- DB: `ALTER TABLE dispensers DROP COLUMN fusion_pump_id`
-- Backend: removido de modelo, schema, API
-- Frontend: fallbacks `?? dispCfg?.fusion_pump_id ?? dispenserId` reemplazados por error visible
+### 73. Doble autorización mismo dispensador → 409 Conflict ✅ — v0.19.2
 
-### 64. Bugfix — cuadre de caja con formas de pago no-efectivo ✅
+**Problema**: Dos despachadores abren wizard para mismo dispensador. A autoriza
+primero. B pulsa AUTORIZAR después → crea segundo despacho + envía CLEAR_STOP
++ PRESET que interfiere con A → despacho de A queda CANCELADO.
 
-`sales_cash` sumaba `Dispatch.total` de TODOS los COLLECTED sin filtrar por forma de pago.
-Una venta con tarjeta aparecía como efectivo Y en non_cash_sales (duplicada).
-Fix: filtra por `DispatchPayment.payment_method_id == 1` (efectivo estándar).
+**Solución**:
+- **Backend `create_dispatch`**: `pg_advisory_xact_lock(hose_id)` + check de
+  despacho activo (`AUTHORIZED`/`COMPLETED`) → 409 Conflict.
+- **Frontend `SaleWizard`**: Extrae `detail` del error 409, muestra mensaje claro.
+- **Test**: `test_create_dispatch_conflict_same_hose` (93 tests total).
 
-### 65. ID-based comparisons — inmune a cambios de código ✅
+### 74. preset_value persistido + bloqueo cobro $0.00 ✅ — v0.19.3
 
-- `DispatchType`: `code == "CREDIT"` → `dispatch_type_id == 2`
-- `PaymentMethod`: `_sri_payment_code(code)` → columna `sri_code` en BD
-- Todas las comparaciones por código reemplazadas por IDs
+**Problema**: Usuario B estaba en otra página (ej. HISTORIAL) mientras A autorizaba
+y apagaba celular. Al terminar despacho, B regresa al DASHBOARD → ve COBRAR con
+**$0.00**. Si B cobra, se registra cobro en cero (error grave).
 
-### 66. Columna `payment_methods.sri_code` ✅
+Causa raíz: `preset_value` nunca se persistía en BD. `get_active_dispatches`
+hardcodeaba `"preset_value": "0"`. Cuando B hace reconcile, `finalAmount=0`
+y `presetAmount=0` → `$0.00`.
 
-Nueva columna `VARCHAR(3)` con el código SRI de cada forma de pago.
-Eliminado el diccionario hardcodeado de `key49_service.py`.
-Agregar una nueva forma de pago = solo INSERT en BD, cero cambios de código.
-
-### 67. Template impresión — movimientos de caja ✅
-
-Agregado `TRANSACCION: {{movement_id}}` y `TURNO: {{shift_id}}` al template.
-Backend `create_transfer` devuelve `sender_movement_id`.
-
-### 68. Template impresión — factura de despacho ✅
-
-Agregado `TURNO: {{shift_id}}  CAJERO: {{cashier_name}}` al template.
-Backend `_build_receipt_data` + `get_shift_dispatches` incluyen `cashier_name` desde Shift→User.
-
-### 69. Bugfix — TRANSFER_IN visual en historial ✅
-
-Transferencia recibida se mostraba en rojo y negativo (como egreso).
-Fix: agregado `TRANSFER_IN` a condiciones de color verde y signo `+`.
-Agregado ícono 📥 y label "Transferencia recibida".
-
-### 70. Placas predefinidas para venta sin vehículo ✅
-
-- DB: `vehicles.allow_container_sale BOOLEAN DEFAULT false`
-- API: `GET /api/pos/vehicles/predefined`
-- UI: dropdown en `PlateInput.svelte` con placas autorizadas
-- Al seleccionar una placa del dropdown, busca el vehículo normalmente
-
-### 71. Búsqueda de cliente por nombre ✅
-
-- Nuevo tab "Por Nombre" en paso `idLookup` del `SaleWizard`
-- Usa `searchCustomers(query)` — solo BD local, sin APIs externas
-- Muestra resultados como lista, al seleccionar va directo a billing
+**Solución**:
+- **Modelo `Dispatch`**: Nueva columna `preset_value VARCHAR(20)`.
+- **API `create_dispatch`**: Almacena `body.preset_value`.
+- **API `get_active_dispatches`**: Devuelve `d.preset_value` real.
+- **API `collect_dispatch`**: Bloquea cobro a $0.00 cuando `dispatch.total > 0`.
 
 ### Archivos modificados (esta sesión)
 
 ```
-FusionBridge (2):
-  ReceiptBuilder.java           ← +movementId, +shiftId en CashMovementData
-                                  +shiftId, +cashierName en FuelReceiptData
-  TemplateRenderer.java         ← +placeholders en cash y fuel templates
+FusionBridge (1):
+  FusionEventHandler.java       ← +completeDispatchByPumpOnBackend (fallback pump+hose)
 
-Backend (11):
-  models/dispenser.py           ← -fusion_pump_id
-  models/payment.py             ← +sri_code
-  models/person.py              ← +allow_container_sale
-  schemas/__init__.py           ← -fusion_pump_id, +sri_code, +sender_movement_id,
-                                  +PredefinedVehicleResponse
-  api/cash.py                   ← +sender_movement_id en create_transfer
-  api/config.py                 ← +sri_code en PaymentMethodResponse
-  api/dispatches.py             ← dispatch_type_id==2, +cashier_name/shiftId en receipt,
-                                  +cashier_name en get_shift_dispatches
-  api/shifts.py                 ← payment_method_id==1, +select_from
-  api/vehicles.py               ← +GET /vehicles/predefined
-  services/key49_service.py     ← eliminado PAYMENT_METHOD_SRI, usa sri_code de BD
-  tests/conftest.py             ← -fusion_pump_id, +sri_code
-  seed_data.py                  ← +sri_code
+Backend (3):
+  models/dispatch.py            ← +preset_value column
+  api/dispatches.py             ← +complete-by-pump endpoint, +409 guard create_dispatch,
+                                  +preset_value persist, +$0.00 collect block
+  schemas/__init__.py           ← +CompleteByPumpRequest
+  tests/test_api_dispatch.py    ← +test_create_dispatch_conflict_same_hose
 
-POS (13):
-  types.ts                      ← -fusion_pump_id/fusionPumpId, +sri_code,
-                                  +sender_movement_id, +cashier_name, +PredefinedVehicle
-  bridge-client.ts              ← eliminados fallbacks dispenser-level
-  bridge.mock.ts                ← -fusionPumpId, +sri_code mock
-  powerfin.ts                   ← +getPredefinedVehicles
-  powerfin.mock.ts              ← +getPredefinedVehicles, +sender_movement_id, +cashier_name
-  DispenserCard.svelte          ← UX: labels, colors, sin productos, sin "Vender →"
-  PlateInput.svelte             ← +dropdown placas predefinidas
-  SaleWizard.svelte             ← +name search tab, +shiftId/cashierName en print
-  +page.svelte                  ← error visible en cancel/stop, turno arriba
-  history/+page.svelte          ← TRANSFER_IN fix, turno card, movement/shift en print,
-                                  fuel receipt shiftId/cashierName
-  cash/movement/+page.svelte    ← +movementId/shiftId en print
-  cash/transfer/+page.svelte    ← +movementId/shiftId en print
-
-Docs (2):
-  DEPLOY.md                     ← NUEVO: guía rápida de deploy a producción
-  INSTALL.md                    ← IPs actualizadas a 192.168.1.25
+POS (3):
+  DispenserCard.svelte          ← FUELLING+IDLE detectado como cobro pendiente
+  +page.svelte                  ← FUELLING+IDLE redirige a collect mode
+  powerfin.ts                   ← createDispatch extrae detail del error 409
+  SaleWizard.svelte             ← maneja err.status===409 con mensaje claro
 ```
 
 ---
@@ -164,11 +122,18 @@ Docs (2):
    · ADMIN: todo
    · SUPERVISOR: ventas, reportes, cierre de turno, SRI retry
    · DISPATCHER: ventas, cierre de turno
+☐ 4. dispatch.total no debe ser 0 en active dispatches cuando el despacho ya
+   está COMPLETED. Revisar si completeDispatchOnBackend está actualizando
+   correctamente d.total en todos los casos (incluyendo fallback pump+hose).
 ```
 
 **SQL para producción (esta sesión):**
 
 ```sql
+-- v0.19.3: preset_value en dispatches
+ALTER TABLE dispatches ADD COLUMN IF NOT EXISTS preset_value VARCHAR(20);
+
+-- v0.19.0 (pendiente de sesión anterior)
 ALTER TABLE dispensers DROP COLUMN IF EXISTS fusion_pump_id;
 ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS sri_code VARCHAR(3) NOT NULL DEFAULT '20';
 UPDATE payment_methods SET sri_code = '01' WHERE payment_method_id = 1;

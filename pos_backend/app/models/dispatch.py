@@ -65,6 +65,9 @@ class Dispatch(Base):
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    preset_value: Mapped[str | None] = mapped_column(
+        String(20), comment="Preset amount sent to Wayne (MONEY/VOLUME value)"
+    )
     status: Mapped[str] = mapped_column(String(15), default="AUTHORIZED")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

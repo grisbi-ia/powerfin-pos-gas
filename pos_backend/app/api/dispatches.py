@@ -252,6 +252,7 @@ async def create_dispatch(
         credit_status=credit_status,
         hose_id=hose_id,
         grade_id=grade_id,
+        preset_value=body.preset_value,
     )
     db.add(dispatch)
     await db.flush()
@@ -543,6 +544,19 @@ async def collect_dispatch(
 
     if dispatch.status == "COLLECTED":
         raise HTTPException(status_code=409, detail="Orden ya cobrada")
+
+    # Guard: don't allow collecting at $0.00 when the dispatch has a real amount
+    # (e.g., stale presetAmount=0 from reconciliation before completion)
+    effective_amount = float(body.collected_amount)
+    if body.payments:
+        effective_amount = sum(float(p.amount) for p in body.payments)
+    dispatch_total = float(dispatch.total or 0)
+    if dispatch_total > 0 and effective_amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El monto a cobrar es ${dispatch_total:.2f}. "
+                   "No se puede cobrar $0.00. Regrese al inicio y reintente."
+        )
 
     dispatch.status = "COLLECTED"
     dispatch.shift_id = body.collected_by_shift_id  # cash belongs to collector's shift
@@ -896,7 +910,7 @@ async def get_active_dispatches(
             "side": hose_map[d.hose_id].side if d.hose_id and d.hose_id in hose_map else "A",
             "grade": d.grade_id or "UNKNOWN",
             "preset_type": "MONEY",
-            "preset_value": "0",
+            "preset_value": d.preset_value or "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
             "price_without_subsidy": float(detail_map[d.dispatch_id].price_without_subsidy) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].price_without_subsidy is not None else None,
             "subsidy_per_unit": float(detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else 0.0,
