@@ -34,6 +34,7 @@ public class FusionEventHandler {
         this.recoveryService = recoveryService;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
     }
 
