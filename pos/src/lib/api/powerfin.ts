@@ -347,6 +347,18 @@ export async function getShiftCashSummary(
 	return res.json();
 }
 
+export async function getShiftReceiptData(
+	token: string,
+	shiftId: number
+): Promise<Record<string, unknown>> {
+	if (USE_MOCKS_POWERFIN) return mock.getShiftCashSummary(token, shiftId) as unknown as Record<string, unknown>;
+	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/receipt-data`), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error consultando datos de cierre');
+	return res.json();
+}
+
 export async function getOnlineUsers(
 	token: string
 ): Promise<import('./types').OnlineUser[]> {

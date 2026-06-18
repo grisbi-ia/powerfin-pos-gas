@@ -221,10 +221,11 @@ class CloseShiftRequest(BaseModel):
 class CloseShiftResponse(BaseModel):
     shift_id: int
     closed_at: datetime
+    opened_at: Optional[datetime] = None
     opening_cash: Decimal
     surplus: Decimal = Decimal("0")
     shortage: Decimal = Decimal("0")
-    total_sales: int = 0
+    total_sales: float = 0.0
     total_volume: Decimal = Decimal("0")
     dispatch_count: int = 0
     accounting_cash_code: Optional[str] = None

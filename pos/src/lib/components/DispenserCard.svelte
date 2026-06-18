@@ -76,7 +76,7 @@
 				isPendingCollection: true,
 				pendingAmount: pendingOrder.finalAmount || pendingOrder.presetAmount,
 				pendingCustomer: pendingOrder.customerName,
-				pendingPresetType: pendingOrder.presetType || 'MONEY'
+				pendingPresetType: (pendingOrder.status === 'COMPLETED' || pendingOrder.finalAmount > 0) ? 'MONEY' : (pendingOrder.presetType || 'MONEY')
 			};
 		}
 

@@ -245,6 +245,7 @@ public class ReceiptBuilder {
         // Result
         public String surplus, shortage;
         public String totalCash, totalSales;
+        public boolean isReprint;
         // Non-cash sales (formatted as multi-line string)
         public String nonCashLines;
 
@@ -283,6 +284,7 @@ public class ReceiptBuilder {
             d.shortage = str(data, "shortage", "");
             d.totalCash = str(data, "totalCash", "0.00");
             d.totalSales = str(data, "totalSales", "0.00");
+            d.isReprint = Boolean.TRUE.equals(data.get("isReprint"));
             // Non-cash: format as "METODO (N): $ X.XX" lines
             java.util.List<Map<String, Object>> nonCash = (java.util.List<Map<String, Object>>) data.get("nonCashSales");
             if (nonCash != null && !nonCash.isEmpty()) {

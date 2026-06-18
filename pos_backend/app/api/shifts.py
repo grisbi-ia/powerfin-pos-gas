@@ -22,6 +22,33 @@ from app.schemas import (
 router = APIRouter(prefix="/api/pos/shifts", tags=["shifts"])
 
 
+@router.get("", response_model=list)
+async def list_shifts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 10,
+):
+    """List current user's shifts (newest first)."""
+    result = await db.execute(
+        select(Shift)
+        .where(Shift.user_id == current_user.user_id)
+        .order_by(Shift.shift_id.desc())
+        .limit(limit)
+    )
+    shifts = result.scalars().all()
+    return [
+        {
+            "shift_id": s.shift_id,
+            "status": s.status,
+            "user_name": current_user.name,
+            "opened_at": s.opened_at.isoformat() if s.opened_at else None,
+            "closed_at": s.closed_at.isoformat() if s.closed_at else None,
+            "opening_cash": float(s.opening_cash or 0),
+        }
+        for s in shifts
+    ]
+
+
 @router.post("/open", response_model=ShiftResponse, status_code=201)
 async def open_shift(
     body: OpenShiftRequest,
@@ -87,6 +114,61 @@ async def get_current_shift(
     )
 
 
+@router.get("/{shift_id}/receipt-data", response_model=CloseShiftResponse)
+async def get_shift_receipt_data(
+    shift_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get shift close receipt data for reprinting (any authenticated user)."""
+    result = await db.execute(select(Shift).where(Shift.shift_id == shift_id))
+    shift = result.scalar_one_or_none()
+    if not shift:
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+    # Recompute financial summary from DB (same queries as close_shift)
+    summary = await _compute_shift_summary(db, shift_id)
+
+    # Get cashier name for receipt
+    from app.models.user import User as UserModel
+    cashier_name = await db.scalar(
+        select(UserModel.name).where(UserModel.user_id == shift.user_id)
+    ) or ""
+
+    # Read surplus/shortage from the shift record (set during close)
+    surplus = float(shift.surplus or 0)
+    shortage = float(shift.shortage or 0)
+
+    return CloseShiftResponse(
+        shift_id=shift_id,
+        closed_at=shift.closed_at,
+        opened_at=shift.opened_at,
+        opening_cash=shift.opening_cash,
+        surplus=surplus,
+        shortage=shortage,
+        total_sales=round(summary["sales_cash"] + sum(n["total"] for n in summary["non_cash_sales"]), 2),
+        total_volume=0,
+        dispatch_count=summary["dispatch_count"],
+        accounting_cash_code=cashier_name,  # sent as cash_code, used as cashier name on receipt
+        accounting_branch_code=summary.get("branch_code"),
+        cash_income=round(summary["income"], 2),
+        cash_income_count=summary["income_count"],
+        cash_expense=round(summary["expense"], 2),
+        cash_expense_count=summary["expense_count"],
+        cash_deposits=round(summary["deposits"], 2),
+        cash_deposits_count=summary["deposit_count"],
+        cash_transfers_out=round(summary["transfers_out"], 2),
+        cash_transfers_out_count=summary["transfer_out_count"],
+        cash_transfers_in=round(summary["transfers_recv_amount"], 2),
+        cash_transfers_in_count=summary["transfers_recv_count"],
+        cash_safe_drops=round(summary["safe_drops"], 2),
+        cash_safe_drops_count=summary["safe_drop_count"],
+        sales_cash=round(summary["sales_cash"], 2),
+        sales_cash_count=summary["sales_cash_count"],
+        non_cash_sales=summary["non_cash_sales"],
+    )
+
+
 @router.post("/{shift_id}/close", response_model=CloseShiftResponse)
 async def close_shift(
     shift_id: int,
@@ -105,129 +187,11 @@ async def close_shift(
     shift.status = "CLOSED"
     shift.closed_at = datetime.now(ECUADOR_TZ)
 
-    # Count dispatches
-    dispatch_count = await db.scalar(
-        select(func.count()).where(
-            Dispatch.shift_id == shift_id, Dispatch.status != "CANCELLED"
-        )
-    ) or 0
+    # Build financial summary
+    summary = await _compute_shift_summary(db, shift_id)
 
-    # Sum sales paid in cash — payment_methods.payment_method_id = 1 is CASH/EFECTIVO
-    # This ID is a business invariant: row 1 in payment_methods is always the cash method.
-    # Do NOT change this ID or compare by code/name — codes and names may be localized.
-    # (shift_id is updated to collector's shift at collection time)
-    sales_cash = await db.scalar(
-        select(func.coalesce(func.sum(DispatchPayment.amount), 0))
-        .select_from(DispatchPayment)
-        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
-        .where(
-            Dispatch.shift_id == shift_id,
-            Dispatch.status == "COLLECTED",
-            DispatchPayment.payment_method_id == 1
-        )
-    ) or 0.0
-    sales_cash_count = await db.scalar(
-        select(func.count())
-        .select_from(DispatchPayment)
-        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
-        .where(
-            Dispatch.shift_id == shift_id,
-            Dispatch.status == "COLLECTED",
-            DispatchPayment.payment_method_id == 1
-        )
-    ) or 0
-
-    # Cash movements — income, expense, transfers, safe drops
-    income = await db.scalar(
-        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id,
-            CashMovement.type.in_(["INCOME", "TRANSFER_IN"]),
-        )
-    ) or 0.0
-    expense = await db.scalar(
-        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id,
-            CashMovement.type == "EXPENSE",
-        )
-    ) or 0.0
-    deposits = await db.scalar(
-        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id,
-            CashMovement.type == "DEPOSIT",
-        )
-    ) or 0.0
-    transfers_out = await db.scalar(
-        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id,
-            CashMovement.type == "TRANSFER_OUT",
-        )
-    ) or 0.0
-    safe_drops = await db.scalar(
-        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id,
-            CashMovement.type == "SAFE_DROP",
-        )
-    ) or 0.0
-
-    # Counts for each cash movement type
-    income_count = await db.scalar(
-        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type.in_(["INCOME", "TRANSFER_IN"]))
-    ) or 0
-    expense_count = await db.scalar(
-        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE")
-    ) or 0
-    deposit_count = await db.scalar(
-        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "DEPOSIT")
-    ) or 0
-    transfer_out_count = await db.scalar(
-        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_OUT")
-    ) or 0
-    safe_drop_count = await db.scalar(
-        select(func.count()).where(CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP")
-    ) or 0
-    # Transfers received (INCOME with related_user_id)
-    transfers_recv_amount = await db.scalar(
-        select(func.coalesce(func.sum(CashMovement.amount), 0)).where(
-            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN"
-        )
-    ) or 0.0
-    transfers_recv_count = await db.scalar(
-        select(func.count()).where(
-            CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN"
-        )
-    ) or 0
-
-    # Non-cash sales breakdown by payment method
-    non_cash_sales = []
-    pay_breakdown = await db.execute(
-        select(
-            PaymentMethod.code, PaymentMethod.name,
-            func.coalesce(func.sum(DispatchPayment.amount), 0),
-            func.count()
-        )
-        .select_from(DispatchPayment)
-        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
-        .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
-        .where(
-            Dispatch.shift_id == shift_id,
-            Dispatch.status == "COLLECTED",
-            DispatchPayment.payment_method_id != 1
-        )
-        .group_by(PaymentMethod.code, PaymentMethod.name)
-    )
-    for row in pay_breakdown:
-        non_cash_sales.append({
-            "method_code": row[0],
-            "method_name": row[1],
-            "total": float(row[2] or 0),
-            "count": int(row[3] or 0),
-        })
-
-    # Expected cash balance: opening + income + sales - expenses - deposits - transfers - safe_drops
-    # Employee must zero out their cash BEFORE closing (via deposits/transfers).
-    # POSITIVE expected → money NOT deposited → FALTANTE (shortage)
-    # NEGATIVE expected → MORE money deposited than expected → SOBRANTE (surplus)
-    expected = float(shift.opening_cash) + float(income) + float(sales_cash) - float(expense) - float(deposits) - float(transfers_out) - float(safe_drops)
+    # Calculate surplus/shortage from expected balance
+    expected = summary["opening"] + summary["income"] + summary["sales_cash"] - summary["expense"] - summary["deposits"] - summary["transfers_out"] - summary["safe_drops"]
 
     if expected > 0:
         shift.shortage = round(expected, 2)
@@ -239,40 +203,35 @@ async def close_shift(
         shift.surplus = 0
         shift.shortage = 0
 
-    # System config for branch code
-    from app.models.company import SystemConfig
-    branch_code = await db.scalar(
-        select(SystemConfig.value).where(SystemConfig.key == "accounting_branch_code")
-    )
-
     await db.commit()
 
     return CloseShiftResponse(
         shift_id=shift_id,
         closed_at=shift.closed_at,
+        opened_at=shift.opened_at,
         opening_cash=shift.opening_cash,
         surplus=shift.surplus or 0,
         shortage=shift.shortage or 0,
-        total_sales=dispatch_count,
+        total_sales=round(summary["sales_cash"] + sum(n["total"] for n in summary["non_cash_sales"]), 2),
         total_volume=0,
-        dispatch_count=dispatch_count,
+        dispatch_count=summary["dispatch_count"],
         accounting_cash_code=current_user.accounting_cash_code,
-        accounting_branch_code=branch_code,
-        cash_income=round(float(income), 2),
-        cash_income_count=income_count,
-        cash_expense=round(float(expense), 2),
-        cash_expense_count=expense_count,
-        cash_deposits=round(float(deposits), 2),
-        cash_deposits_count=deposit_count,
-        cash_transfers_out=round(float(transfers_out), 2),
-        cash_transfers_out_count=transfer_out_count,
-        cash_transfers_in=round(float(transfers_recv_amount), 2),
-        cash_transfers_in_count=transfers_recv_count,
-        cash_safe_drops=round(float(safe_drops), 2),
-        cash_safe_drops_count=safe_drop_count,
-        sales_cash=round(float(sales_cash), 2),
-        sales_cash_count=sales_cash_count,
-        non_cash_sales=non_cash_sales,
+        accounting_branch_code=summary["branch_code"],
+        cash_income=round(summary["income"], 2),
+        cash_income_count=summary["income_count"],
+        cash_expense=round(summary["expense"], 2),
+        cash_expense_count=summary["expense_count"],
+        cash_deposits=round(summary["deposits"], 2),
+        cash_deposits_count=summary["deposit_count"],
+        cash_transfers_out=round(summary["transfers_out"], 2),
+        cash_transfers_out_count=summary["transfer_out_count"],
+        cash_transfers_in=round(summary["transfers_recv_amount"], 2),
+        cash_transfers_in_count=summary["transfers_recv_count"],
+        cash_safe_drops=round(summary["safe_drops"], 2),
+        cash_safe_drops_count=summary["safe_drop_count"],
+        sales_cash=round(summary["sales_cash"], 2),
+        sales_cash_count=summary["sales_cash_count"],
+        non_cash_sales=summary["non_cash_sales"],
     )
 
 
@@ -380,3 +339,131 @@ async def get_shift_dispatches(
         }
         for d in dispatches
     ]
+
+
+async def _compute_shift_summary(db: AsyncSession, shift_id: int) -> dict:
+    """Compute shift financial summary. Shared by close_shift and reprint."""
+    from app.models.company import SystemConfig
+
+    opening = await db.scalar(
+        select(func.coalesce(Shift.opening_cash, 0)).where(Shift.shift_id == shift_id)
+    ) or 0.0
+
+    dispatch_count = await db.scalar(
+        select(func.count()).where(
+            Dispatch.shift_id == shift_id, Dispatch.status != "CANCELLED"
+        )
+    ) or 0
+
+    # Cash sales (payment_method_id = 1)
+    sales_cash = await db.scalar(
+        select(func.coalesce(func.sum(DispatchPayment.amount), 0))
+        .select_from(DispatchPayment)
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .where(Dispatch.shift_id == shift_id, Dispatch.status == "COLLECTED",
+               DispatchPayment.payment_method_id == 1)
+    ) or 0.0
+    sales_cash_count = await db.scalar(
+        select(func.count())
+        .select_from(DispatchPayment)
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .where(Dispatch.shift_id == shift_id, Dispatch.status == "COLLECTED",
+               DispatchPayment.payment_method_id == 1)
+    ) or 0
+
+    # Cash movements
+    income = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0))
+        .where(CashMovement.shift_id == shift_id,
+               CashMovement.type.in_(["INCOME", "TRANSFER_IN"]))
+    ) or 0.0
+    expense = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0))
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE")
+    ) or 0.0
+    deposits = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0))
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "DEPOSIT")
+    ) or 0.0
+    transfers_out = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0))
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_OUT")
+    ) or 0.0
+    safe_drops = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0))
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP")
+    ) or 0.0
+
+    income_count = await db.scalar(
+        select(func.count())
+        .where(CashMovement.shift_id == shift_id,
+               CashMovement.type.in_(["INCOME", "TRANSFER_IN"]))
+    ) or 0
+    expense_count = await db.scalar(
+        select(func.count())
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "EXPENSE")
+    ) or 0
+    deposit_count = await db.scalar(
+        select(func.count())
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "DEPOSIT")
+    ) or 0
+    transfer_out_count = await db.scalar(
+        select(func.count())
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_OUT")
+    ) or 0
+    safe_drop_count = await db.scalar(
+        select(func.count())
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP")
+    ) or 0
+    transfers_recv_amount = await db.scalar(
+        select(func.coalesce(func.sum(CashMovement.amount), 0))
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN")
+    ) or 0.0
+    transfers_recv_count = await db.scalar(
+        select(func.count())
+        .where(CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN")
+    ) or 0
+
+    # Non-cash sales
+    non_cash_sales = []
+    pay_breakdown = await db.execute(
+        select(PaymentMethod.code, PaymentMethod.name,
+               func.coalesce(func.sum(DispatchPayment.amount), 0), func.count())
+        .select_from(DispatchPayment)
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+        .where(Dispatch.shift_id == shift_id, Dispatch.status == "COLLECTED",
+               DispatchPayment.payment_method_id != 1)
+        .group_by(PaymentMethod.code, PaymentMethod.name)
+    )
+    for row in pay_breakdown:
+        non_cash_sales.append({
+            "method_code": row[0], "method_name": row[1],
+            "total": float(row[2] or 0), "count": int(row[3] or 0),
+        })
+
+    branch_code = await db.scalar(
+        select(SystemConfig.value)
+        .where(SystemConfig.key == "accounting_branch_code")
+    )
+
+    return {
+        "opening": float(opening),
+        "dispatch_count": dispatch_count,
+        "sales_cash": float(sales_cash),
+        "sales_cash_count": sales_cash_count,
+        "income": float(income),
+        "income_count": income_count,
+        "expense": float(expense),
+        "expense_count": expense_count,
+        "deposits": float(deposits),
+        "deposit_count": deposit_count,
+        "transfers_out": float(transfers_out),
+        "transfer_out_count": transfer_out_count,
+        "transfers_recv_amount": float(transfers_recv_amount),
+        "transfers_recv_count": transfers_recv_count,
+        "safe_drops": float(safe_drops),
+        "safe_drop_count": safe_drop_count,
+        "non_cash_sales": non_cash_sales,
+        "branch_code": branch_code,
+    }

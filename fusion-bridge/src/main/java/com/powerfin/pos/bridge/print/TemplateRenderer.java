@@ -412,6 +412,11 @@ public class TemplateRenderer {
                     resolved = resolved.replace("{#noncash}", "").replace("{/noncash}", "");
                     if (resolved.isBlank()) continue;
                 }
+                if (resolved.contains("{#reprint}") || resolved.contains("{/reprint}")) {
+                    if (!data.isReprint) continue;
+                    resolved = resolved.replace("{#reprint}", "").replace("{/reprint}", "");
+                    if (resolved.isBlank()) continue;
+                }
 
                 resolved = resolved
                     .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
@@ -493,6 +498,8 @@ public class TemplateRenderer {
     public static String shiftCloseTemplate() {
         return """
 
+{#reprint}[CENTER][BOLD]*** REIMPRESION ***[/BOLD][/CENTER]
+{/reprint}
 [CENTER][BOLD]{{location_name}}[/BOLD][/CENTER]
 [CENTER]{{location_address}}[/CENTER]
 [CENTER]R.U.C.: {{location_ruc}}[/CENTER]

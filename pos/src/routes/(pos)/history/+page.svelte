@@ -21,9 +21,24 @@
 	let reprintingCashId: number | null = null;
 	let refreshTimer: ReturnType<typeof setInterval> | null = null;
 	let dispatchCount = 0;
+	// If no open shift, load last closed shift for reprint access
+	let closedShift: { shift_id: number; status: string; user_name: string; opened_at: string } | null = null;
+
+	async function loadClosedShift() {
+		if (!$auth.token) return;
+		try {
+			const res = await fetch('/api/pos/shifts?limit=5', { headers: { Authorization: `Bearer ${$auth.token}` } });
+			if (res.ok) {
+				const all = await res.json();
+				closedShift = all.find((s: any) => s.status === 'CLOSED') || null;
+			}
+		} catch { /* ignore */ }
+	}
 
 	async function loadData() {
-		if (!$auth.token || !$shift) return;
+		if (!$auth.token) return;
+		const shiftId = $shift?.shift_id || closedShift?.shift_id;
+		if (!shiftId) { loading = false; return; }
 
 		// Ensure config is loaded (otherwise reprint fails silently)
 		if (!get(configLoaded) && get(auth).token) {
@@ -35,8 +50,8 @@
 
 		try {
 			[dispatches, movements] = await Promise.all([
-				powerfin.getShiftDispatches($auth.token, $shift.shift_id),
-				powerfin.getCashMovements($auth.token, $shift.shift_id)
+				powerfin.getShiftDispatches($auth.token, shiftId),
+				powerfin.getCashMovements($auth.token, shiftId)
 			]);
 
 			// Sort dispatches newest first
@@ -203,7 +218,7 @@
 					shiftId: String(m.shift_id),
 					date: new Date(m.created_at).toLocaleDateString('es-EC'),
 					time: new Date(m.created_at).toLocaleTimeString('es-EC'),
-					userName: ($shift as any)?.user_name || '',
+					userName: (($shift || closedShift) as any)?.user_name || '',
 					amount: Number(m.amount ?? 0).toFixed(2),
 					observation: m.observation,
 					locationName: loc?.name || '',
@@ -217,7 +232,57 @@
 		finally { reprintingCashId = null; }
 	}
 
-	onMount(() => {
+
+	async function reprintClose() {
+		if (!$auth.token) return;
+		const sid = $shift?.shift_id || closedShift?.shift_id;
+		if (!sid) return;
+		printing = 'shift-close';
+		try {
+			const raw = await powerfin.getShiftReceiptData($auth.token, sid);
+			const cfg = get(config);
+			const loc = cfg?.location;
+			const printerIp = cfg?.cash_printer_ip || (cfg?.dispensers?.[0]?.printer_ip) || '';
+			const printerPort = cfg?.cash_printer_port || (cfg?.dispensers?.[0]?.printer_port) || 9100;
+			// Map backend snake_case to FusionBridge camelCase
+			const data: Record<string, unknown> = {
+				date: new Date().toLocaleDateString('es-EC'),
+				time: new Date().toLocaleTimeString('es-EC'),
+				locationName: loc?.name || '',
+				locationAddress: loc?.address || '',
+				locationRuc: loc?.ruc || '',
+				locationPhone: loc?.phone || '',
+				shiftId: String(raw.shift_id ?? ''),
+				userName: (raw as any).accounting_cash_code || '',
+				openedAt: (raw as any).opened_at || '',
+				closedAt: raw.closed_at || '',
+				openingCash: String(raw.opening_cash ?? '0'),
+				salesCash: String(raw.sales_cash ?? '0'),
+				salesCashCount: String(raw.sales_cash_count ?? '0'),
+				income: String(raw.cash_income ?? '0'),
+				incomeCount: String(raw.cash_income_count ?? '0'),
+				expense: String(raw.cash_expense ?? '0'),
+				expenseCount: String(raw.cash_expense_count ?? '0'),
+				deposits: String(raw.cash_deposits ?? '0'),
+				depositsCount: String(raw.cash_deposits_count ?? '0'),
+				transfersOut: String(raw.cash_transfers_out ?? '0'),
+				transfersOutCount: String(raw.cash_transfers_out_count ?? '0'),
+				transfersIn: String(raw.cash_transfers_in ?? '0'),
+				transfersInCount: String(raw.cash_transfers_in_count ?? '0'),
+				safeDrops: String(raw.cash_safe_drops ?? '0'),
+				safeDropsCount: String(raw.cash_safe_drops_count ?? '0'),
+				surplus: String(raw.surplus ?? ''),
+				shortage: String(raw.shortage ?? ''),
+				totalSales: String(raw.total_sales ?? '0'),
+				nonCashSales: raw.non_cash_sales || [],
+				isReprint: true,
+			};
+			await bridge.printReceipt({ type: 'SHIFT_CLOSE', printerIp, printerPort, shiftData: data });
+		} catch (err) { console.error(err); }
+		finally { printing = null; }
+	}
+	onMount(async () => {
+		if (!$shift) await loadClosedShift();
 		loadData();
 		refreshTimer = setInterval(loadData, 15_000);
 	});
@@ -230,11 +295,11 @@
 <Header title="Historial" showBack={true} onBack={() => goto('/')} />
 
 <main class="flex-1 px-4 py-4 pb-24">
-	{#if !$shift}
+	{#if !$shift && !closedShift}
 		<div class="card p-6 text-center mt-8">
 			<div class="text-3xl mb-3">🔒</div>
-			<h2 class="text-lg font-bold text-gray-800 mb-2">Turno no aperturado</h2>
-			<p class="text-sm text-gray-500 mb-4">Debe abrir su turno para ver el historial.</p>
+			<h2 class="text-lg font-bold text-gray-800 mb-2">Sin turnos</h2>
+			<p class="text-sm text-gray-500 mb-4">No se encontraron turnos. Abra uno primero.</p>
 			<button class="touch-btn bg-primary text-white rounded-xl px-6 py-3 text-sm font-semibold" on:click={() => goto('/')}>
 				Ir al inicio
 			</button>
@@ -245,19 +310,30 @@
 		<div class="bg-red-50 text-red-600 text-sm text-center rounded-xl py-3">{error}</div>
 	{:else}
 		<!-- Resumen -->
+		{@const ds = $shift || closedShift}
+		{#if ds}
 		<div class="card p-4 mb-4">
-			<div class="text-xs text-gray-500 mb-2">Turno #{$shift.shift_id} · {$shift.status === 'OPEN' ? 'En curso' : 'Cerrado'}</div>
+			<div class="text-xs text-gray-500 mb-2">Turno #{ds.shift_id} · {ds.status === 'OPEN' ? 'En curso' : 'Cerrado'}</div>
 			<div class="grid grid-cols-2 gap-3">
 				<div class="bg-gray-50 rounded-lg p-3">
 					<div class="text-xs text-gray-400 mb-1">Usuario</div>
-					<div class="text-sm font-semibold text-gray-800">{$shift.user_name}</div>
+					<div class="text-sm font-semibold text-gray-800">{ds.user_name}</div>
 				</div>
 				<div class="bg-gray-50 rounded-lg p-3">
 					<div class="text-xs text-gray-400 mb-1">Apertura</div>
-					<div class="text-sm font-semibold text-gray-800">{new Date($shift.opened_at).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date($shift.opened_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}</div>
+					<div class="text-sm font-semibold text-gray-800">{new Date(ds.opened_at).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date(ds.opened_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}</div>
 				</div>
 			</div>
 		</div>
+
+		{#if ds.status === 'CLOSED'}
+			<div class="mb-4">
+				<button class="touch-btn w-full py-3 rounded-xl border-2 border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50" on:click={reprintClose} disabled={printing != null}>
+					{printing != null ? '⏳' : '🖨'} Reimprimir cierre de turno
+				</button>
+			</div>
+		{/if}
+		{/if}
 
 		<!-- Tabs -->
 		<div class="flex border-b border-gray-200 mb-4">
