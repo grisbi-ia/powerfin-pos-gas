@@ -85,11 +85,8 @@ WHERE d.shift_id = :shift_id
     OR d.total != COALESCE(dp.total_pagado, 0)
   )
 ORDER BY d.created_at;
-
-
 -- ═══════════════════════════════════════════════════════════════
--- DETALLE COMPLETO — Todos los despachos del turno
--- (COLLECTED + COMPLETED + AUTHORIZED + CANCELLED)
+-- DETALLE COMPLETO — Solo despachos oficiales (COLLECTED + COMPLETED)
 -- ═══════════════════════════════════════════════════════════════
 SELECT
     d.order_id                                                            AS orden,
@@ -150,4 +147,5 @@ LEFT JOIN LATERAL (
     WHERE dp2.dispatch_id = d.dispatch_id
 ) dp ON true
 WHERE d.shift_id = :shift_id
+  AND d.status IN ('COLLECTED', 'COMPLETED')
 ORDER BY d.created_at;

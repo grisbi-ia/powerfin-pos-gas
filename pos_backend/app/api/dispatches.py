@@ -481,15 +481,19 @@ async def complete_dispatch_by_pump(
 
     # Find the AUTHORIZED dispatch for this hose (most recent first).
     # Also include COMPLETED dispatches with total=0 (Wayne race condition fix).
+    # Uses raw SQL to bypass statement cache.
     dispatch_result = await db.execute(
-        select(Dispatch).where(
-            Dispatch.hose_id == hose.hose_id,
-            Dispatch.status.in_(["AUTHORIZED", "COMPLETED"])
-        ).order_by(Dispatch.created_at.desc()).limit(1)
+        text("SELECT dispatch_id FROM dispatches WHERE hose_id = :hid AND status = ANY(ARRAY['AUTHORIZED','COMPLETED']) ORDER BY created_at DESC LIMIT 1"),
+        {"hid": hose.hose_id}
+    )
+    row = dispatch_result.fetchone()
+    if not row:
+        return {"status": "ok", "detail": "no authorized dispatch"}
+
+    dispatch_result = await db.execute(
+        select(Dispatch).where(Dispatch.dispatch_id == row[0])
     )
     dispatch = dispatch_result.scalar_one_or_none()
-    if not dispatch:
-        return {"status": "ok", "detail": "no authorized dispatch"}
 
     # Only update status if not already COMPLETED (allow correction of zero totals)
     if dispatch.status == "AUTHORIZED":
