@@ -173,7 +173,7 @@ describe('Bridge Mock API', () => {
 			side: 'A',
 			preset_type: 'MONEY',
 			preset_value: '50.00',
-			payment_method: 'EFECTIVO',
+			payment_method_id: 1,
 			unit_price: 1.500
 		});
 		expect(result.status).toBe('AUTHORIZED');

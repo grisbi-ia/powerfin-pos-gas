@@ -149,8 +149,8 @@ async def get_config(
     ).scalars().all()
     payment_methods = [
         PaymentMethodResponse(
-            code=pm.code, name=pm.name, requires_reference=pm.requires_reference,
-            sri_code=pm.sri_code
+            payment_method_id=pm.payment_method_id, code=pm.code, name=pm.name,
+            requires_reference=pm.requires_reference, sri_code=pm.sri_code
         )
         for pm in pm_result
     ]

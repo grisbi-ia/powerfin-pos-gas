@@ -623,6 +623,7 @@ SUBTOTAL: $ {{subtotal}}
 ===
 [CENTER][BOLD]TOTAL:  ${{amount}}[/BOLD][/CENTER]
 ===
+FORMA DE PAGO: {{payment_method}}
 ---
 {#subsidy_amount}VALOR TOTAL SIN SUBSIDIO: $ {{amount}}
 AHORRO POR SUBSIDIO: $ {{subsidy_amount}}

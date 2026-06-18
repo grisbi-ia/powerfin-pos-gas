@@ -50,13 +50,13 @@ const MOCK_CONFIG: AppConfig = {
 		{ code: 'VIP', name: 'Cliente VIP' }
 	],
 	payment_methods: [
-		{ code: 'EFECTIVO', name: 'Efectivo', sri_code: '01', requires_reference: false },
-		{ code: 'TARJETA', name: 'Tarjeta Crédito/Débito', sri_code: '19', requires_reference: true },
-		{ code: 'QR', name: 'QR / Transferencia', sri_code: '20', requires_reference: false },
-		{ code: 'CREDITO', name: 'Crédito', sri_code: '20', requires_reference: false },
-		{ code: 'DEUNA', name: 'DeUna', sri_code: '20', requires_reference: true },
-		{ code: 'JEPFAST', name: 'JepFast', sri_code: '20', requires_reference: true },
-		{ code: 'SIPY', name: 'Sipy', sri_code: '20', requires_reference: true }
+		{ payment_method_id: 1, code: 'CASH', name: 'Efectivo', sri_code: '01', requires_reference: false },
+		{ payment_method_id: 4, code: 'TCTD', name: 'Tarjeta Crédito/Débito', sri_code: '19', requires_reference: true },
+		{ payment_method_id: 5, code: 'DEUNA', name: 'QR / Transferencia', sri_code: '20', requires_reference: false },
+		{ payment_method_id: 2, code: 'CREDITPR', name: 'Crédito', sri_code: '20', requires_reference: false },
+		{ payment_method_id: 5, code: 'DEUNA', name: 'DeUna', sri_code: '20', requires_reference: true },
+		{ payment_method_id: 6, code: 'JEPFAST', name: 'JepFast', sri_code: '20', requires_reference: true },
+		{ payment_method_id: 7, code: 'JAZ', name: 'Sipy', sri_code: '20', requires_reference: true }
 	],
 	polling: {
 		interval_ms: 2000,
@@ -314,7 +314,7 @@ export async function createDispatch(
 		preset_type: (data.preset_type as 'MONEY' | 'VOLUME') ?? 'MONEY',
 		preset_value: data.preset_value as string,
 		unit_price: (data as Record<string, number>).unit_price ?? 1.500,
-		payment_method: (data.payment_method as string) ?? 'EFECTIVO',
+		payment_method_id: (data.payment_method_id as number) ?? 1,
 		customer_id: data.customer_id as string | undefined,
 		plate: data.plate as string | undefined,
 		status: 'AUTHORIZED',
@@ -370,7 +370,7 @@ export async function collectDispatch(
 		status: 'COLLECTED',
 		collected_by_shift_id: _data.collected_by_shift_id,
 		collected_by_name: MOCK_USER.name,
-		payment_method: _data.payment_method,
+		payment_method_id: _data.payment_method_id,
 		collected_amount: _data.collected_amount,
 		change_amount: _data.change_amount
 	};
@@ -651,7 +651,7 @@ export async function getShiftCashSummary(
 
 	// Sales cash: sum of COMPLETED orders with CASH payment for this shift
 	const salesCash = mockOrders
-		.filter(o => o.shift_id === shiftId && o.status === 'COMPLETED' && o.payment_method === 'EFECTIVO')
+		.filter(o => o.shift_id === shiftId && o.status === 'COMPLETED' && o.payment_method_id === 1)
 		.reduce((sum, o) => sum + (o.final_amount ?? 0), 0);
 
 	const openingCash = mockShift?.opening_cash ?? 0;

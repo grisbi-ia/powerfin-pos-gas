@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator, Field
 
 
 # ── Auth ─────────────────────────────────────────────────────────
@@ -77,6 +77,7 @@ class PriceListResponse(BaseModel):
 
 
 class PaymentMethodResponse(BaseModel):
+    payment_method_id: int
     code: str
     name: str
     requires_reference: bool
@@ -257,7 +258,7 @@ class CreateDispatchRequest(BaseModel):
     preset_type: str = "MONEY"
     preset_value: str = "0"
     unit_price: Decimal
-    payment_method: str = "EFECTIVO"
+    payment_method_id: int = 1
     customer_id: Optional[str] = None
     customer_name: Optional[str] = None
     plate: Optional[str] = None
@@ -283,10 +284,18 @@ class CompleteDispatchRequest(BaseModel):
     order_id: str
     fusion_sale_id: str = ""
     volume: str = "0"
-    amount: Decimal = Decimal("0")
-    unit_price: Decimal = Decimal("0")
-    payment_method: str = "EFECTIVO"
+    amount: str = "0"
+    unit_price: str = "0"
+    payment_method_id: int = 1
     completed_at: Optional[str] = None
+
+    @field_validator('amount', 'unit_price', mode='before')
+    @classmethod
+    def coerce_to_str(cls, v):
+        """Accept both JSON numbers (float/int) and strings."""
+        if v is None:
+            return "0"
+        return str(v)
 
 
 class CompleteByPumpRequest(BaseModel):
@@ -295,13 +304,21 @@ class CompleteByPumpRequest(BaseModel):
     fusion_pump_id: int
     fusion_hose_id: int
     volume: str = "0"
-    amount: Decimal = Decimal("0")
-    unit_price: Decimal = Decimal("0")
+    amount: str = "0"
+    unit_price: str = "0"
+
+    @field_validator('amount', 'unit_price', 'volume', mode='before')
+    @classmethod
+    def coerce_to_str(cls, v):
+        """Accept both JSON numbers (float/int) and strings."""
+        if v is None:
+            return "0"
+        return str(v)
 
 
 class CollectDispatchRequest(BaseModel):
     collected_by_shift_id: int
-    payment_method: str = "EFECTIVO"
+    payment_method_id: int = 1
     collected_amount: Decimal
     change_amount: Decimal = Decimal("0")
     reference_code: Optional[str] = None
@@ -309,7 +326,7 @@ class CollectDispatchRequest(BaseModel):
 
 
 class PaymentItemRequest(BaseModel):
-    payment_method_code: str
+    payment_method_id: int
     amount: Decimal
     reference_code: Optional[str] = None
 
@@ -319,7 +336,7 @@ class CollectDispatchResponse(BaseModel):
     status: str = "COLLECTED"
     collected_by_shift_id: int
     collected_by_name: str
-    payment_method: str
+    payment_method_id: int
     collected_amount: Decimal
     change_amount: Decimal
     receipt_data: dict | None = None  # Full data for printing (from DB)

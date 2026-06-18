@@ -178,7 +178,7 @@ public class FusionEventHandler {
         String now = Instant.now().toString();
         String body = String.format(
             "{\"order_id\":\"%s\",\"fusion_sale_id\":\"%s\",\"volume\":\"%s\"," +
-            "\"amount\":\"%s\",\"unit_price\":\"%s\",\"payment_method\":\"EFECTIVO\"," +
+            "\"amount\":\"%s\",\"unit_price\":\"%s\",\"payment_method_id\":1," +
             "\"completed_at\":\"%s\"}",
             orderId, saleId, volume, amount, unitPrice, now);
 

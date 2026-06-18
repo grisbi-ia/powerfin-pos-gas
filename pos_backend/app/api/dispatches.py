@@ -1,5 +1,6 @@
 """Dispatch management — create, complete, collect, cancel, billing, invoice."""
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -37,6 +38,8 @@ from app.schemas import (
 from app.services.credit_service import validate_credit_dispatch
 from app.services.sequential_service import consume_sequential
 from app.services.access_key_service import generate_access_key
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pos/dispatches", tags=["dispatches"])
 
@@ -254,6 +257,7 @@ async def create_dispatch(
         hose_id=hose_id,
         grade_id=grade_id,
         preset_value=body.preset_value,
+        preset_type=body.preset_type,
     )
     db.add(dispatch)
     await db.flush()
@@ -385,8 +389,15 @@ async def complete_dispatch(
         dispatch.completed_at = datetime.now(ECUADOR_TZ)
 
     # Update dispatch details with actual volume and recalculate totals
-    amount_dec = Decimal(str(body.amount))
-    volume_dec = Decimal(str(body.volume)) if body.volume and body.volume != "0" else Decimal("0")
+    try:
+        amount_dec = Decimal(str(body.amount)) if body.amount else Decimal("0")
+    except Exception:
+        logger.warning(f"complete_dispatch: invalid amount '{body.amount}' for {order_id}")
+        amount_dec = Decimal("0")
+    try:
+        volume_dec = Decimal(str(body.volume)) if body.volume and body.volume != "0" else Decimal("0")
+    except Exception:
+        volume_dec = Decimal("0")
     
     detail_result = await db.execute(
         select(DispatchDetail).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
@@ -592,37 +603,34 @@ async def collect_dispatch(
     # Record payments
     if body.payments:
         for p in body.payments:
-            pm_result = await db.execute(
-                select(PaymentMethod).where(PaymentMethod.code == p.payment_method_code)
-            )
-            pm = pm_result.scalar_one_or_none()
-            if pm:
-                payment = DispatchPayment(
-                    dispatch_id=dispatch.dispatch_id,
-                    payment_method_id=pm.payment_method_id,
-                    amount=float(p.amount),
-                    reference_code=p.reference_code,
-                )
-                db.add(payment)
-    else:
-        # Single payment (backward compatibility)
-        pm_result = await db.execute(
-            select(PaymentMethod).where(PaymentMethod.code == body.payment_method)
-        )
-        pm = pm_result.scalar_one_or_none()
-        if pm:
             payment = DispatchPayment(
                 dispatch_id=dispatch.dispatch_id,
-                payment_method_id=pm.payment_method_id,
-                amount=float(body.collected_amount),
-                reference_code=body.reference_code,
+                payment_method_id=p.payment_method_id,
+                amount=float(p.amount),
+                reference_code=p.reference_code,
             )
             db.add(payment)
+    else:
+        # Single payment (backward compatibility)
+        payment = DispatchPayment(
+            dispatch_id=dispatch.dispatch_id,
+            payment_method_id=body.payment_method_id,
+            amount=float(body.collected_amount),
+            reference_code=body.reference_code,
+        )
+        db.add(payment)
+
+    # Resolve payment method name for receipt
+    pm_result = await db.execute(
+        select(PaymentMethod).where(PaymentMethod.payment_method_id == body.payment_method_id)
+    )
+    pm = pm_result.scalar_one_or_none()
+    pay_method_name = pm.name if pm else ""
 
     await db.commit()
 
     # Build receipt data from persisted DB records (same as reprint uses)
-    receipt_data = await _build_receipt_data(db, dispatch)
+    receipt_data = await _build_receipt_data(db, dispatch, pay_method_name)
 
     # Fire-and-forget: send invoice to SRI via Key49 (non-blocking)
     # Pass only dispatch_id — background task creates its own DB session
@@ -638,14 +646,14 @@ async def collect_dispatch(
         status="COLLECTED",
         collected_by_shift_id=body.collected_by_shift_id,
         collected_by_name=current_user.name,
-        payment_method=body.payment_method,
+        payment_method_id=body.payment_method_id,
         collected_amount=body.collected_amount,
         change_amount=body.change_amount,
         receipt_data=receipt_data,
     )
 
 
-async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch) -> dict:
+async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch, pay_method_name: str = "") -> dict:
     """Build full receipt data from persisted DB records.
     Same data source as history reprint — ensures print and reprint are identical."""
     from app.models.company import CompanyInfo
@@ -656,19 +664,21 @@ async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch) -> dict:
     )
     detail = detail_result.scalars().first()
 
-    # Payment
-    pay_result = await db.execute(
-        select(DispatchPayment).where(DispatchPayment.dispatch_id == dispatch.dispatch_id)
-    )
-    pay = pay_result.scalars().first()
-    pay_method_name = "EFECTIVO"
-    if pay:
-        pm_result = await db.execute(
-            select(PaymentMethod).where(PaymentMethod.payment_method_id == pay.payment_method_id)
+    # Payment — prefer caller-supplied name, fall back to DB query
+    if not pay_method_name:
+        pay_result = await db.execute(
+            select(DispatchPayment).where(DispatchPayment.dispatch_id == dispatch.dispatch_id)
         )
-        pm = pm_result.scalar_one_or_none()
-        if pm:
-            pay_method_name = pm.name or pm.code or "EFECTIVO"
+        pay = pay_result.scalars().first()
+        if pay:
+            pm_result = await db.execute(
+                select(PaymentMethod).where(PaymentMethod.payment_method_id == pay.payment_method_id)
+            )
+            pm = pm_result.scalar_one_or_none()
+            if pm:
+                pay_method_name = pm.name or pm.code or ""
+        if not pay_method_name:
+            pay_method_name = ""
 
     # Person (customer)
     person = None
@@ -914,6 +924,17 @@ async def get_active_dispatches(
         for sid, uname in shifts_result:
             cashier_map[sid] = uname or ""
 
+    # Build payment method name lookup
+    pay_method_map = {}
+    if dispatch_ids:
+        pay_result = await db.execute(
+            select(DispatchPayment.dispatch_id, PaymentMethod.name)
+            .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+            .where(DispatchPayment.dispatch_id.in_(dispatch_ids))
+        )
+        for did, pname in pay_result:
+            pay_method_map[did] = pname
+
     return [
         {
             "order_id": d.order_id,
@@ -921,14 +942,15 @@ async def get_active_dispatches(
             "hose_id": d.hose_id or 1,
             "side": hose_map[d.hose_id].side if d.hose_id and d.hose_id in hose_map else "A",
             "grade": d.grade_id or "UNKNOWN",
-            "preset_type": "MONEY",
+            "preset_type": d.preset_type or "MONEY",
             "preset_value": d.preset_value or "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
             "price_without_subsidy": float(detail_map[d.dispatch_id].price_without_subsidy) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].price_without_subsidy is not None else None,
             "subsidy_per_unit": float(detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else 0.0,
             "subsidy_amount": float(detail_map[d.dispatch_id].subsidy_amount) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].subsidy_amount is not None else 0.0,
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
-            "payment_method": "EFECTIVO",
+            "payment_method": "",
+            "payment_method_name": pay_method_map.get(d.dispatch_id, ""),
             "customer_id": person_map[d.person_id].id_number if d.person_id and d.person_id in person_map else None,
             "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
             "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,

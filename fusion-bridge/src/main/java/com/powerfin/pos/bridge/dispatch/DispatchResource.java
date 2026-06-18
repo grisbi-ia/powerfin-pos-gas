@@ -45,7 +45,17 @@ public class DispatchResource {
             String customerId = (String) request.getOrDefault("customer_id", "");
             String plate = (String) request.getOrDefault("plate", "");
             String priceList = (String) request.getOrDefault("price_list", "STANDARD");
-            String paymentMethod = (String) request.getOrDefault("payment_method", "EFECTIVO");
+            String paymentMethod = "CASH";
+            Object pmIdObj = request.get("payment_method_id");
+            if (pmIdObj instanceof Number) {
+                paymentMethod = String.valueOf(((Number) pmIdObj).intValue());
+            } else if (pmIdObj instanceof String) {
+                paymentMethod = (String) pmIdObj;
+            }
+            // Fallback: legacy payment_method string
+            if (paymentMethod == null || paymentMethod.isEmpty()) {
+                paymentMethod = (String) request.getOrDefault("payment_method", "1");
+            }
 
             // Clear any lingering STOP state before sending preset.
             // A previous STOP (manual or ATO) can leave the pump with "busy

@@ -46,6 +46,7 @@ export interface AppConfig {
 }
 
 export interface PaymentMethodConfig {
+	payment_method_id: number;
 	code: string;
 	name: string;
 	sri_code: string;
@@ -239,7 +240,8 @@ export interface DispatchOrder {
 	price_without_subsidy?: number;
 	subsidy_per_unit?: number;
 	subsidy_amount?: number;
-	payment_method: string;
+	payment_method_id: number;
+	payment_method_name?: string;
 	customer_id?: string;
 	customer_name?: string;
 	customer_address?: string;
@@ -264,7 +266,7 @@ export interface CreateDispatchRequest {
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
 	unit_price: number;
-	payment_method: string;
+	payment_method_id: number;
 	customer_id?: string;
 	plate?: string;
 }
@@ -280,7 +282,7 @@ export interface SaleCompletedData {
 	volume: string;
 	amount: string;
 	unit_price: string;
-	payment_method: string;
+	payment_method_id: number;
 	completed_at: string;
 }
 
@@ -288,7 +290,7 @@ export type PresetType = 'MONEY' | 'VOLUME' | 'FULL';
 
 export interface CollectDispatchRequest {
 	collected_by_shift_id: number;
-	payment_method: string;
+	payment_method_id: number;
 	collected_amount: number;
 	change_amount: number;
 	reference_code?: string;
@@ -305,7 +307,7 @@ export interface CollectDispatchResponse {
 	status: 'COLLECTED';
 	collected_by_shift_id: number;
 	collected_by_name: string;
-	payment_method: string;
+	payment_method_id: number;
 	collected_amount: number;
 	change_amount: number;
 	receipt_data?: {
@@ -323,7 +325,7 @@ export interface AuthorizeData {
 	side: 'A' | 'B';
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
-	payment_method: string;
+	payment_method_id: number;
 	customer_id?: string;
 	plate?: string;
 	unit_price: number;

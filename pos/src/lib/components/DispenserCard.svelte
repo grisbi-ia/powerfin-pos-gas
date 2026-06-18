@@ -47,6 +47,7 @@
 		status: string; primaryHose: HoseState | null;
 		allIdle: boolean; isPendingCollection: boolean;
 		pendingAmount: number; pendingCustomer: string;
+		pendingPresetType: 'MONEY' | 'VOLUME';
 	} {
 		const hoses = dispenser.sides[side];
 		const allIdle = hoses.every(h => h.status === 'IDLE');
@@ -74,7 +75,8 @@
 				allIdle: false,
 				isPendingCollection: true,
 				pendingAmount: pendingOrder.finalAmount || pendingOrder.presetAmount,
-				pendingCustomer: pendingOrder.customerName
+				pendingCustomer: pendingOrder.customerName,
+				pendingPresetType: pendingOrder.presetType || 'MONEY'
 			};
 		}
 
@@ -85,7 +87,8 @@
 				allIdle: false,
 				isPendingCollection: false,
 				pendingAmount: 0,
-				pendingCustomer: ''
+				pendingCustomer: '',
+				pendingPresetType: 'MONEY'
 			};
 		}
 
@@ -97,7 +100,8 @@
 			allIdle,
 			isPendingCollection: false,
 			pendingAmount: 0,
-			pendingCustomer: ''
+			pendingCustomer: '',
+			pendingPresetType: 'MONEY'
 		};
 	}
 
@@ -109,6 +113,7 @@
 		isPendingCollection: boolean;
 		pendingAmount: number;
 		pendingCustomer: string;
+		pendingPresetType: 'MONEY' | 'VOLUME';
 		color: string;
 		label: string;
 	}
@@ -214,7 +219,11 @@
 						<div class="text-xs text-gray-500">{info.pendingCustomer}</div>
 					{/if}
 					<div class="text-base font-bold text-green-700 mt-0.5">
-						${info.pendingAmount.toFixed(2)}
+						{#if info.pendingPresetType === 'VOLUME' && info.pendingAmount > 0}
+							{info.pendingAmount} GAL
+						{:else}
+							${info.pendingAmount.toFixed(2)}
+						{/if}
 					</div>
 					<div class="text-xs text-green-600 font-medium mt-0.5">Tocar para cobrar →</div>
 				{/if}

@@ -57,7 +57,7 @@
 	$: idValid = idType === 'CED' ? idNumber.length === 10 : idNumber.length === 13;
 
 	// Collection state
-	let paymentMethod = '';
+	let paymentMethodId = 0;
 	let receivedAmount = '';
 	let confirmingPayment = false;
 	let referenceCode = '';
@@ -92,9 +92,9 @@
 	$: regValid = regIdNumber.length > 0 && regName.trim().length > 0 && regEmail.trim().length > 0;
 
 	$: paymentMethods = $config?.payment_methods ?? [];
-	$: selectedPaymentMethod = paymentMethods.find(m => m.code === paymentMethod);
+	$: selectedPaymentMethod = paymentMethods.find(m => m.payment_method_id === paymentMethodId);
 	$: needsReference = selectedPaymentMethod?.requires_reference ?? false;
-	$: canConfirmPayment = paymentMethod !== '' && (!needsReference || referenceCode.trim() !== '');
+	$: canConfirmPayment = paymentMethodId !== 0 && (!needsReference || referenceCode.trim() !== '');
 
 	$: finalAmount = collectOrder
 		? (collectOrder.finalAmount || collectOrder.presetAmount)
@@ -313,14 +313,15 @@
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
-			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate });
+			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method_id: 1, customer_id: owner?.customer_id, plate });
 			orderId = orderResult.order_id;
-			await bridge.authorizeDispatch({ order_id: orderId, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method: 'EFECTIVO', customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
+			await bridge.authorizeDispatch({ order_id: orderId, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method_id: 1, customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 			const authorizedByUserId = $currentUser?.user_id;
 			const authorizedBy = $currentUser?.name ?? '';
 			pendingOrders.addOrder({
 				orderId, dispenserId, fusionPumpId: hose.fusion_pump_id, fusionHoseId: hose.fusion_hose_id, hoseId: hose.hose_id, side,
 				customerId: owner?.customer_id, customerName, plate,
+				presetType: presetType === 'FULL' ? 'VOLUME' : presetType,
 				presetAmount: presetType === 'MONEY' ? val : presetType === 'FULL' ? 0 : (val * unitPrice),
 				finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl,
 				status: 'FUELLING', createdAt: new Date().toISOString(),
@@ -354,9 +355,9 @@
 		error = '';
 		try {
 			const shiftId = $shift?.shift_id ?? 0;
-			const received = paymentMethod === 'EFECTIVO' ? (parseFloat(receivedAmount) || 0) : 0;
+			const received = paymentMethodId === 1 ? (parseFloat(receivedAmount) || 0) : 0;
 			const realChange = Math.max(0, received - finalAmount);
-			const collectResult = await powerfin.collectDispatch(token(), collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method: paymentMethod, collected_amount: finalAmount, change_amount: realChange, reference_code: referenceCode || undefined });
+			const collectResult = await powerfin.collectDispatch(token(), collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method_id: paymentMethodId, collected_amount: finalAmount, change_amount: realChange, reference_code: referenceCode || undefined });
 		// Store receipt data from backend (DB-persisted, same as reprint)
 		receiptData = (collectResult as any)?.receipt_data ?? null;
 			// Note: do NOT removeOrder here — it would nullify collectOrder reactively
@@ -398,7 +399,7 @@
 						dispenserId, hoseId, orderId: collectOrder?.orderId ?? '',
 						volume: finalVolume, amount: finalAmount.toFixed(2),
 						unitPrice: Number(collectOrder?.unitPrice ?? selectedHose?.unit_price ?? 0).toFixed(7),
-						paymentMethod, grade: gradeName,
+						paymentMethod: selectedPaymentMethod?.name || '',
 						unit: gradeUnit === 'GALONES' ? 'GAL' : 'L',
 						priceWithoutSubsidy: Number(selectedHose?.base_price ?? 0).toFixed(4),
 						subsidyPerUnit: Number(selectedHose?.subsidy_per_unit ?? 0).toFixed(4),
@@ -869,8 +870,8 @@
 					<h3 class="text-sm font-semibold text-gray-700 mb-3">Forma de pago</h3>
 					<div class="grid grid-cols-2 gap-2 mb-3">
 						{#each paymentMethods as method}
-							<button class="touch-btn py-3 rounded-xl border-2 text-sm font-medium transition-colors {paymentMethod === method.code ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'}"
-								on:click={() => { paymentMethod = method.code; referenceCode = ''; }}>{method.name}</button>
+							<button class="touch-btn py-3 rounded-xl border-2 text-sm font-medium transition-colors {paymentMethodId === method.payment_method_id ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'}"
+								on:click={() => { paymentMethodId = method.payment_method_id; referenceCode = ''; }}>{method.name}</button>
 						{/each}
 					</div>
 					{#if needsReference}
@@ -878,7 +879,7 @@
 					{/if}
 					<div class="bg-gray-50 rounded-xl p-3 mb-3">
 						<div class="flex justify-between text-sm mb-2"><span class="text-gray-500">Total a cobrar</span><span class="font-bold">${finalAmount.toFixed(2)}</span></div>
-						{#if paymentMethod === 'EFECTIVO'}
+						{#if paymentMethodId === 1}
 							<div class="flex items-center gap-2">
 								<span class="text-sm text-gray-500">Recibido</span>
 								<span class="text-lg">$</span>
@@ -903,7 +904,7 @@
 						<div class="text-sm text-gray-500 mb-4">
 							<div class="flex justify-between"><span>Total</span><span class="font-bold">${finalAmount.toFixed(2)}</span></div>
 							<div class="flex justify-between"><span>Método</span><span>{selectedPaymentMethod?.name}</span></div>
-							{#if paymentMethod === 'EFECTIVO' && parseFloat(receivedAmount) > 0}
+							{#if paymentMethodId === 1 && parseFloat(receivedAmount) > 0}
 								<div class="flex justify-between"><span>Recibido</span><span>${parseFloat(receivedAmount).toFixed(2)}</span></div>
 								{#if Math.max(0, parseFloat(receivedAmount) - finalAmount) > 0}
 									<div class="flex justify-between text-green-600"><span>Vuelto</span><span class="font-bold">${Math.max(0, parseFloat(receivedAmount) - finalAmount).toFixed(2)}</span></div>

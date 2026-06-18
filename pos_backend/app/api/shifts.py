@@ -112,7 +112,9 @@ async def close_shift(
         )
     ) or 0
 
-    # Sum sales paid in cash — payment_method_id=1 is always EFECTIVO
+    # Sum sales paid in cash — payment_methods.payment_method_id = 1 is CASH/EFECTIVO
+    # This ID is a business invariant: row 1 in payment_methods is always the cash method.
+    # Do NOT change this ID or compare by code/name — codes and names may be localized.
     # (shift_id is updated to collector's shift at collection time)
     sales_cash = await db.scalar(
         select(func.coalesce(func.sum(DispatchPayment.amount), 0))
@@ -329,6 +331,18 @@ async def get_shift_dispatches(
         for v in vehicles_result.scalars():
             vehicle_map[v.vehicle_id] = v
 
+    # Build payment method name lookup
+    dispatch_ids = [d.dispatch_id for d in dispatches]
+    pay_method_map = {}
+    if dispatch_ids:
+        pay_result = await db.execute(
+            select(DispatchPayment.dispatch_id, PaymentMethod.name)
+            .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+            .where(DispatchPayment.dispatch_id.in_(dispatch_ids))
+        )
+        for did, pname in pay_result:
+            pay_method_map[did] = pname
+
     return [
         {
             "order_id": d.order_id,
@@ -336,14 +350,15 @@ async def get_shift_dispatches(
             "hose_id": d.hose_id or 1,
             "side": hose_map[d.hose_id].side if d.hose_id and d.hose_id in hose_map else "A",
             "grade": d.grade_id or "DIESEL",
-            "preset_type": "MONEY",
-            "preset_value": "0",
+            "preset_type": d.preset_type or "MONEY",
+            "preset_value": d.preset_value or "0",
             "unit_price": detail_map[d.dispatch_id].unit_price if d.dispatch_id in detail_map else (d.total or 0),
             "price_without_subsidy": float(detail_map[d.dispatch_id].price_without_subsidy) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].price_without_subsidy is not None else None,
             "subsidy_per_unit": float(detail_map[d.dispatch_id].subsidy_amount / detail_map[d.dispatch_id].quantity) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].quantity and detail_map[d.dispatch_id].quantity > 0 else 0.0,
             "subsidy_amount": float(detail_map[d.dispatch_id].subsidy_amount) if d.dispatch_id in detail_map and detail_map[d.dispatch_id].subsidy_amount is not None else 0.0,
             "quantity": detail_map[d.dispatch_id].quantity if d.dispatch_id in detail_map else 0,
-            "payment_method": "EFECTIVO",
+            "payment_method": "",
+            "payment_method_name": pay_method_map.get(d.dispatch_id, ""),
             "customer_id": person_map[d.person_id].id_number if d.person_id and d.person_id in person_map else None,
             "customer_name": person_map[d.person_id].name if d.person_id and d.person_id in person_map else None,
             "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,

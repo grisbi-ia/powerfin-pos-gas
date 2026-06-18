@@ -143,7 +143,7 @@
 					priceWithoutSubsidy: order.price_without_subsidy != null ? Number(order.price_without_subsidy).toFixed(4) : '',
 					subsidyPerUnit: order.subsidy_per_unit != null ? Number(order.subsidy_per_unit).toFixed(4) : '',
 					subsidyAmount: order.subsidy_amount != null ? Number(order.subsidy_amount).toFixed(2) : '',
-					paymentMethod: order.payment_method,
+					paymentMethod: order.payment_method_name || '',
 					grade: order.grade,
 					customerName: order.customer_name,
 					customerId: order.customer_id ?? '',
@@ -313,7 +313,7 @@
 							<div class="flex items-center gap-3 text-xs text-gray-400 border-t border-gray-100 pt-2">
 								<span>{formatDate(order.created_at)}</span>
 								<span>·</span>
-								<span>{order.payment_method}</span>
+								<span>{order.payment_method_name || ''}</span>
 								{#if order.customer_name}
 									<span>·</span>
 									<span class="truncate">{order.customer_name}</span>

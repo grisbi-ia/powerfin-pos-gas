@@ -65,7 +65,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
-				payment_method: 'EFECTIVO'
+				payment_method_id: 1
 			});
 			expect(result.order_id).toMatch(/^OV-/);
 			expect(result.status).toBe('PENDING');
@@ -98,7 +98,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				unit_price: 1.500
 			});
 
@@ -122,7 +122,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '30.00',
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				unit_price: 1.500
 			});
 
@@ -134,7 +134,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				side: 'B',
 				preset_type: 'MONEY',
 				preset_value: '20.00',
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				unit_price: 1.500
 			});
 
@@ -234,7 +234,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				customer_id: customers[0].customer_id
 			});
 			expect(dispatch.order_id).toMatch(/^OV-/);
@@ -248,7 +248,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 				side: 'A',
 				preset_type: 'MONEY',
 				preset_value: '50.00',
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				unit_price: price.unit_price
 			});
 			expect(authResult.status).toBe('AUTHORIZED');

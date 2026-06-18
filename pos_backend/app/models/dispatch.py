@@ -68,6 +68,10 @@ class Dispatch(Base):
     preset_value: Mapped[str | None] = mapped_column(
         String(20), comment="Preset amount sent to Wayne (MONEY/VOLUME value)"
     )
+    preset_type: Mapped[str] = mapped_column(
+        String(10), default="MONEY",
+        comment="Preset type: MONEY, VOLUME, or FULL"
+    )
     status: Mapped[str] = mapped_column(String(15), default="AUTHORIZED")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

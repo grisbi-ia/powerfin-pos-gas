@@ -190,7 +190,7 @@
 				preset_type: 'MONEY',
 				preset_value: amount,
 				unit_price: 3.103,
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				customer_id: dispatchOwner?.customer_id,
 				plate: plate
 			});
@@ -204,7 +204,7 @@
 				side: side,
 				preset_type: 'MONEY',
 				preset_value: amount,
-				payment_method: 'EFECTIVO',
+				payment_method_id: 1,
 				customer_id: dispatchOwner?.customer_id,
 				plate: plate,
 				unit_price: unitPrice,
@@ -218,6 +218,7 @@
 				fusionHoseId: selectedFusionHoseId,
 				hoseId: selectedHoseId,
 				side: side,
+				presetType: 'MONEY',
 				customerName: dispatchOwner?.name ?? '',
 				plate,
 				presetAmount: parseFloat(amount),

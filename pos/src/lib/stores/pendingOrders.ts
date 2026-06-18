@@ -11,6 +11,7 @@ export interface PendingOrder {
 	customerId?: string;
 	customerName: string;
 	plate: string;
+	presetType: 'MONEY' | 'VOLUME';
 	presetAmount: number;
 	finalAmount: number;
 	finalVolume: string;
@@ -200,6 +201,7 @@ function createPendingOrdersStore() {
 						side: server.side,
 						customerName: server.customer_name ?? 'Sin nombre',
 						plate: server.plate ?? '',
+						presetType: (server.preset_type as 'MONEY' | 'VOLUME') || 'MONEY',
 						presetAmount: parseFloat(server.preset_value) || 0,
 						finalAmount: server.final_amount ?? 0,
 						finalVolume: server.final_volume ?? '0.00',

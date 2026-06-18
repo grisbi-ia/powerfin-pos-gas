@@ -159,7 +159,7 @@
 							volume: finalVolume,
 							amount: String(finalAmount),
 							unit_price: String(txData.unitPrice || '0'),
-							payment_method: 'EFECTIVO',
+							payment_method_id: 1,
 							completed_at: new Date().toISOString()
 						}).catch(() => { /* fire-and-forget — reconciliation will retry */ });
 					}
