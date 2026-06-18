@@ -2,12 +2,18 @@
 
 import json
 import re
+import json
+import logging
+
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Any
 
-from fastapi import FastAPI
+import fastapi
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.router import router as api_router
 from app.config import settings
@@ -102,6 +108,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(DecimalFixMiddleware)
+
+# ── Debug: log all Pydantic validation errors ──────────────────
+_log = logging.getLogger("pos.validation")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = "<unavailable>"
+    try:
+        body = await request.body()
+        body = body.decode("utf-8", errors="replace")[:500]
+    except Exception:
+        pass
+    errors = [f"{'.'.join(str(l) for l in e['loc'])}: {e['msg']}" for e in exc.errors()]
+    _log.warning(f"422 on {request.method} {request.url.path} — "
+                 f"errors={errors} body={body}")
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 app.include_router(api_router)
 

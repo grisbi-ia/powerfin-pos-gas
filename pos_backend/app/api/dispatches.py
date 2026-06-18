@@ -367,6 +367,7 @@ async def complete_dispatch(
     """Mark a dispatch as completed (idempotent).
     Called by FusionBridge (no auth — internal service) and POS (double-safe).
     """
+    logger.debug(f"complete_dispatch: order={order_id} amount={body.amount} volume={body.volume}")
     result = await db.execute(
         select(Dispatch).where(Dispatch.order_id == order_id)
     )
