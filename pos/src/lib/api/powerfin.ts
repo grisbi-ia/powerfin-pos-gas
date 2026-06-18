@@ -278,7 +278,16 @@ export async function collectDispatch(
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(data)
 	});
-	if (!res.ok) throw new Error('Error cobrando despacho');
+	if (!res.ok) {
+		let detail = 'Error cobrando despacho';
+		try {
+			const body = await res.json();
+			detail = body?.detail || detail;
+		} catch {}
+		const err = new Error(detail) as any;
+		err.status = res.status;
+		throw err;
+	}
 	return res.json();
 }
 

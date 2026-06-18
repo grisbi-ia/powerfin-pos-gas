@@ -181,16 +181,27 @@ Ready for production integration with POS frontend.
 - [x] Config API: LocationResponse, HoseResponse, DispenserConfig extendidos
 - [x] Backend respuestas enriquecidas: customer_id, plate, address, phone, subsidy, access_key
 
-**Phase 10c — Correcciones + edge cases restantes (next).**
-- [ ] Revisión de subtotales y totales en el despacho (total / 1.15)
-- [ ] Mejorar código numérico aleatorio para clave de acceso
-- [ ] Más espacio al final de impresión (líneas en blanco antes del corte)
+**Phase 10c through 11e (completed — v0.15.0 through v0.19.4).**
+- [x] Subtotal/IVA fix, random access key, print spacing, negative balance prevention
+- [x] Key49 SRI electronic invoicing (fire-and-forget, polling, retries)
+- [x] Zona horaria Ecuador, clave Key49, IPs impresora, reimpresión
+- [x] Cierre de turno completo: cuadre, surplus/shortage, depósito, template
+- [x] RecoveryService: reconexión FusionBridge durante despacho activo
+- [x] Phase 11: UX, refactors, bugfixes (dashboard visual, IDs vs strings, SRI column, name search)
+- [x] Recovery despacho AUTHORIZED sin PAY_IN (phone-off bug)
+- [x] Doble autorización mismo dispensador → 409 Conflict
+- [x] preset_value persistido + bloqueo cobro $0.00 (cross-page race)
+- [x] Migración Alembic completa (15+ columnas en 6 tablas)
+- [x] Despachos en $0.00: carrera AM=0, collect exige COMPLETED, cancel limpia SRI
+- [x] Auto-cancel eliminado (redundante con ATO=180s del Wayne)
+- [x] Frontend muestra mensajes de error reales del backend
+
+**Pendiente.**
 - [ ] Pago mixto (efectivo + tarjeta)
-- [ ] Reconexión FusionBridge durante despacho activo
-- [ ] Múltiples despachos simultáneos
-- [ ] Prueba de cuadre de caja end-to-end con hardware real
-- [ ] Ajustar ATO en consola Wayne de 0 → 180s
-- [ ] Migración Alembic para schema acumulado
+- [ ] Flujo de crédito en el POS (selector en SaleWizard)
+- [ ] Roles/permisos enforcement real
+- [ ] identity_service.py — mover URL y token a system_config
+- [ ] Despachos ya enviados al SRI con $0.00 — conciliar manualmente
 
 ## When building
 
@@ -198,7 +209,7 @@ Ready for production integration with POS frontend.
 - Stack: FastAPI + SQLAlchemy 2.0 (async) + asyncpg + Alembic
 - Virtual env: `pos_backend/venv/`
 - Run: `source venv/bin/activate && uvicorn app.main:app --reload --port 8080`
-- Test: `pytest` (71 tests)
+- Test: `pytest` (93 tests)
 - DB: `localhost:5433/powerfin_gas` (user: postgres, pass: 1234abcd)
 - Test DB: `localhost:5433/powerfin_gas_test`
 

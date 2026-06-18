@@ -52,6 +52,6 @@ declare module "$app/types" {
 		};
 		Pathname(): "/" | "/cash" | "/cash/movement" | "/cash/transfer" | "/confirmation" | "/fueling" | "/history" | "/login" | "/new-dispatch" | "/sale" | "/shift/close" | "/shift/open" | "/users";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
-		Asset(): string & {};
+		Asset(): "/favicon.png" | "/icons/icon-512.png" | "/sw.js" | string & {};
 	}
 }

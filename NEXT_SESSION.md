@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-16)
+## Estado actual (2026-06-17)
 
 ### ✅ Fases completadas
 
@@ -33,81 +33,61 @@
 | 11b | `v0.19.1` | Bugfix: recovery despacho AUTHORIZED cuando PAY_IN no eco-devuelto (phone-off) |
 | 11c | `v0.19.2` | Bugfix: doble autorización mismo dispensador → 409 Conflict en create_dispatch |
 | 11d | `v0.19.3` | Bugfix: preset_value persistido en BD + bloqueo cobro $0.00 (cross-page race condition) |
-
-### 📊 Tests
-
-```bash
-FusionBridge — 67 tests    /opt/maven/bin/mvn test    # BUILD SUCCESS
-POS Backend  — 93 tests    pytest                     # 93 passed
-Powerfin POS — 0 errors    npm run check              # svelte-check OK
-Total: 160 tests pasando
-```
+| **11e** | **v0.19.4** | **Bugfix: despachos en $0.00 — carrera AM=0, collect exige COMPLETED, cancel limpia SRI** |
 
 ---
 
-## Logros de la sesión (2026-06-16) — v0.19.1, v0.19.2, v0.19.3
+## Logros de la sesión (2026-06-17) — v0.19.4
 
-### 72. Recovery despacho AUTHORIZED cuando PAY_IN no eco-devuelto ✅ — v0.19.1
+### 75. Migración Alembic completa ✅
 
-**Problema**: Celular apagado durante despacho → Wayne envía NEW_TRANSACTION pero
-si PAY_IN no trae OV, `completeDispatchOnBackend` nunca se llama → dispatch
-queda AUTHORIZED para siempre (irrecuperable).
-
-**Solución — defensa en 3 capas**:
-- **Backend**: Nuevo endpoint `POST /api/pos/dispatches/complete-by-pump` (sin auth).
-  Encuentra dispatch AUTHORIZED por `fusion_pump_id` + `fusion_hose_number`.
-- **FusionBridge**: `handleNewTransaction()` con fallback: si `orderId` es null,
-  llama `completeDispatchByPumpOnBackend()` con pump+hose.
-- **POS Frontend**: `DispenserCard` y `+page.svelte` detectan `FUELLING+IDLE`
-  (no solo `COMPLETED+IDLE`) como cobro pendiente.
-
-### 73. Doble autorización mismo dispensador → 409 Conflict ✅ — v0.19.2
-
-**Problema**: Dos despachadores abren wizard para mismo dispensador. A autoriza
-primero. B pulsa AUTORIZAR después → crea segundo despacho + envía CLEAR_STOP
-+ PRESET que interfiere con A → despacho de A queda CANCELADO.
+**Problema**: Instalación limpia no podía ejecutar `alembic upgrade head` porque
+la segunda migración solo tenía `alter_column` (comentarios) sin los `add_column`
+necesarios. 15 columnas faltaban entre el schema inicial y el modelo ORM actual.
 
 **Solución**:
-- **Backend `create_dispatch`**: `pg_advisory_xact_lock(hose_id)` + check de
-  despacho activo (`AUTHORIZED`/`COMPLETED`) → 409 Conflict.
-- **Frontend `SaleWizard`**: Extrae `detail` del error 409, muestra mensaje claro.
-- **Test**: `test_create_dispatch_conflict_same_hose` (93 tests total).
+- `b261e8ceb69f`: reescrita con `add_column` para 15+ columnas en 6 tablas
+  (`company_info`, `dispatch_details`, `dispatches`, `products`, `vehicles`,
+  `payment_methods`, `dispensers`, `shifts`)
+- `seed_data.py`: removido `fusion_pump_id` de `Dispenser()` (ahora en `hoses`)
+- `INSTALL.md` sección 9 actualizada: flujo `alembic upgrade head` → `seed_data.py`
 
-### 74. preset_value persistido + bloqueo cobro $0.00 ✅ — v0.19.3
+### 76. Despachos en $0.00 — defensa en 4 capas ✅
 
-**Problema**: Usuario B estaba en otra página (ej. HISTORIAL) mientras A autorizaba
-y apagaba celular. Al terminar despacho, B regresa al DASHBOARD → ve COBRAR con
-**$0.00**. Si B cobra, se registra cobro en cero (error grave).
+**Problema**: Despachos se creaban con `total=$0.00`, se cobraban en $0.00 y se
+enviaban al SRI con monto cero. Tres bugs contribuían:
 
-Causa raíz: `preset_value` nunca se persistía en BD. `get_active_dispatches`
-hardcodeaba `"preset_value": "0"`. Cuando B hace reconcile, `finalAmount=0`
-y `presetAmount=0` → `$0.00`.
+1. **Carrera AM=0**: FusionBridge llamaba `complete_dispatch` con `amount="0"`
+   (Wayne no enviaba AM en el primer evento). Cuando el POS reintentaba con el
+   monto real, el backend respondía "ya está COMPLETED" y lo ignoraba.
+2. **collect sin exigir COMPLETED**: `collect_dispatch` solo verificaba
+   `status != COLLECTED`. Un despacho AUTHORIZED con total=0 se podía cobrar.
+3. **CANCELLED iban al SRI**: `cancel_dispatch` no limpiaba `sri_status`.
+   `retry_pending_invoices` no excluía CANCELLED.
 
-**Solución**:
-- **Modelo `Dispatch`**: Nueva columna `preset_value VARCHAR(20)`.
-- **API `create_dispatch`**: Almacena `body.preset_value`.
-- **API `get_active_dispatches`**: Devuelve `d.preset_value` real.
-- **API `collect_dispatch`**: Bloquea cobro a $0.00 cuando `dispatch.total > 0`.
+**Solución — 4 defensas**:
 
-### Archivos modificados (esta sesión)
+| Capa | Archivo | Qué hace |
+|------|---------|----------|
+| 1 | `dispatches.py:complete_dispatch` | Si COMPLETED con total=0 + nuevo amount>0 → corrige totals |
+| 2 | `dispatches.py:complete-by-pump` | Busca AUTHORIZED + COMPLETED(total=0); ignora si ya tiene totals |
+| 3 | `dispatches.py:collect_dispatch` | Exige `status==COMPLETED` + `total>0` + `effective_amount>0` |
+| 4 | `dispatches.py:cancel_dispatch` | Limpia `sri_status=NULL` al cancelar |
 
-```
-FusionBridge (1):
-  FusionEventHandler.java       ← +completeDispatchByPumpOnBackend (fallback pump+hose)
+**Adicional**:
+- `key49_service.py`: `emitir_factura` y `retry_pending_invoices` excluyen CANCELLED
+- Auto-cancel (>5 min) **eliminado** — redundante con ATO=180s del Wayne. Causaba
+  cancelación de tanques llenos que tardan más de 5 min en despachar.
+- Frontend: `powerfin.ts` extrae `detail` del error; `SaleWizard.svelte` muestra
+  mensaje real del backend en vez de "Error al registrar cobro".
 
-Backend (3):
-  models/dispatch.py            ← +preset_value column
-  api/dispatches.py             ← +complete-by-pump endpoint, +409 guard create_dispatch,
-                                  +preset_value persist, +$0.00 collect block
-  schemas/__init__.py           ← +CompleteByPumpRequest
-  tests/test_api_dispatch.py    ← +test_create_dispatch_conflict_same_hose
+### 77. Precios: aclaración price_list_items vs products.base_price ✅
 
-POS (3):
-  DispenserCard.svelte          ← FUELLING+IDLE detectado como cobro pendiente
-  +page.svelte                  ← FUELLING+IDLE redirige a collect mode
-  powerfin.ts                   ← createDispatch extrae detail del error 409
-  SaleWizard.svelte             ← maneja err.status===409 con mensaje claro
-```
+**Problema**: Usuario cambió `products.base_price` a $3.251 pero el sistema seguía
+cobrando $3.103. El precio de venta SIEMPRE viene de `price_list_items.unit_price`
+para la lista STANDARD. `products.base_price` solo es referencia/fallback.
+
+**Solución**: Documentado el flujo de precios. El usuario actualizó ambas tablas.
 
 ---
 
@@ -122,23 +102,8 @@ POS (3):
    · ADMIN: todo
    · SUPERVISOR: ventas, reportes, cierre de turno, SRI retry
    · DISPATCHER: ventas, cierre de turno
-☐ 4. dispatch.total no debe ser 0 en active dispatches cuando el despacho ya
-   está COMPLETED. Revisar si completeDispatchOnBackend está actualizando
-   correctamente d.total en todos los casos (incluyendo fallback pump+hose).
-```
-
-**SQL para producción (esta sesión):**
-
-```sql
--- v0.19.3: preset_value en dispatches
-ALTER TABLE dispatches ADD COLUMN IF NOT EXISTS preset_value VARCHAR(20);
-
--- v0.19.0 (pendiente de sesión anterior)
-ALTER TABLE dispensers DROP COLUMN IF EXISTS fusion_pump_id;
-ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS sri_code VARCHAR(3) NOT NULL DEFAULT '20';
-UPDATE payment_methods SET sri_code = '01' WHERE payment_method_id = 1;
-UPDATE payment_methods SET sri_code = '19' WHERE payment_method_id = 4;
-ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS allow_container_sale BOOLEAN NOT NULL DEFAULT false;
+☐ 4. Flujo de crédito en el POS — selector en SaleWizard
+☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar manualmente
 ```
 
 ---
@@ -167,33 +132,34 @@ ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS allow_container_sale BOOLEAN NOT N
 | User | postgres |
 | Password | 1234abcd |
 
-## Cómo arrancar todo
+## Deploy a producción
 
 ```bash
 cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
-rm -rf pos/.svelte-kit pos/node_modules/.vite
-./start.sh backend  # POS Backend :8080
-./start.sh bridge   # FusionBridge :8090
-./start.sh pos      # POS :5173
-./start.sh stop     # Detener todo
-./start.sh status   # Ver estado
+
+# Backend
+rsync -av \
+  pos_backend/app/api/dispatches.py \
+  pos_backend/app/services/key49_service.py \
+  pos_backend/seed_data.py \
+  pos_backend/alembic/versions/b261e8ceb69f_accumulated_schema_changes_phases_9_10.py \
+  app@192.168.1.25:/opt/powerfin/pos/backend/
+
+# Frontend
+rsync -av \
+  pos/src/lib/api/powerfin.ts \
+  pos/src/lib/components/SaleWizard.svelte \
+  app@192.168.1.25:/opt/powerfin/pos/pos/src/
+
+# Reiniciar
+ssh app@192.168.1.25 "sudo systemctl restart pos-backend pos-frontend"
 ```
-
-Abrir: **`http://192.168.1.113:5173`** | Login: `carlos` / `1234` o `maria` / `1234`
-
----
-
-## Deploy a producción
-
-Ver `docs/DEPLOY.md` para la guía rápida.
-Servidor: **192.168.1.25** · Usuario: **app** · OS: Debian 13.
 
 ---
 
 ## NOTAS
 
 - El dispensador físico requiere **palanca manual** además de levantar la pistola.
-- `SUBSCRIBE|ALL` necesario en firmware Rel-5.19.1.
 - **NO usar `LID` ni `LM` en PRESET** — firmware Rel-5.19.1 crea locks permanentes.
 - **No existe Consumidor Final** — toda venta requiere cliente con cédula o RUC.
 - **ATO en 180 segundos** — los presets expiran después de 3 minutos sin levantar pistola.
@@ -201,16 +167,12 @@ Servidor: **192.168.1.25** · Usuario: **app** · OS: Debian 13.
 - **Cuadre de caja**: `WHERE shift_id = mi_turno AND status = 'COLLECTED'`.
 - **Auto-guardado**: buscar CED/RUC en API externo → se guarda en BD local automáticamente.
 - **Facturación preferencial**: `vehicles.billing_person_id` — NULL = usar titular.
-- **Validación**: CED = 10 dígitos, RUC = 13 dígitos.
-- **Registro nueva persona**: nombre + email requeridos (facturación electrónica).
-- **STOP durante FUELLING**: ⏹ → STOP → (2s) → CLEAR_STOP → NEW_TRANSACTION → cobro parcial.
-  CLEAR_STOP automático en cada authorize limpia busy buffers residuales.
 - **Celular apagado**: FusionBridge completa el dispatch directamente (no depende del POS).
-  3 reintentos con 1s backoff. El POS también llama como doble seguro (idempotente).
-- **Consola Wayne en oficina** (no en islas) → el POS es la ÚNICA forma de detener un despacho.
-- **Modal STOP**: doble barrera anti-bolsillo (CANCELAR grande + Detener pequeño + timeout 8s).
-- **Formas de pago**: filtrar por `payment_method_id`, no por `code`. ID 1 = efectivo estándar.
-- **Tipos de despacho**: filtrar por `dispatch_type_id`, no por `code`. ID 2 = crédito estándar.
-- **SRI codes**: vienen de `payment_methods.sri_code`, no hardcodeados en código.
-- **Placas predefinidas**: vehículos con `allow_container_sale=true` aparecen en dropdown del PlateInput.
-
+- **Consola Wayne en oficina** → el POS es la ÚNICA forma de detener un despacho.
+- **Precios**: el precio de venta SIEMPRE viene de `price_list_items.unit_price`.
+  `products.base_price` es referencia/subsidio. Cambiar ambos para consistencia.
+- **Despacho a crédito**: se decide al autorizar, no al cobrar. Requiere contrato activo
+  con vehículo asignado y cupo disponible.
+- **SRI codes**: vienen de `payment_methods.sri_code`, no hardcodeados.
+- **Instalación limpia**: `alembic upgrade head` + `python seed_data.py`.
+  Ver `docs/INSTALL.md` sección 9.

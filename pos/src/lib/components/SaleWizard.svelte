@@ -363,7 +363,7 @@
 			// and destroy the collect UI before the user sees the print/confirmation.
 			// The order is removed in handleNewSale() when the user clicks "Nueva Venta".
 			if (printPolicy === 'ALWAYS') await doPrint();
-		} catch { error = 'Error al registrar cobro'; confirmed = false; }
+		} catch (err: any) { error = err?.message || 'Error al registrar cobro'; confirmed = false; }
 	}
 
 	async function doPrint() {

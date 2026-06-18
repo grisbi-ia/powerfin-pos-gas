@@ -187,31 +187,22 @@ async def seed():
         # ── Dispensers ──
         # 4 physical dispensers → 8 logical pumps in Synergy
         # Each physical dispenser = 2 sides (A/B) = 2 logical pumps
-        #
-        # SURT-01: BI-PRODUCTO (pumps 1+2, loop COM40) 🟢 IDLE
-        #   Side A (pump 1): ECO_PAIS hose 1 + SUPER hose 2
-        #   Side B (pump 2): ECO_PAIS hose 1 + SUPER hose 2
+        # fusion_pump_id is now on hoses, not dispensers
         d1 = Dispenser(
             emission_point_id=1, code="SURT-01", name="Surtidor GASOLINA",
-            fusion_pump_id=1, printer_ip="192.168.1.31", printer_port=9100, sort_order=1,
+            printer_ip="192.168.1.31", printer_port=9100, sort_order=1,
         )
-        # SURT-02: MONO-PRODUCTO (pumps 3+4, loop COM41) ⚫ CLOSED
-        #   Side A (pump 3): EXTRA-ECO, Side B (pump 4): EXTRA-ECO
         d2 = Dispenser(
             emission_point_id=1, code="SURT-02", name="Surtidor EXTRA-ECO",
-            fusion_pump_id=3, printer_ip=None, printer_port=9100, sort_order=2,
+            printer_ip=None, printer_port=9100, sort_order=2,
         )
-        # SURT-03: MONO-PRODUCTO (pumps 5+6, loop COM42) ⚫ CLOSED
-        #   Side A (pump 5): DIESEL, Side B (pump 6): DIESEL
         d3 = Dispenser(
             emission_point_id=1, code="SURT-03", name="Surtidor DIESEL 1",
-            fusion_pump_id=5, printer_ip=None, printer_port=9100, sort_order=3,
+            printer_ip=None, printer_port=9100, sort_order=3,
         )
-        # SURT-04: MONO-PRODUCTO (pumps 7+8, loop COM43) ⚫ CLOSED
-        #   Side A (pump 7): DIESEL, Side B (pump 8): DIESEL
         d4 = Dispenser(
             emission_point_id=1, code="SURT-04", name="Surtidor DIESEL 2",
-            fusion_pump_id=7, printer_ip=None, printer_port=9100, sort_order=4,
+            printer_ip=None, printer_port=9100, sort_order=4,
         )
         db.add_all([d1, d2, d3, d4])
         await db.flush()

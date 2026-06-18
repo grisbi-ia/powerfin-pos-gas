@@ -25,7 +25,7 @@ apt update && apt upgrade -y
 timedatectl set-timezone America/Guayaquil
 
 # Herramientas básicas
-apt install -y curl wget git ufw rsync netcat-openbsd
+apt install -y curl wget git ufw rsync netcat-openbsd htop
 ```
 
 ---
@@ -343,30 +343,74 @@ ufw deny 5173   # bloquea a cualquier otra IP
 
 ## 9. Base de datos — schema y datos iniciales
 
-### Crear tablas (desde el backend)
+### 9.1 Ejecutar migraciones Alembic (crea todas las tablas)
 
 ```bash
 cd /opt/powerfin/pos/backend
 source venv/bin/activate
-python3 -c "
-from app.database import engine, Base
-import app.models  # necesario: registra todos los modelos en Base.metadata
-import asyncio
-async def init():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-asyncio.run(init())
-"
+alembic upgrade head
 ```
 
-### Seed — system_config
+Esto crea las 26 tablas con todas las columnas acumuladas:
+
+`preset_value`, `sri_code`, `sort_order`, `allow_container_sale`, etc.
+
+### 9.2 Cargar datos semilla (seed_data.py)
+
+El script `seed_data.py` inserta TODOS los datos de referencia necesarios:
+
+```bash
+cd /opt/powerfin/pos/backend
+source venv/bin/activate
+python seed_data.py
+```
+
+**Lo que inserta:**
+
+
+| Tabla                | Contenido                                                            |
+| -------------------- | -------------------------------------------------------------------- |
+| `system_config`      | 3 configs base (branch_code, currency, invoice_footer)               |
+| `company_info`       | NEOGAS S.A. (ajustar RUC/datos antes de producción)                  |
+| `roles`              | ADMIN, SUPERVISOR, DISPATCHER                                        |
+| `users`              | admin, carlos, maria, pedro (PIN: 1234)                              |
+| `tax_types`          | IVA_12, IVA_0, ICE                                                   |
+| `product_categories` | FUEL, OIL, ADDITIVE, AMBIENTAL                                       |
+| `products`           | DIESEL, SUPER, ECO_PAIS, ACEITE_20W50, ADITIVO_MOTOR, AMBIENTAL_PINO |
+| `grades`             | DIESEL, SUPER, ECO_PAIS                                              |
+| `price_lists`        | STANDARD, VIP, EMPLOYEE, FAMILY                                      |
+| `price_list_items`   | Precios por lista y producto                                         |
+| `persons`            | 3 personas (1 CED + 2 RUC)                                           |
+| `vehicles`           | 3 vehículos (ABC1234, XYZ5678, XYZ5679)                              |
+| `payment_methods`    | 8 métodos con sri_code (EFECTIVO=01, TARJETA=19, resto=20)           |
+| `emission_points`    | 001-001, FACTURA, secuencial desde 1                                 |
+| `dispensers`         | 4 surtidores (SURT-01 a SURT-04) con printer_ip                      |
+| `hoses`              | 10 mangueras (8 lados A/B × 4 dispensers, 2 bi-producto)             |
+| `dispatch_types`     | SALE, CREDIT, CALIBRATION, TEST                                      |
+| `credit_contracts`   | CT-2026-001 (INDEFINIDO, $5,000 cupo, Transportes Andinos)           |
+
+
+### 9.3 Ajustar datos para producción
+
+Después de seed_data.py, ajustar los datos reales del cliente:
 
 ```bash
 psql -h localhost -U postgres -d powerfin_gas << 'SQL'
+-- Datos reales de la empresa
+UPDATE company_info SET
+  ruc = '<RUC-REAL>',
+  name = '<RAZON-SOCIAL>',
+  commercial_name = '<NOMBRE-COMERCIAL>',
+  address = '<DIRECCION>',
+  phone = '<TELEFONO>',
+  email = '<EMAIL>',
+  city = '<CIUDAD>',
+  province = '<PROVINCIA>',
+  sri_environment = 2   -- 1=PRUEBAS, 2=PRODUCCION
+WHERE company_id = 1;
+
+-- Configuraciones adicionales
 INSERT INTO system_config (key, value, description) VALUES
-  ('accounting_branch_code', '001', 'Código de sucursal contable'),
-  ('default_currency', 'USD', 'Moneda por defecto'),
-  ('invoice_footer_message', 'Gracias por su compra', 'Mensaje pie de factura'),
   ('printer_policy', 'ASK', 'ALWAYS, ASK, or NEVER'),
   ('max_cash_in_hand', '300.00', 'Límite máximo de efectivo en bolsillo (USD)'),
   ('cash_printer_ip', '192.168.1.21', 'IP de impresora para comprobantes de caja'),
@@ -375,31 +419,18 @@ INSERT INTO system_config (key, value, description) VALUES
   ('key49_base_url', 'https://key49.apx5.com/v1', 'Key49 API base URL'),
   ('key49_enabled', 'false', 'Enable automatic SRI invoicing via Key49')
 ON CONFLICT (key) DO NOTHING;
-SQL
-```
 
-### Seed — company_info
-
-```bash
-psql -h localhost -U postgres -d powerfin_gas << 'SQL'
-INSERT INTO company_info (company_id, ruc, name, commercial_name, address, phone, email,
-  city, province, country, fiscal_regime, sri_environment, emission_type, is_active)
-VALUES (
-  1, '1103875439001', 'PATRICIO VALAREZO', 'NEOGAS',
-  'Av. Principal 123, Cuenca', '072345678', 'info@neogas.com',
-  'PAUTE', 'AZUAY', 'ECUADOR',
-  'OBLIGADO A LLEVAR CONTABILIDAD', 1, 1, true
-)
-ON CONFLICT DO NOTHING;
-SQL
-```
-
-### Seed — impresoras (dispensers)
-
-```bash
-psql -h localhost -U postgres -d powerfin_gas << 'SQL'
+-- IPs de impresoras (ajustar a las reales)
 UPDATE dispensers SET printer_ip = '192.168.1.21', printer_port = 9100;
 SQL
+```
+
+### 9.4 Verificar
+
+```bash
+cd /opt/powerfin/pos/backend
+source venv/bin/activate
+pytest
 ```
 
 ---

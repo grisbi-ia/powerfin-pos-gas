@@ -237,7 +237,9 @@ async def emitir_factura(
     if not dispatch:
         return False
 
-    # Don't re-send if already in processing
+    # Don't re-send if already in processing, or if dispatch was cancelled
+    if dispatch.status == "CANCELLED":
+        return False
     if dispatch.sri_status and dispatch.sri_status not in ("PENDING",):
         return True
 
@@ -425,7 +427,10 @@ async def retry_pending_invoices(db: AsyncSession) -> dict:
         return {"retried": 0, "expired": 0}
 
     result = await db.execute(
-        select(Dispatch).where(Dispatch.sri_status == "PENDING")
+        select(Dispatch).where(
+            Dispatch.sri_status == "PENDING",
+            Dispatch.status != "CANCELLED"
+        )
     )
     pending = result.scalars().all()
     

@@ -1,6 +1,6 @@
 """Dispatch management — create, complete, collect, cancel, billing, invoice."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -370,12 +370,18 @@ async def complete_dispatch(
         # Idempotent: if not found, just return ok
         return {"status": "ok"}
 
-    # Already processed
+    # Already processed — but allow correction if totals are 0
+    # (race condition: FusionBridge wins with Wayne AM=0, POS retries with real amount)
     if dispatch.status != "AUTHORIZED":
-        return {"status": "ok"}
+        if dispatch.status == "COMPLETED" and float(dispatch.total or 0) == 0 and body.amount and float(body.amount) > 0:
+            pass  # Proceed to correct the zero totals
+        else:
+            return {"status": "ok"}
 
-    dispatch.status = "COMPLETED"
-    dispatch.completed_at = datetime.now(ECUADOR_TZ)
+    # Only update status if not already COMPLETED
+    if dispatch.status == "AUTHORIZED":
+        dispatch.status = "COMPLETED"
+        dispatch.completed_at = datetime.now(ECUADOR_TZ)
 
     # Update dispatch details with actual volume and recalculate totals
     amount_dec = Decimal(str(body.amount))
@@ -460,19 +466,25 @@ async def complete_dispatch_by_pump(
     if not hose:
         return {"status": "ok", "detail": "no hose found"}
 
-    # Find the AUTHORIZED dispatch for this hose (most recent first)
+    # Find the AUTHORIZED dispatch for this hose (most recent first).
+    # Also include COMPLETED dispatches with total=0 (Wayne race condition fix).
     dispatch_result = await db.execute(
         select(Dispatch).where(
             Dispatch.hose_id == hose.hose_id,
-            Dispatch.status == "AUTHORIZED"
+            Dispatch.status.in_(["AUTHORIZED", "COMPLETED"])
         ).order_by(Dispatch.created_at.desc()).limit(1)
     )
     dispatch = dispatch_result.scalar_one_or_none()
     if not dispatch:
         return {"status": "ok", "detail": "no authorized dispatch"}
 
-    dispatch.status = "COMPLETED"
-    dispatch.completed_at = datetime.now(ECUADOR_TZ)
+    # Only update status if not already COMPLETED (allow correction of zero totals)
+    if dispatch.status == "AUTHORIZED":
+        dispatch.status = "COMPLETED"
+        dispatch.completed_at = datetime.now(ECUADOR_TZ)
+    elif dispatch.status == "COMPLETED" and float(dispatch.total or 0) > 0:
+        # Already completed with real totals — nothing to do
+        return {"status": "ok", "detail": "already completed with totals"}
 
     # Update amounts from the Wayne's NEW_TRANSACTION data
     if body.amount and float(body.amount) > 0:
@@ -545,17 +557,32 @@ async def collect_dispatch(
     if dispatch.status == "COLLECTED":
         raise HTTPException(status_code=409, detail="Orden ya cobrada")
 
-    # Guard: don't allow collecting at $0.00 when the dispatch has a real amount
-    # (e.g., stale presetAmount=0 from reconciliation before completion)
+    if dispatch.status != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail="El despacho aún no ha terminado. "
+                   "Espere a que el surtidor complete el despacho."
+        )
+
+    # Guard 1: never collect a dispatch with $0.00 total
+    # (Wayne race condition, complete_dispatch never ran, or stale data)
+    dispatch_total = float(dispatch.total or 0)
+    if dispatch_total <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="El despacho aún no tiene monto registrado. "
+                   "Espere a que el surtidor termine de despachar."
+        )
+
+    # Guard 2: don't allow collecting at $0.00 when the dispatch has a real amount
     effective_amount = float(body.collected_amount)
     if body.payments:
         effective_amount = sum(float(p.amount) for p in body.payments)
-    dispatch_total = float(dispatch.total or 0)
-    if dispatch_total > 0 and effective_amount <= 0:
+    if effective_amount <= 0:
         raise HTTPException(
             status_code=400,
-            detail=f"El monto a cobrar es ${dispatch_total:.2f}. "
-                   "No se puede cobrar $0.00. Regrese al inicio y reintente."
+            detail=f"El monto a cobrar es \${dispatch_total:.2f}. "
+                   "No se puede cobrar \$0.00. Regrese al inicio y reintente."
         )
 
     dispatch.status = "COLLECTED"
@@ -752,6 +779,7 @@ async def cancel_dispatch(
     dispatch = result.scalar_one_or_none()
     if dispatch:
         dispatch.status = "CANCELLED"
+        dispatch.sri_status = None  # CANCELLED dispatches must never reach SRI
         await db.commit()
     return {"status": "ok"}
 
@@ -820,23 +848,6 @@ async def get_active_dispatches(
     """Get all active dispatches across ALL open shifts.
     Used for multi-device sync: every dispatcher sees all pending orders
     regardless of who created them."""
-    from app.models.dispenser import Hose
-
-    # ── Auto-cancel stale AUTHORIZED dispatches (> 5 min old) ──────────
-    # Covers Gap D: dispatch created, preset never reached the dispenser
-    # (FusionBridge down, network timeout, etc.) or ATO expired (180s).
-    stale_cutoff = datetime.now(ECUADOR_TZ) - timedelta(minutes=5)
-    stale_result = await db.execute(
-        select(Dispatch).where(
-            Dispatch.status == "AUTHORIZED",
-            Dispatch.created_at < stale_cutoff
-        )
-    )
-    stale_dispatches = stale_result.scalars().all()
-    for d in stale_dispatches:
-        d.status = "CANCELLED"
-    if stale_dispatches:
-        await db.commit()
 
     # Get all active (non-collected, non-cancelled) dispatches from open shifts
     result = await db.execute(
