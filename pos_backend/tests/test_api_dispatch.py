@@ -54,7 +54,7 @@ class TestDispatchAPI:
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
-            "unit_price": 3.103, "payment_method": "EFECTIVO",
+            "unit_price": 3.103, "payment_method_id": 1,
             "customer_name": "Juan Carlos Pérez",
             "plate": "ABC1234",
             "authorized_by": "Carlos Sarmiento",
@@ -74,7 +74,7 @@ class TestDispatchAPI:
         body = {
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
-            "unit_price": 3.103, "payment_method": "EFECTIVO",
+            "unit_price": 3.103, "payment_method_id": 1,
             "dispatch_type_code": "SALE",
             "items": [
                 {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
@@ -94,7 +94,7 @@ class TestDispatchAPI:
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
-            "unit_price": 3.103, "payment_method": "EFECTIVO",
+            "unit_price": 3.103, "payment_method_id": 1,
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -103,7 +103,7 @@ class TestDispatchAPI:
         r = await client.post(f"/api/pos/dispatches/{order_id}/complete", headers=auth_headers, json={
             "order_id": order_id, "fusion_sale_id": "100",
             "volume": "1.0", "amount": 3.103,
-            "unit_price": 3.103, "payment_method": "EFECTIVO"
+            "unit_price": 3.103, "payment_method_id": 1
         })
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
@@ -113,13 +113,13 @@ class TestDispatchAPI:
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "10.00",
-            "unit_price": 3.103, "payment_method": "EFECTIVO",
+            "unit_price": 3.103, "payment_method_id": 1,
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
         order_id = r.json()["order_id"]
 
-        body = {"order_id": order_id, "amount": 3.103, "unit_price": 3.103, "volume": "1", "payment_method": "EFECTIVO", "fusion_sale_id": "100"}
+        body = {"order_id": order_id, "amount": 3.103, "unit_price": 3.103, "volume": "1", "payment_method_id": 1, "fusion_sale_id": "100"}
         r1 = await client.post(f"/api/pos/dispatches/{order_id}/complete", headers=auth_headers, json=body)
         r2 = await client.post(f"/api/pos/dispatches/{order_id}/complete", headers=auth_headers, json=body)
         assert r1.status_code == 200
@@ -130,7 +130,7 @@ class TestDispatchAPI:
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "10.00",
-            "unit_price": 3.103, "payment_method": "EFECTIVO",
+            "unit_price": 3.103, "payment_method_id": 1,
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -145,23 +145,23 @@ class TestDispatchAPI:
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "50.00",
-            "unit_price": 50.00, "payment_method": "EFECTIVO",
+            "unit_price": 50.00, "payment_method_id": 1,
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 10, "unit_price": 5.00, "tax_rate": 0}]
         })
         order_id = r.json()["order_id"]
         await client.post(f"/api/pos/dispatches/{order_id}/complete", headers=auth_headers, json={
-            "order_id": order_id, "amount": 50, "unit_price": 5, "volume": "10", "payment_method": "EFECTIVO", "fusion_sale_id": "101"
+            "order_id": order_id, "amount": 50, "unit_price": 5, "volume": "10", "payment_method_id": 1, "fusion_sale_id": "101"
         })
 
         r = await client.post(f"/api/pos/dispatches/{order_id}/collect", headers=auth_headers, json={
             "collected_by_shift_id": 1,
-            "payment_method": "EFECTIVO",
+            "payment_method_id": 1,
             "collected_amount": 60,
             "change_amount": 10,
             "payments": [
-                {"payment_method_code": "EFECTIVO", "amount": 40, "reference_code": None},
-                {"payment_method_code": "TARJETA", "amount": 20, "reference_code": "REF123"},
+                {"payment_method_id": 1, "amount": 40, "reference_code": None},
+                {"payment_method_id": 4, "amount": 20, "reference_code": "REF123"},
             ]
         })
         assert r.status_code == 200

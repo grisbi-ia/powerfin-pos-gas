@@ -2,9 +2,9 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, field_validator, model_validator, Field
 
 
 # ── Auth ─────────────────────────────────────────────────────────
@@ -288,6 +288,7 @@ class CompleteDispatchRequest(BaseModel):
     amount: str = "0"
     unit_price: str = "0"
     payment_method_id: int = 1
+    payment_method: Optional[str] = None  # deprecated, kept for backward compat
     completed_at: Optional[str] = None
 
     @field_validator('amount', 'unit_price', mode='before')
@@ -297,6 +298,29 @@ class CompleteDispatchRequest(BaseModel):
         if v is None:
             return "0"
         return str(v)
+
+    @field_validator('payment_method', mode='before')
+    @classmethod
+    def legacy_payment_method(cls, v):
+        """Accept legacy payment_method string or int."""
+        return v  # just pass through, model_validator handles mapping
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_payment(cls, data: Any) -> Any:
+        """Map legacy payment_method to payment_method_id if needed."""
+        if isinstance(data, dict):
+            # If old format has payment_method but not payment_method_id
+            if "payment_method" in data and "payment_method_id" not in data:
+                pm = data["payment_method"]
+                try:
+                    data["payment_method_id"] = int(pm)
+                except (ValueError, TypeError):
+                    data["payment_method_id"] = 1
+            # If both present, remove old field
+            if "payment_method" in data and "payment_method_id" in data:
+                data.pop("payment_method", None)
+        return data
 
 
 class CompleteByPumpRequest(BaseModel):
