@@ -227,7 +227,7 @@ public class FusionEventHandler {
                                                    String volume, String amount, String unitPrice) {
         String url = powerfinUrl + "/api/pos/dispatches/complete-by-pump";
         String body = String.format(
-            "{\"fusion_pump_id\":%d,\"fusion_hose_number\":%d,\"volume\":\"%s\"," +
+            "{\"fusion_pump_id\":%d,\"fusion_hose_id\":%d,\"volume\":\"%s\"," +
             "\"amount\":\"%s\",\"unit_price\":\"%s\"}",
             pumpId, hoseId, volume, amount, unitPrice);
 

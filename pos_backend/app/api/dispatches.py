@@ -17,6 +17,7 @@ from app.models import (
     DispatchType,
     Dispenser,
     EmissionPoint,
+    Hose,
     PaymentMethod,
     Person,
     Shift,
@@ -455,11 +456,11 @@ async def complete_dispatch_by_pump(
     """
     from app.models.dispenser import Hose
 
-    # Map fusion_pump_id + fusion_hose_number to hose_id
+    # Map fusion_pump_id + fusion_hose_id to hose_id
     hose_result = await db.execute(
         select(Hose).where(
             Hose.fusion_pump_id == body.fusion_pump_id,
-            Hose.fusion_hose_number == body.fusion_hose_number
+            Hose.fusion_hose_id == body.fusion_hose_id
         )
     )
     hose = hose_result.scalar_one_or_none()
