@@ -114,15 +114,8 @@ _log = logging.getLogger("pos.validation")
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    body = "<unavailable>"
-    try:
-        body = await request.body()
-        body = body.decode("utf-8", errors="replace")[:500]
-    except Exception:
-        pass
-    errors = [f"{'.'.join(str(l) for l in e['loc'])}: {e['msg']}" for e in exc.errors()]
-    _log.warning(f"422 on {request.method} {request.url.path} — "
-                 f"errors={errors} body={body}")
+    errors = [f"{'.'.join(str(l) for l in e['loc'])}: {e['msg']} ({e.get('type','')})" for e in exc.errors()]
+    _log.warning(f"422 on {request.method} {request.url.path} — errors={errors}")
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 app.include_router(api_router)

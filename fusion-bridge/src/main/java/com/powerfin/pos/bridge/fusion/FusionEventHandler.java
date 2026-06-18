@@ -182,6 +182,8 @@ public class FusionEventHandler {
             "\"completed_at\":\"%s\"}",
             orderId, saleId, volume, amount, unitPrice, now);
 
+        Log.infof("completeDispatch body: %s", body);
+
         // Run on virtual thread so retries don't block the event loop
         Thread.startVirtualThread(() -> {
             for (int attempt = 1; attempt <= 3; attempt++) {

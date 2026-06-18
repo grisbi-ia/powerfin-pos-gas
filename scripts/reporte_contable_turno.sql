@@ -11,8 +11,8 @@ SELECT
     '═══ TURNO ' || s.shift_id || ' ═══'        AS encabezado,
     s.status                                      AS estado,
     u.name                                        AS cajero,
-    to_char(s.opened_at, 'DD/MM/YYYY HH24:MI')   AS apertura,
-    to_char(s.closed_at, 'DD/MM/YYYY HH24:MI')   AS cierre,
+    to_char(s.opened_at, 'YYYY-MM-DD HH24:MI:SS')  AS apertura,
+    to_char(s.closed_at, 'YYYY-MM-DD HH24:MI:SS')  AS cierre,
     s.accounting_date                             AS fecha_contable,
     s.opening_cash                                AS caja_inicial,
     s.surplus                                     AS sobrante,
@@ -53,13 +53,17 @@ ORDER BY total_usd DESC;
 
 -- ── Movimientos de caja ──────────────────────────────────────
 SELECT
+    s.shift_id                                    AS turno,
+    u.name                                        AS cajero,
     cm.type                                       AS tipo,
     cm.amount                                     AS monto,
     cm.observation                                AS observacion,
     cm.running_balance                            AS saldo_caja,
     cm.related_user_name                          AS usuario_relacionado,
-    to_char(cm.created_at, 'DD/MM HH24:MI')       AS fecha_hora
+    to_char(cm.created_at, 'YYYY-MM-DD HH24:MI:SS')  AS fecha_hora
 FROM cash_movements cm
+JOIN shifts s ON s.shift_id = cm.shift_id
+JOIN users u  ON u.user_id  = s.user_id
 WHERE cm.shift_id = :shift_id
 ORDER BY cm.created_at;
 
@@ -89,11 +93,13 @@ ORDER BY d.created_at;
 -- DETALLE COMPLETO — Solo despachos oficiales (COLLECTED + COMPLETED)
 -- ═══════════════════════════════════════════════════════════════
 SELECT
+    s.shift_id                                                            AS turno,
+    u.name                                                                AS cajero,
     d.order_id                                                            AS orden,
     d.status                                                              AS estado,
     dt.name                                                               AS tipo,
-    to_char(d.created_at,   'DD/MM HH24:MI')                              AS creado,
-    to_char(d.completed_at, 'DD/MM HH24:MI')                              AS completado,
+    to_char(d.created_at,   'YYYY-MM-DD HH24:MI:SS')                        AS creado,
+    to_char(COALESCE(d.completed_at, d.created_at), 'YYYY-MM-DD HH24:MI:SS') AS completado,
     ds.name                                                               AS dispensador,
     d.hose_id                                                             AS manguera,
     h.side                                                                AS lado,
@@ -130,6 +136,8 @@ SELECT
     d.sri_status                                                          AS sri,
     d.credit_status                                                       AS credito
 FROM dispatches d
+JOIN shifts s               ON s.shift_id           = d.shift_id
+JOIN users u                ON u.user_id            = s.user_id
 JOIN dispensers ds          ON ds.dispenser_id      = d.dispenser_id
 LEFT JOIN hoses h           ON h.hose_id            = d.hose_id
 LEFT JOIN grades g          ON g.code               = h.grade_id
