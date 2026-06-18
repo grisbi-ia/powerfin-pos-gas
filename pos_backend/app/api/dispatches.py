@@ -80,16 +80,16 @@ async def create_dispatch(
     # If A authorizes first, B must be blocked from authorizing again.
     # pg_advisory_xact_lock prevents the theoretical race condition
     # (both checking simultaneously) — released automatically on commit/rollback.
+    # Uses raw SQL to bypass SQLAlchemy statement cache (which can return
+    # stale results and allow double-authorization).
     from sqlalchemy import text
     await db.execute(text("SELECT pg_advisory_xact_lock(:hose_id)"), {"hose_id": body.hose_id})
 
     active_result = await db.execute(
-        select(Dispatch).where(
-            Dispatch.hose_id == body.hose_id,
-            Dispatch.status.in_(["AUTHORIZED", "COMPLETED"]),
-        )
+        text("SELECT 1 FROM dispatches WHERE hose_id = :hid AND status = ANY(ARRAY['AUTHORIZED','COMPLETED']) LIMIT 1"),
+        {"hid": body.hose_id}
     )
-    if active_result.scalar_one_or_none():
+    if active_result.scalar():
         raise HTTPException(
             status_code=409,
             detail="Este dispensador ya tiene un despacho en curso. "
