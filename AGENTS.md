@@ -208,7 +208,7 @@ Ready for production integration with POS frontend.
 - [ ] identity_service.py — mover URL y token a system_config
 - [ ] Despachos ya enviados al SRI con $0.00 — conciliar manualmente
 
-**Phase 12 — Admin Backend CRUD + Auth (v0.20.0 — in progress).**
+**Phase 12 — Admin Backend CRUD + Auth (v0.22.0 — in progress).**
 - [x] POST /api/admin/auth/login — login admin (username+password, JWT 4h)
 - [x] Admin auth guard + require_permission(resource, action)
 - [x] Users CRUD: GET (list/search/paginate), POST, GET/:id, PUT, DELETE (soft)
@@ -225,25 +225,25 @@ Ready for production integration with POS frontend.
 - [x] 36 tests admin (10 auth + 26 users)
 - [x] 93 tests POS intactos — sin regresiones
 
-**Phase 13 — Admin Backend Dashboard + Reportes (v0.21.0).**
+**Phase 13 — Admin Backend Dashboard + Reportes (v0.23.0).**
 - [ ] Dashboard: summary, sales-by-day, sales-by-product, sales-by-payment
 - [ ] Dashboard: top-customers, top-products
 - [ ] Reports: sales, dispatches, shifts, cash-summary
 - [ ] Export: PDF (reportlab) + Excel (openpyxl)
 
-**Phase 14 — Admin Frontend Layout + CRUD (v0.22.0).**
+**Phase 14 — Admin Frontend Layout + CRUD (v0.24.0).**
 - [ ] Proyecto SvelteKit independiente en admin/
 - [ ] Layout responsive: AdminShell + Sidebar + Topbar
 - [ ] Auth: login admin + JWT interceptor + route guarding
 - [ ] DataTable con sort, paginate, search, responsive (→ DataCard)
 - [ ] Pantallas CRUD: users, products, grades, prices, dispensers, etc.
 
-**Phase 15 — Admin Frontend Dashboard (v0.23.0).**
+**Phase 15 — Admin Frontend Dashboard (v0.25.0).**
 - [ ] KPI cards + date range picker
 - [ ] Chart.js: sales-by-day (línea), products (donut), payment (pie)
 - [ ] Top customers, top products, responsive charts
 
-**Phase 16 — Admin Frontend Reportes + Export (v0.24.0).**
+**Phase 16 — Admin Frontend Reportes + Export (v0.26.0).**
 - [ ] Pantallas de reportes con filtros avanzados
 - [ ] ExportButton → PDF / Excel con feedback de descarga
 

@@ -12,7 +12,7 @@ Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos
 
 ---
 
-## FASE 12 — Admin Backend CRUD + Auth `[v0.20.0]`
+## FASE 12 — Admin Backend CRUD + Auth `[v0.22.0]`
 
 ### 12.1 Auth
 
@@ -119,7 +119,7 @@ Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos
 
 ---
 
-## FASE 13 — Admin Backend Dashboard + Reportes `[v0.21.0]`
+## FASE 13 — Admin Backend Dashboard + Reportes `[v0.23.0]`
 
 ### 13.1 Dashboard
 
@@ -149,7 +149,7 @@ Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos
 
 ---
 
-## FASE 14 — Admin Frontend Layout + CRUD `[v0.22.0]`
+## FASE 14 — Admin Frontend Layout + CRUD `[v0.24.0]`
 
 - [ ] Proyecto SvelteKit `admin/`
 - [ ] AdminShell + Sidebar + Topbar responsive
@@ -160,7 +160,7 @@ Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos
 
 ---
 
-## FASE 15 — Admin Frontend Dashboard `[v0.23.0]`
+## FASE 15 — Admin Frontend Dashboard `[v0.25.0]`
 
 - [ ] KPI cards
 - [ ] Sales by Day (Chart.js línea)
@@ -171,7 +171,7 @@ Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos
 
 ---
 
-## FASE 16 — Admin Frontend Reportes `[v0.24.0]`
+## FASE 16 — Admin Frontend Reportes `[v0.26.0]`
 
 - [ ] Sales report page
 - [ ] Dispatches report page

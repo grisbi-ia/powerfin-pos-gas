@@ -540,7 +540,7 @@ protegidos por roles y permisos granulares.
 ✅ Auth admin rechaza usuarios con role DISPATCHER (403)
 ✅ Permission checker bloquea acciones no autorizadas por recurso
 ✅ Tests admin > 90% coverage
-✅ git tag v0.20.0 -m "Fase 12: Admin Backend CRUD"
+✅ git tag v0.22.0 -m "Fase 12: Admin Backend CRUD"
 ```
 
 ---
@@ -580,7 +580,7 @@ Endpoints de dashboard con KPIs, gráficas y reportes exportables en PDF y Excel
 ✅ Excel generado con estilos, auto-filtro, congelar paneles
 ✅ Export respeta permisos (solo ADMIN y SUPERVISOR)
 ✅ Tests dashboard + reports > 90% coverage
-✅ git tag v0.21.0 -m "Fase 13: Admin Dashboard + Reportes"
+✅ git tag v0.23.0 -m "Fase 13: Admin Dashboard + Reportes"
 ```
 
 ---
@@ -629,7 +629,7 @@ y pantallas CRUD para todos los catálogos.
 ✅ npm run check → 0 errores
 ✅ npm run test → tests pasan
 ✅ npm run build → build exitoso
-✅ git tag v0.22.0 -m "Fase 14: Admin Frontend CRUD"
+✅ git tag v0.24.0 -m "Fase 14: Admin Frontend CRUD"
 ```
 
 ---
@@ -661,7 +661,7 @@ Dashboard visual con KPIs y gráficas interactivas usando Chart.js.
 ✅ Gráficas interactivas con tooltips
 ✅ Cambiar rango de fechas actualiza todas las gráficas
 ✅ Gráficas se reorganizan en mobile sin pérdida de legibilidad
-✅ git tag v0.23.0 -m "Fase 15: Admin Dashboard + Charts"
+✅ git tag v0.25.0 -m "Fase 15: Admin Dashboard + Charts"
 ```
 
 ---
@@ -692,7 +692,7 @@ Pantallas de reportes con filtros avanzados y exportación PDF/Excel.
 ✅ PDF se descarga y abre correctamente con diseño profesional
 ✅ Excel se descarga con estilos y filtros
 ✅ Export respeta rango de fechas y filtros del reporte
-✅ git tag v0.24.0 -m "Fase 16: Admin Reportes + Export"
+✅ git tag v0.26.0 -m "Fase 16: Admin Reportes + Export"
 ```
 
 ---
@@ -792,9 +792,9 @@ y puesta en producción.
 | Fase 11a     | `v0.19.0`| UX, refactors, ID-based, SRI code, name search, predefined plates |
 | Fase 11b     | `v0.19.1`| Bugfix: recovery AUTHORIZED dispatch cuando PAY_IN no eco-devuelto (phone-off) |
 | Fase 11c     | `v0.19.2`| Bugfix: doble autorización mismo dispensador — 409 Conflict en create_dispatch |
-| Fase 12      | `v0.20.0`| Admin Backend: CRUD + Auth + permisos granulares                      |
-| Fase 13      | `v0.21.0`| Admin Backend: Dashboard + Reportes + PDF/Excel                       |
-| Fase 14      | `v0.22.0`| Admin Frontend: Layout responsive + CRUD pantallas                    |
-| Fase 15      | `v0.23.0`| Admin Frontend: Dashboard + gráficas Chart.js                         |
-| Fase 16      | `v0.24.0`| Admin Frontend: Reportes + exportación PDF/Excel                      |
+| Fase 12      | `v0.22.0`| Admin Backend: CRUD + Auth + Users CRUD                               |
+| Fase 13      | `v0.23.0`| Admin Backend: Dashboard + Reportes + PDF/Excel                       |
+| Fase 14      | `v0.24.0`| Admin Frontend: Layout responsive + CRUD pantallas                    |
+| Fase 15      | `v0.25.0`| Admin Frontend: Dashboard + gráficas Chart.js                         |
+| Fase 16      | `v0.26.0`| Admin Frontend: Reportes + exportación PDF/Excel                      |
 | Fase 17      | `v1.0.0` | Producción GASOLINERA — Admin + Cloudflare Tunnel                     |
