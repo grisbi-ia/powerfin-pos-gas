@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.database import get_db
-from app.models import CashMovement, Dispatch, Shift, Transfer
+from app.models import CashMovement, Dispatch, DispatchPayment, Shift, Transfer
 from app.models.user import User
 from app.schemas import (
     CashMovementResponse,
@@ -56,10 +56,16 @@ async def _available_cash(db: AsyncSession, shift_id: int) -> Decimal:
             CashMovement.shift_id == shift_id, CashMovement.type == "SAFE_DROP"
         )
     ) or 0.0
+    # Only sum CASH payments (payment_method_id=1, EFECTIVO).
+    # Card, credit, yalobox, and other digital payments are NOT
+    # physical cash in hand and must not inflate the balance.
     sales_cash = await db.scalar(
-        select(func.coalesce(func.sum(Dispatch.total), 0)).where(
+        select(func.coalesce(func.sum(DispatchPayment.amount), 0))
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .where(
             Dispatch.shift_id == shift_id,
             Dispatch.status == "COLLECTED",
+            DispatchPayment.payment_method_id == 1,  # EFECTIVO only
         )
     ) or 0.0
 
@@ -210,10 +216,16 @@ async def get_cash_summary(
             CashMovement.shift_id == shift_id, CashMovement.type == "TRANSFER_IN"
         )
     ) or 0.0
+    # Only sum CASH payments (payment_method_id=1, EFECTIVO).
+    # Card, credit, yalobox, and other digital payments are NOT
+    # physical cash in hand and must not inflate the balance.
     sales_cash = await db.scalar(
-        select(func.coalesce(func.sum(Dispatch.total), 0)).where(
+        select(func.coalesce(func.sum(DispatchPayment.amount), 0))
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .where(
             Dispatch.shift_id == shift_id,
             Dispatch.status == "COLLECTED",
+            DispatchPayment.payment_method_id == 1,  # EFECTIVO only
         )
     ) or 0.0
 
