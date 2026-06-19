@@ -111,18 +111,23 @@ Nunca se versiona código roto.
 ```
 powerfin_pos_gas/
 ├── docs/                        ← authoritative reference (read before coding)
+│   ├── admin/                   ← 🆕 Admin-specific docs
+│   │   ├── ADMIN_UI.md          ← Admin interface architecture
+│   │   ├── ADMIN_ROADMAP.md     ← Admin progress tracker (checklist vivo)
+│   │   └── UX_STANDARDS.md      ← UI/UX standards (colors, components, patterns)
 │   ├── FUSION_PROTOCOL.md       ← TCP protocol (validated real data)
 │   ├── FUSION_BRIDGE.md         ← Quarkus architecture + code sketches
 │   ├── POWERFIN_POS.md          ← SvelteKit architecture + code sketches
 │   ├── API_CONTRACT.md          ← endpoint contracts between all systems
-│   ├── INFRAESTRUCTURA.md       ← Debian setup, systemd, Nginx, deploy
+│   ├── INFRAESTRUCTURA.md       ← Debian setup, systemd, Nginx, Cloudflare, deploy
 │   ├── FLUJOS_OPERATIVOS.md     ← dispatcher workflows + mockups
-│   ├── ROADMAP.md               ← 8-phase development plan
+│   ├── ROADMAP.md               ← 17-phase development plan
 │   ├── POS_BACKEND.md           ← POS Backend schema, APIs, business rules
 │   └── IDENTITY_API.md          ← External identity lookup (Sercobaco/SRI)
-├── pos_backend/                 ← Python FastAPI backend (NEW)
+├── pos_backend/                 ← Python FastAPI backend
 ├── fusion-bridge/               ← Quarkus sub-project (Java 21)
-└── pos/                         ← SvelteKit sub-project (TypeScript)
+├── pos/                         ← SvelteKit sub-project — Powerfin POS
+└── admin/                       ← 🆕 SvelteKit sub-project — Powerfin Admin
 ```
 
 ## Current state
@@ -203,6 +208,51 @@ Ready for production integration with POS frontend.
 - [ ] identity_service.py — mover URL y token a system_config
 - [ ] Despachos ya enviados al SRI con $0.00 — conciliar manualmente
 
+**Phase 12 — Admin Backend CRUD + Auth (v0.20.0 — in progress).**
+- [x] POST /api/admin/auth/login — login admin (username+password, JWT 4h)
+- [x] Admin auth guard + require_permission(resource, action)
+- [x] Users CRUD: GET (list/search/paginate), POST, GET/:id, PUT, DELETE (soft)
+- [ ] Roles CRUD: GET, POST, PUT
+- [ ] Products CRUD: GET, POST, PUT, DELETE
+- [ ] Grades CRUD: GET, POST, PUT, DELETE
+- [ ] Price-lists CRUD + items: GET, POST, PUT, DELETE
+- [ ] Dispensers + hoses CRUD: GET, POST, PUT
+- [ ] Emission-points CRUD: GET, POST, PUT
+- [ ] GET/PUT: company-info
+- [ ] GET/PUT: system-config (by key)
+- [ ] Payment-methods CRUD: GET, POST, PUT
+- [x] Paginación y búsqueda en endpoints implementados
+- [x] 36 tests admin (10 auth + 26 users)
+- [x] 93 tests POS intactos — sin regresiones
+
+**Phase 13 — Admin Backend Dashboard + Reportes (v0.21.0).**
+- [ ] Dashboard: summary, sales-by-day, sales-by-product, sales-by-payment
+- [ ] Dashboard: top-customers, top-products
+- [ ] Reports: sales, dispatches, shifts, cash-summary
+- [ ] Export: PDF (reportlab) + Excel (openpyxl)
+
+**Phase 14 — Admin Frontend Layout + CRUD (v0.22.0).**
+- [ ] Proyecto SvelteKit independiente en admin/
+- [ ] Layout responsive: AdminShell + Sidebar + Topbar
+- [ ] Auth: login admin + JWT interceptor + route guarding
+- [ ] DataTable con sort, paginate, search, responsive (→ DataCard)
+- [ ] Pantallas CRUD: users, products, grades, prices, dispensers, etc.
+
+**Phase 15 — Admin Frontend Dashboard (v0.23.0).**
+- [ ] KPI cards + date range picker
+- [ ] Chart.js: sales-by-day (línea), products (donut), payment (pie)
+- [ ] Top customers, top products, responsive charts
+
+**Phase 16 — Admin Frontend Reportes + Export (v0.24.0).**
+- [ ] Pantallas de reportes con filtros avanzados
+- [ ] ExportButton → PDF / Excel con feedback de descarga
+
+**Phase 17 — Cloudflare + Deploy + Go-live (v1.0.0).**
+- [ ] Cloudflare Tunnel + DNS + WAF
+- [ ] Nginx config con rate limiting
+- [ ] Deploy script actualizado
+- [ ] Prueba E2E: admin → POS
+
 ## When building
 
 ### POS Backend (Python)
@@ -224,6 +274,21 @@ Ready for production integration with POS frontend.
 - Print policy config: `PRINTER_POLICY` env var (ALWAYS | ASK | NEVER)
 - ESC/POS library: `escpos-coffee` 4.1.0
 
+### Powerfin Admin (SvelteKit) — proyecto independiente
+- Admin es un proyecto SvelteKit **separado** en `admin/`
+- NO comparte build, package.json, ni dependencias con `pos/`
+- Para estándares visuales, colores, componentes, y patrones UI: `docs/admin/UX_STANDARDS.md`
+  ⚠️ UX_STANDARDS.md es PRESCRIPTIVO para admin/ y DESCRIPTIVO para pos/.
+  NUNCA refactorizar pos/ solo por estética o consistencia con admin/.
+- Responsive: mobile-first con Tailwind (sm/md/lg/xl/2xl)
+- Charts: Chart.js 4.x + svelte-chartjs (ligero wrapper)
+- Export: PDF (reportlab) + Excel (openpyxl) — generación en backend
+- Auth: username + password (no PIN), JWT 4h, role-based permissions
+- Roles: ADMIN (full), SUPERVISOR (read+export), DISPATCHER (sin acceso)
+- Soft-delete para entidades con integridad referencial (users, products, grades)
+- Paginación obligatoria en todos los endpoints admin
+- Deploy: Nginx location /admin → SPA estática, independiente de /pos
+
 ## Connectivity tests (from server)
 
 ```bash
@@ -239,4 +304,7 @@ curl -s http://localhost:8090/health   # FusionBridge
 
 # Start all
 ./start.sh stop && ./start.sh backend && ./start.sh bridge && ./start.sh pos
+
+# Build admin (independiente)
+cd admin && npm run build
 ```

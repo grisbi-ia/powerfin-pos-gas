@@ -24,9 +24,16 @@ Tests obligatorios antes de cada versión git.
 | **7** | Pruebas con hardware real   | 1       | Validación en GASOLINERA con dispensadores |
 | **8** | POS Backend real            | 1       | FastAPI + PostgreSQL (reemplaza mock) ✅   |
 | **9** | Integración y hardening     | 1       | POS ↔ Backend real ↔ FusionBridge          |
-| **10**| Go-live                     | 1       | Deploy final, capacitación, producción     |
+| **10**| Edge cases + tech debt      | 2       | STOP, offline, SRI, impresión              |
+| **11**| UX + Bugfixes               | 2       | Refactors, recovery, 409, UX polish        |
+| **12**| Admin Backend — CRUD + Auth | 2       | Endpoints /api/admin/\* CRUD              |
+| **13**| Admin Backend — Dashboard   | 1       | KPIs, gráficas, PDF, Excel                 |
+| **14**| Admin Frontend — Layout+CRUD| 2       | SvelteKit admin responsive                 |
+| **15**| Admin Frontend — Dashboard  | 1       | Gráficas interactivas con Chart.js         |
+| **16**| Admin Frontend — Reportes   | 1       | Filtros avanzados + export PDF/Excel       |
+| **17**| Cloudflare + Go-live        | 1       | Túnel, SSL, hardening, producción          |
 
-**Duración total estimada: 10 semanas**
+**Duración total estimada: 21 semanas**
 
 ---
 
@@ -500,6 +507,232 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 
 ---
 
+## FASE 12 — Admin Backend — CRUD + Auth (Semanas 14-15)
+
+### Objetivo
+
+Endpoints de administración en el POS Backend para gestión de catálogos,
+protegidos por roles y permisos granulares.
+
+### Tareas
+
+```
+☐ POST /api/admin/auth/login — login admin (username+password, JWT 4h)
+☐ Admin auth guard — role.code in (ADMIN, SUPERVISOR)
+☐ Permission checker — require_permission(resource, action)
+☐ CRUD /api/admin/users — GET/POST/PUT/DELETE + search + pagination
+☐ CRUD /api/admin/roles — GET/POST/PUT
+☐ CRUD /api/admin/products — GET/POST/PUT/DELETE + search + pagination
+☐ CRUD /api/admin/grades — GET/POST/PUT/DELETE
+☐ CRUD /api/admin/price-lists — GET/POST/PUT/DELETE + items CRUD inline
+☐ CRUD /api/admin/dispensers — GET/POST/PUT + hoses CRUD
+☐ CRUD /api/admin/emission-points — GET/POST/PUT
+☐ GET/PUT /api/admin/company-info
+☐ GET/PUT /api/admin/system-config (by key)
+☐ CRUD /api/admin/payment-methods — GET/POST/PUT
+☐ Tests completos (pytest) para todos los endpoints admin
+```
+
+### Criterio de completitud
+
+```
+✅ Todos los CRUD admin responden con paginación y búsqueda
+✅ Auth admin rechaza usuarios con role DISPATCHER (403)
+✅ Permission checker bloquea acciones no autorizadas por recurso
+✅ Tests admin > 90% coverage
+✅ git tag v0.20.0 -m "Fase 12: Admin Backend CRUD"
+```
+
+---
+
+## FASE 13 — Admin Backend — Dashboard + Reportes (Semana 16)
+
+### Objetivo
+
+Endpoints de dashboard con KPIs, gráficas y reportes exportables en PDF y Excel.
+
+### Tareas
+
+```
+☐ GET /api/admin/dashboard/summary — KPIs con rango de fechas
+☐ GET /api/admin/dashboard/sales-by-day — serie temporal
+☐ GET /api/admin/dashboard/sales-by-product — agrupación por producto
+☐ GET /api/admin/dashboard/sales-by-payment — agrupación por método de pago
+☐ GET /api/admin/dashboard/top-customers — ranking clientes
+☐ GET /api/admin/dashboard/top-products — ranking productos
+☐ GET /api/admin/reports/sales — reporte paginado con filtros avanzados
+☐ POST /api/admin/reports/sales/export — PDF + Excel
+☐ GET /api/admin/reports/dispatches — detalle con filtros
+☐ POST /api/admin/reports/dispatches/export — PDF + Excel
+☐ GET /api/admin/reports/shifts — histórico turnos
+☐ POST /api/admin/reports/shifts/export — PDF + Excel
+☐ GET /api/admin/reports/cash-summary — flujo consolidado
+☐ POST /api/admin/reports/cash-summary/export — PDF + Excel
+☐ Dependencias: reportlab (PDF) + openpyxl (Excel)
+☐ Tests completos para dashboard y reportes
+```
+
+### Criterio de completitud
+
+```
+✅ Dashboard retorna KPIs correctos según rango de fechas
+✅ PDF generado incluye logo, header, resumen, tabla, footer
+✅ Excel generado con estilos, auto-filtro, congelar paneles
+✅ Export respeta permisos (solo ADMIN y SUPERVISOR)
+✅ Tests dashboard + reports > 90% coverage
+✅ git tag v0.21.0 -m "Fase 13: Admin Dashboard + Reportes"
+```
+
+---
+
+## FASE 14 — Admin Frontend — Layout + CRUD (Semanas 17-18)
+
+### Objetivo
+
+Proyecto SvelteKit independiente (`admin/`) con layout responsive, autenticación,
+y pantallas CRUD para todos los catálogos.
+
+### Tareas
+
+```
+☐ Crear proyecto SvelteKit 2.x + TypeScript + Tailwind CSS
+☐ Layout responsive: AdminShell + Sidebar + Topbar
+    ☐ Sidebar: hamburguesa mobile, colapsable tablet, fijo desktop
+☐ Auth store + login page (username + password)
+☐ JWT interceptor con auto-refresh y redirect on 401
+☐ Permission-based route guarding (+layout.ts)
+☐ Breadcrumb dinámico
+☐ Componentes base: LoadingSpinner, ErrorBanner, EmptyState, StatusBadge
+☐ DataTable: sort, paginate, search, responsive (→ DataCard en mobile)
+☐ Pagination, FilterBar, ConfirmDialog, FormField
+☐ Pantalla Users: tabla + formulario create/edit (role, PIN/password, active)
+☐ Pantalla Products: tabla + formulario (categoría, precio base, impuesto)
+☐ Pantalla Grades: tabla + formulario (producto asociado)
+☐ Pantalla Price Lists: tabla + edición inline de items
+☐ Pantalla Dispensers + Hoses: tabla + formulario
+☐ Pantalla Emission Points: tabla + formulario
+☐ Pantalla Company Info: formulario de edición
+☐ Pantalla System Config: editor key-value
+☐ Pantalla Payment Methods: tabla + formulario
+☐ Pantalla Credit Contracts: tabla + formulario (aprovecha API existente)
+☐ ExportButton en todas las tablas (CSV descarga simple)
+☐ Tests con Vitest para componentes clave
+```
+
+### Criterio de completitud
+
+```
+✅ Layout responsive funciona en mobile, tablet, y desktop
+✅ Login admin rechaza despachadores
+✅ Todos los CRUD funcionan: crear, leer, editar, soft-delete
+✅ DataTable paginada con búsqueda
+✅ npm run check → 0 errores
+✅ npm run test → tests pasan
+✅ npm run build → build exitoso
+✅ git tag v0.22.0 -m "Fase 14: Admin Frontend CRUD"
+```
+
+---
+
+## FASE 15 — Admin Frontend — Dashboard + Gráficas (Semana 19)
+
+### Objetivo
+
+Dashboard visual con KPIs y gráficas interactivas usando Chart.js.
+
+### Tareas
+
+```
+☐ Dashboard page con KPI cards (ventas, despachos, clientes, ticket promedio)
+☐ Sales by Day chart (línea/barras con Chart.js + svelte-chartjs)
+☐ Sales by Product chart (donut)
+☐ Sales by Payment Method chart (pie)
+☐ Top Customers (barra horizontal)
+☐ Top Products (barra vertical)
+☐ Date range picker con presets (hoy, ayer, 7d, 30d, este mes, personalizado)
+☐ Gráficas responsivas: 1 columna mobile, 2-3 columnas desktop
+☐ Actualización de datos al cambiar rango de fechas
+```
+
+### Criterio de completitud
+
+```
+✅ Dashboard muestra KPIs reales desde backend
+✅ Gráficas interactivas con tooltips
+✅ Cambiar rango de fechas actualiza todas las gráficas
+✅ Gráficas se reorganizan en mobile sin pérdida de legibilidad
+✅ git tag v0.23.0 -m "Fase 15: Admin Dashboard + Charts"
+```
+
+---
+
+## FASE 16 — Admin Frontend — Reportes + Export (Semana 20)
+
+### Objetivo
+
+Pantallas de reportes con filtros avanzados y exportación PDF/Excel.
+
+### Tareas
+
+```
+☐ Sales report page con filtros (fecha, producto, método pago, cliente)
+☐ Dispatches report page con filtros (estado, tipo, dispensador)
+☐ Shifts report page con filtros (usuario, estado)
+☐ Cash summary report page con filtros de fecha
+☐ Botón Export en cada reporte → dropdown PDF / Excel
+☐ Descarga con feedback visual (spinner durante generación)
+☐ Manejo de errores de exportación (timeout, archivo muy grande)
+☐ Tablas de reportes paginadas con sort
+```
+
+### Criterio de completitud
+
+```
+✅ Reportes muestran datos filtrados correctamente
+✅ PDF se descarga y abre correctamente con diseño profesional
+✅ Excel se descarga con estilos y filtros
+✅ Export respeta rango de fechas y filtros del reporte
+✅ git tag v0.24.0 -m "Fase 16: Admin Reportes + Export"
+```
+
+---
+
+## FASE 17 — Cloudflare + Deploy + Hardening (Semana 21)
+
+### Objetivo
+
+Exponer admin a internet vía Cloudflare Tunnel, hardening de seguridad,
+y puesta en producción.
+
+### Tareas
+
+```
+☐ Instalar y configurar cloudflared en servidor Debian
+☐ Configurar Cloudflare Tunnel + DNS (admin.gasolinera.com)
+☐ Configurar Nginx para admin con rate limiting en login
+☐ Cloudflare WAF rules (rate limit, country block Ecuador-only)
+☐ Certbot SSL para dominio (cloudflared → nginx)
+☐ Script deploy.sh actualizado para admin/
+☐ systemd service cloudflared
+☐ Auditoría: opcional tabla audit_log para cambios desde admin
+☐ Prueba de acceso público: https://admin.gasolinera.com
+☐ Prueba end-to-end: login admin → crear producto → visible en POS
+☐ Documentación final actualizada (docs/admin/ADMIN_UI.md, INFRAESTRUCTURA.md)
+```
+
+### Criterio de completitud
+
+```
+✅ Admin accesible desde internet vía Cloudflare Tunnel
+✅ SSL funciona (HTTPS forzado)
+✅ Rate limiting activo en login admin
+✅ Deploy script funciona: ./deploy.sh admin
+✅ Prueba E2E: cambio en admin reflejado en POS
+✅ git tag v1.0.0 -m "Producción GASOLINERA — Admin + Cloudflare"
+```
+
+---
+
 ## Orden de lectura de documentos para AGENTS Code
 
 **Fase 1 (FusionBridge):**
@@ -525,12 +758,14 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 3. FLUJOS_OPERATIVOS.md ← pantallas y flujos
 ```
 
-**Fase 8 (POS Backend):**
+**Fases 12-17 (Powerfin Admin):**
 
 ```
-1. POS_BACKEND.md       ← schema, APIs, reglas de negocio
-2. IDENTITY_API.md      ← integración Sercobaco/SRI
-3. API_CONTRACT.md      ← contratos de endpoints
+1. docs/admin/ADMIN_UI.md      ← arquitectura del admin (endpoints, frontend, deploy)
+2. docs/admin/UX_STANDARDS.md  ← estándares visuales, componentes, colores, patrones
+3. API_CONTRACT.md      ← contratos de endpoints (base para /api/admin/*)
+4. POS_BACKEND.md       ← schema y modelos que el admin gestiona
+5. INFRAESTRUCTURA.md   ← Cloudflare Tunnel, Nginx, deploy
 ```
 
 ---
@@ -557,4 +792,9 @@ Resolver edge cases críticos antes del go-live y preparar despliegue.
 | Fase 11a     | `v0.19.0`| UX, refactors, ID-based, SRI code, name search, predefined plates |
 | Fase 11b     | `v0.19.1`| Bugfix: recovery AUTHORIZED dispatch cuando PAY_IN no eco-devuelto (phone-off) |
 | Fase 11c     | `v0.19.2`| Bugfix: doble autorización mismo dispensador — 409 Conflict en create_dispatch |
-| Fase 11      | `v1.0.0` | Producción GASOLINERA              |
+| Fase 12      | `v0.20.0`| Admin Backend: CRUD + Auth + permisos granulares                      |
+| Fase 13      | `v0.21.0`| Admin Backend: Dashboard + Reportes + PDF/Excel                       |
+| Fase 14      | `v0.22.0`| Admin Frontend: Layout responsive + CRUD pantallas                    |
+| Fase 15      | `v0.23.0`| Admin Frontend: Dashboard + gráficas Chart.js                         |
+| Fase 16      | `v0.24.0`| Admin Frontend: Reportes + exportación PDF/Excel                      |
+| Fase 17      | `v1.0.0` | Producción GASOLINERA — Admin + Cloudflare Tunnel                     |

@@ -14,6 +14,26 @@ class LoginRequest(BaseModel):
     pin: str
 
 
+class AdminLoginRequest(BaseModel):
+    """Admin login uses password (full text), not numeric PIN."""
+    username: str
+    password: str
+
+
+class AdminUserInfo(BaseModel):
+    user_id: int
+    username: str
+    name: str
+    role: str
+    permissions: dict = {}
+
+
+class AdminLoginResponse(BaseModel):
+    access_token: str
+    expires_in: int
+    user: AdminUserInfo
+
+
 class UserResponse(BaseModel):
     user_id: int
     name: str
@@ -573,3 +593,57 @@ class DispatchTypeResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: str
+
+
+# ── Admin — Generic ───────────────────────────────────────────────
+
+class PaginatedResponse(BaseModel):
+    """Generic wrapper for paginated list endpoints."""
+    items: list
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
+# ── Admin — Users ─────────────────────────────────────────────────
+
+class AdminUserListItem(BaseModel):
+    user_id: int
+    username: str
+    name: str
+    role: str
+    role_name: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminUserDetail(BaseModel):
+    user_id: int
+    username: str
+    name: str
+    role_id: int
+    role: str
+    role_name: str
+    accounting_cash_code: str | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    name: str
+    password: str = Field(min_length=4, max_length=128)
+    role_id: int
+    accounting_cash_code: str | None = None
+    is_active: bool = True
+
+
+class UpdateUserRequest(BaseModel):
+    name: str | None = None
+    password: str | None = Field(default=None, min_length=4, max_length=128)
+    role_id: int | None = None
+    accounting_cash_code: str | None = None
+    is_active: bool | None = None

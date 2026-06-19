@@ -22,9 +22,15 @@ def verify_pin(pin: str, pin_hash: str) -> bool:
     return bcrypt.checkpw(pin.encode(), pin_hash.encode())
 
 
-def create_access_token(user_id: int, username: str) -> str:
-    """Create a JWT access token."""
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+def create_access_token(user_id: int, username: str, expire_minutes: int | None = None) -> str:
+    """Create a JWT access token.
+
+    expire_minutes overrides settings.jwt_expire_minutes when provided.
+    POS login uses the default (480 min = 8h).
+    Admin login passes 240 min = 4h.
+    """
+    minutes = expire_minutes if expire_minutes is not None else settings.jwt_expire_minutes
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     payload = {
         "sub": str(user_id),
         "username": username,
