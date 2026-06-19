@@ -1,0 +1,333 @@
+#!/usr/bin/env bash
+#
+# powerfin-gas — CLI de administración para Powerfin POS
+# Ubicación: /usr/local/bin/powerfin-gas  (servidor de producción)
+# Pre-deploy: /home/app/powerfin-deploy/
+# Destino:    /opt/powerfin/pos/
+#
+set -euo pipefail
+
+# ── Config ──────────────────────────────────────────────────────────
+PRE_DEPLOY="/home/app/powerfin-deploy"
+DEST="/opt/powerfin/pos"
+
+APP_NAME="powerfin-gas"
+
+# ── Helpers ─────────────────────────────────────────────────────────
+die() { echo "❌ $1" >&2; exit 1; }
+ok()  { echo "✅ $1"; }
+info(){ echo "→ $1"; }
+
+DB_HOST="localhost"
+DB_PORT="5432"
+DB_NAME="powerfin_gas"
+DB_USER="postgres"
+DB_PASS="Post20Gres17"
+
+require_pre_deploy() {
+    local dir="$1"
+    if [ ! -d "$PRE_DEPLOY/$dir" ] || [ -z "$(ls -A "$PRE_DEPLOY/$dir" 2>/dev/null)" ]; then
+        die "Pre-deploy vacío en $PRE_DEPLOY/$dir — subí los archivos primero desde desarrollo"
+    fi
+}
+
+restart_service() {
+    local svc="$1"
+    echo "→ Reiniciando $svc..."
+    sudo systemctl restart "$svc" || die "No se pudo reiniciar $svc"
+    ok "$svc reiniciado"
+}
+
+# ── deploy-frontend ─────────────────────────────────────────────────
+cmd_deploy_frontend() {
+    require_pre_deploy "frontend"
+    echo "→ Desplegando frontend desde $PRE_DEPLOY/frontend/ → $DEST/pos/src/"
+
+    rsync -av \
+        --exclude='node_modules/' \
+        --exclude='.svelte-kit/' \
+        --exclude='build/' \
+        --exclude='.env' \
+        --exclude='.git/' \
+        "$PRE_DEPLOY/frontend/" "$DEST/pos/src/"
+
+    ok "Frontend desplegado"
+    restart_service "pos-frontend"
+}
+
+# ── deploy-backend ──────────────────────────────────────────────────
+cmd_deploy_backend() {
+    require_pre_deploy "backend"
+    echo "→ Desplegando backend desde $PRE_DEPLOY/backend/ → $DEST/backend/app/"
+
+    rsync -av \
+        --exclude='__pycache__/' \
+        --exclude='*.pyc' \
+        --exclude='.pytest_cache/' \
+        --exclude='venv/' \
+        --exclude='.env' \
+        --exclude='.git/' \
+        --exclude='*.log' \
+        "$PRE_DEPLOY/backend/" "$DEST/backend/app/"
+
+    ok "Backend desplegado"
+    restart_service "pos-backend"
+}
+
+# ── deploy-fusion ───────────────────────────────────────────────────
+cmd_deploy_fusion() {
+    require_pre_deploy "fusion"
+    echo "→ Desplegando FusionBridge desde $PRE_DEPLOY/fusion/ → $DEST/fusion-bridge/"
+
+    # Copiar JAR + dependencias (quarkus-app/*)
+    rsync -av "$PRE_DEPLOY/fusion/" "$DEST/fusion-bridge/"
+
+    ok "FusionBridge desplegado"
+    restart_service "fusion-bridge"
+}
+
+# ── deploy-all ──────────────────────────────────────────────────────
+cmd_deploy_all() {
+    cmd_deploy_frontend
+    cmd_deploy_backend
+    if [ -d "$PRE_DEPLOY/fusion" ] && [ -n "$(ls -A "$PRE_DEPLOY/fusion" 2>/dev/null)" ]; then
+        cmd_deploy_fusion
+    else
+        echo "ℹ️  Sin cambios en FusionBridge — omitiendo"
+    fi
+}
+
+# ── Service control ─────────────────────────────────────────────────
+cmd_start_frontend()  { sudo systemctl start pos-frontend  && ok "pos-frontend  arrancado"; }
+cmd_start_backend()   { sudo systemctl start pos-backend   && ok "pos-backend   arrancado"; }
+cmd_start_fusion()    { sudo systemctl start fusion-bridge && ok "fusion-bridge arrancado"; }
+cmd_start_all()       { cmd_start_backend; sleep 2; cmd_start_fusion; sleep 2; cmd_start_frontend; }
+
+cmd_stop_frontend()   { sudo systemctl stop pos-frontend  && ok "pos-frontend  detenido"; }
+cmd_stop_backend()    { sudo systemctl stop pos-backend   && ok "pos-backend   detenido"; }
+cmd_stop_fusion()     { sudo systemctl stop fusion-bridge && ok "fusion-bridge detenido"; }
+cmd_stop_all()        { cmd_stop_frontend; cmd_stop_backend; cmd_stop_fusion; }
+
+cmd_restart_frontend(){ sudo systemctl restart pos-frontend  && ok "pos-frontend  reiniciado"; }
+cmd_restart_backend() { sudo systemctl restart pos-backend   && ok "pos-backend   reiniciado"; }
+cmd_restart_fusion()  { sudo systemctl restart fusion-bridge && ok "fusion-bridge reiniciado"; }
+cmd_restart_all()     { cmd_restart_backend; sleep 2; cmd_restart_fusion; sleep 2; cmd_restart_frontend; }
+
+# ── Status ───────────────────────────────────────────────────────────
+cmd_status() {
+    echo ""
+    echo "══════════════════════════════════════════════════"
+    echo "  Powerfin POS — Estado de servicios"
+    echo "══════════════════════════════════════════════════"
+    echo ""
+
+    for svc in pos-backend pos-frontend fusion-bridge; do
+        local state
+        state=$(systemctl is-active "$svc" 2>/dev/null || echo "unknown")
+        case "$state" in
+            active)   echo "  🟢 $svc" ;;
+            inactive) echo "  ⚫ $svc (detenido)" ;;
+            failed)   echo "  🔴 $svc (falló)" ;;
+            *)        echo "  ⚪ $svc ($state)" ;;
+        esac
+    done
+
+    echo ""
+    echo "── Health checks ─────────────────────────────────"
+    echo ""
+
+    local backend_ok fusion_ok frontend_ok
+    backend_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health 2>/dev/null || echo "000")
+    fusion_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8090/health 2>/dev/null || echo "000")
+    frontend_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173 2>/dev/null || echo "000")
+
+    case "$backend_ok" in
+        200) echo "  🟢 Backend      :8080  → $backend_ok" ;;
+        *)   echo "  🔴 Backend      :8080  → $backend_ok" ;;
+    esac
+    case "$fusion_ok" in
+        200) echo "  🟢 FusionBridge :8090  → $fusion_ok" ;;
+        *)   echo "  🔴 FusionBridge :8090  → $fusion_ok" ;;
+    esac
+    case "$frontend_ok" in
+        200) echo "  🟢 Frontend     :5173  → $frontend_ok" ;;
+        *)   echo "  🔴 Frontend     :5173  → $frontend_ok" ;;
+    esac
+
+    echo ""
+    echo "── Pre-deploy ─────────────────────────────────────"
+    echo ""
+
+    for dir in frontend backend fusion; do
+        if [ -d "$PRE_DEPLOY/$dir" ] && [ -n "$(ls -A "$PRE_DEPLOY/$dir" 2>/dev/null)" ]; then
+            local count
+            count=$(find "$PRE_DEPLOY/$dir" -type f | wc -l)
+            echo "  📦 $dir → $count archivos pendientes"
+        else
+            echo "  ⬚ $dir → vacío"
+        fi
+    done
+
+    echo ""
+}
+
+# ── Logs ─────────────────────────────────────────────────────────────
+cmd_logs() {
+    local filter="${1:-}"
+    if [ -n "$filter" ]; then
+        sudo journalctl -u "$filter" -f
+    else
+        sudo journalctl -u pos-backend -u pos-frontend -u fusion-bridge -f
+    fi
+}
+
+cmd_logs_tail() {
+    local lines="${1:-50}"
+    sudo journalctl -u pos-backend -u pos-frontend -u fusion-bridge -n "$lines" --no-pager
+}
+
+# ── Pre-deploy (listar archivos pendientes) ─────────────────────────
+cmd_pending() {
+    echo ""
+    for dir in frontend backend fusion; do
+        if [ -d "$PRE_DEPLOY/$dir" ] && [ -n "$(ls -A "$PRE_DEPLOY/$dir" 2>/dev/null)" ]; then
+            echo "── $PRE_DEPLOY/$dir/ ──"
+            find "$PRE_DEPLOY/$dir" -type f | head -30
+            local total
+            total=$(find "$PRE_DEPLOY/$dir" -type f | wc -l)
+            if [ "$total" -gt 30 ]; then
+                echo "  ... y $(($total - 30)) archivos más"
+            fi
+            echo ""
+        else
+            echo "  $dir → vacío"
+        fi
+    done
+}
+
+# ── Clean pre-deploy (después de un deploy exitoso) ─────────────────
+cmd_clean() {
+    local target="${1:-all}"
+    case "$target" in
+        frontend) rm -rf "$PRE_DEPLOY/frontend"/* && ok "Pre-deploy frontend limpiado" ;;
+        backend)  rm -rf "$PRE_DEPLOY/backend"/*  && ok "Pre-deploy backend limpiado" ;;
+        fusion)   rm -rf "$PRE_DEPLOY/fusion"/*   && ok "Pre-deploy fusion limpiado" ;;
+        all)      rm -rf "$PRE_DEPLOY/frontend"/* "$PRE_DEPLOY/backend"/* "$PRE_DEPLOY/fusion"/* && ok "Pre-deploy limpiado" ;;
+        *)        die "Uso: $APP_NAME clean [frontend|backend|fusion|all]" ;;
+    esac
+}
+
+# ── Backup de base de datos ─────────────────────────────────────────
+cmd_backup_db() {
+    local backup_dir="/home/app/backups"
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local file="$backup_dir/powerfin_gas_$timestamp.sql"
+
+    mkdir -p "$backup_dir"
+
+    info "Respaldando $DB_NAME → $file ..."
+
+    PGPASSWORD="$DB_PASS" pg_dump \
+        -h "$DB_HOST" \
+        -p "$DB_PORT" \
+        -U "$DB_USER" \
+        -d "$DB_NAME" \
+        --no-owner \
+        --no-acl \
+        > "$file" 2>&1 || die "Error al hacer pg_dump"
+
+    local size
+    size=$(du -h "$file" | cut -f1)
+    ok "Backup creado: $file ($size)"
+
+    # Mantener solo los últimos 7 backups
+    local count
+    count=$(ls -1 "$backup_dir"/powerfin_gas_*.sql 2>/dev/null | wc -l)
+    if [ "$count" -gt 7 ]; then
+        ls -1t "$backup_dir"/powerfin_gas_*.sql | tail -n +8 | xargs rm -f
+        info "Backups antiguos eliminados (se conservan los últimos 7)"
+    fi
+}
+
+# ── Help ─────────────────────────────────────────────────────────────
+cmd_help() {
+    echo ""
+    echo "Powerfin POS — CLI de administración"
+    echo ""
+    echo "USO:  $APP_NAME <comando>"
+    echo ""
+    echo "── Deploy (desde pre-deploy → /opt/powerfin/pos/) ──"
+    echo "  deploy-frontend    Copiar frontend y reiniciar"
+    echo "  deploy-backend     Copiar backend y reiniciar"
+    echo "  deploy-fusion      Copiar FusionBridge y reiniciar"
+    echo "  deploy-all         Deploy de los 3 (solo si hay cambios)"
+    echo ""
+    echo "── Control de servicios ──"
+    echo "  start-frontend     start-backend     start-fusion     start-all"
+    echo "  stop-frontend      stop-backend      stop-fusion      stop-all"
+    echo "  restart-frontend   restart-backend   restart-fusion   restart-all"
+    echo ""
+    echo "── Monitoreo ──"
+    echo "  status             Estado + health checks + pre-deploy pendiente"
+    echo "  logs               Logs en vivo de los 3 servicios"
+    echo "  logs-tail [N]      Últimas N líneas (default: 50)"
+    echo "  pending            Listar archivos en pre-deploy"
+    echo "  clean [comp|all]   Limpiar pre-deploy después de deploy exitoso"
+    echo "  backup-db          Backup de base de datos (pg_dump)"
+    echo ""
+    echo "── Flujo típico ──"
+    echo "  1. Desde desarrollo: scripts/deploy-to-server.sh"
+    echo "  2. En servidor:      powerfin-gas pending    (ver qué hay)"
+    echo "  3. En servidor:      powerfin-gas deploy-all  (aplicar)"
+    echo "  4. En servidor:      powerfin-gas status     (verificar)"
+    echo ""
+}
+
+# ── Router ───────────────────────────────────────────────────────────
+case "${1:-help}" in
+    # Deploy
+    deploy-frontend)  cmd_deploy_frontend ;;
+    deploy-backend)   cmd_deploy_backend ;;
+    deploy-fusion)    cmd_deploy_fusion ;;
+    deploy-all)       cmd_deploy_all ;;
+
+    # Start
+    start-frontend)   cmd_start_frontend ;;
+    start-backend)    cmd_start_backend ;;
+    start-fusion)     cmd_start_fusion ;;
+    start-all)        cmd_start_all ;;
+
+    # Stop
+    stop-frontend)    cmd_stop_frontend ;;
+    stop-backend)     cmd_stop_backend ;;
+    stop-fusion)      cmd_stop_fusion ;;
+    stop-all)         cmd_stop_all ;;
+
+    # Restart
+    restart-frontend) cmd_restart_frontend ;;
+    restart-backend)  cmd_restart_backend ;;
+    restart-fusion)   cmd_restart_fusion ;;
+    restart-all)      cmd_restart_all ;;
+
+    # Status & logs
+    status)           cmd_status ;;
+    logs)             cmd_logs "${2:-}" ;;
+    logs-tail)        cmd_logs_tail "${2:-50}" ;;
+
+    # Pre-deploy
+    pending)          cmd_pending ;;
+    clean)            cmd_clean "${2:-all}" ;;
+
+    # Backup
+    backup-db)        cmd_backup_db ;;
+
+    # Help
+    help|--help|-h)   cmd_help ;;
+
+    *)
+        echo "Comando desconocido: $1"
+        echo "Usá: $APP_NAME help"
+        exit 1
+        ;;
+esac

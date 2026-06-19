@@ -449,6 +449,12 @@ export async function getPredefinedVehicles(_token: string): Promise<PredefinedV
 	];
 }
 
+export async function getNextPredefinedVehicle(_token: string): Promise<PredefinedVehicle> {
+	await delay(80);
+	// Always return the first one in mock mode
+	return { vehicle_id: 1, plate: 'ABC001', owner_name: 'Juan Pérez' };
+}
+
 export async function updatePerson(
 	_token: string,
 	personId: number,

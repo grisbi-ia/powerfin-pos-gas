@@ -201,6 +201,15 @@ Ready for production integration with POS frontend.
 - [x] Auto-cancel eliminado (redundante con ATO=180s del Wayne)
 - [x] Frontend muestra mensajes de error reales del backend
 
+**Vehículos predeterminados + Deploy (v0.23.0).**
+- [x] GET /api/pos/vehicles/predefined/next — balanceo por despachos del día
+- [x] Botón "🧉 Pedir Vehículo Interno" en SaleWizard + PlateInput
+- [x] Sin autobúsqueda: llena placa, despachador pulsa Buscar
+- [x] scripts/deploy-to-server.sh + powerfin-gas (CLI servidor)
+- [x] Deploy en 2 etapas con pre-deploy, exclusiones de .env/caché
+- [x] powerfin-gas backup-db con pg_dump y auto-limpieza
+- [x] 7 tests backend + 41 frontend (0 regresiones)
+
 **Pendiente.**
 - [ ] Pago mixto (efectivo + tarjeta)
 - [ ] Flujo de crédito en el POS (selector en SaleWizard)

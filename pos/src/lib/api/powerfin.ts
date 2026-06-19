@@ -191,6 +191,18 @@ export async function getPredefinedVehicles(
 	return res.json();
 }
 
+/** Get the predefined vehicle with the fewest dispatches today (for container sales). */
+export async function getNextPredefinedVehicle(
+	token: string
+): Promise<import('./types').PredefinedVehicle> {
+	if (USE_MOCKS_POWERFIN) return mock.getNextPredefinedVehicle(token);
+	const res = await fetch(powerfinUrl('/api/pos/vehicles/predefined/next'), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error al obtener vehículo interno');
+	return res.json();
+}
+
 /** Set or clear the preferred billing person for a vehicle. */
 export async function setVehicleBillingPerson(
 	token: string,

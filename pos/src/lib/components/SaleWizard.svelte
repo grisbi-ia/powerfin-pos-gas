@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { config } from '$lib/stores/config';
 	import { shift } from '$lib/stores/shift';
@@ -76,6 +76,10 @@
 	let changeBillingLoading = false;
 	let changeBillingError = '';
 	let saveBillingPreferential = false;
+
+	// Predefined vehicles (container sales)
+	let predefinedAvailable = false;
+	let predefinedLoading = false;
 
 	$: changeBillingValid = changeBillingIdType === 'CED' ? changeBillingIdNumber.length === 10 : changeBillingIdNumber.length === 13;
 
@@ -156,6 +160,20 @@
 			else { confirmedOwner = result.owner; step = 'billing'; }
 		} catch { error = 'Error al buscar placa'; }
 		finally { loading = false; }
+	}
+
+	async function handlePredefinedClick() {
+		loading = true; error = '';
+		try {
+			const vehicle = await powerfin.getNextPredefinedVehicle(token());
+			plate = vehicle.plate;
+		} catch (e: any) {
+			error = e?.message === 'Error al obtener vehículo interno'
+				? 'No hay vehículos internos disponibles'
+				: 'Error al obtener vehículo interno';
+		} finally {
+			loading = false;
+		}
 	}
 
 	function handleBillingConfirm() {
@@ -513,6 +531,19 @@
 
 	$: estimatedLiters = presetType === 'MONEY' && parseFloat(presetValue) > 0 ? (parseFloat(presetValue) / unitPrice).toFixed(2) : '';
 	$: estimatedTotal = presetType === 'VOLUME' && parseFloat(presetValue) > 0 ? (parseFloat(presetValue) * unitPrice).toFixed(2) : '';
+
+	onMount(async () => {
+		if (!token()) return;
+		predefinedLoading = true;
+		try {
+			const vehicles = await powerfin.getPredefinedVehicles(token());
+			predefinedAvailable = vehicles.length > 0;
+		} catch {
+			// Silently ignore — predefined vehicles are optional
+		} finally {
+			predefinedLoading = false;
+		}
+	});
 </script>
 
 <div class="flex flex-col min-h-full">
@@ -553,6 +584,30 @@
 							{loading ? '...' : 'Buscar'}
 						</button>
 					</div>
+
+					{#if predefinedAvailable}
+						<div class="pt-3 border-t border-dashed border-amber-200">
+							<button
+								type="button"
+								class="touch-btn w-full rounded-xl border-2 border-dashed border-amber-400 bg-amber-50
+									px-4 py-3 text-sm font-semibold text-amber-700
+									hover:bg-amber-100 hover:border-amber-500
+									active:bg-amber-200 transition-colors
+									disabled:opacity-50 disabled:cursor-not-allowed"
+								on:click={handlePredefinedClick}
+								disabled={loading}
+							>
+								🧉 Pedir Vehículo Interno
+							</button>
+							<p class="text-xs text-gray-400 text-center mt-1">
+								Para ventas por envase o sin placa
+							</p>
+						</div>
+					{:else if predefinedLoading}
+						<div class="mt-3 flex justify-center">
+							<div class="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+						</div>
+					{/if}
 				</div>
 			{/if}
 

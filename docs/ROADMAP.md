@@ -545,6 +545,42 @@ protegidos por roles y permisos granulares.
 
 ---
 
+## Vehículos predeterminados + Deploy (v0.23.0)
+
+### Objetivo
+
+Balanceo automático de vehículos internos para ventas por envase (sin placa)
+y scripts de deploy rápido con pre-deploy en dos etapas.
+
+### Tareas
+
+```
+✅ GET /api/pos/vehicles/predefined/next — vehículo con menos despachos hoy
+✅ Balanceo por created_at (America/Guayaquil), excluye CANCELLED
+✅ Botón "🧉 Pedir Vehículo Interno" en SaleWizard y PlateInput
+✅ Llena el input de placa, el despachador pulsa Buscar manualmente
+✅ Sin botón si no hay vehículos con allow_container_sale=true
+✅ Scripts/deploy-to-server.sh — subida desde desarrollo al pre-deploy
+✅ Scripts/powerfin-gas — CLI del servidor (deploy, start/stop/restart, status, backup-db)
+✅ Deploy en 2 etapas: pre-deploy → aplicar con powerfin-gas
+✅ Exclusiones de caché, temp y .env en rsync
+✅ 7 tests backend nuevos (136 total, 0 regresiones)
+✅ 41 tests frontend (0 regresiones)
+```
+
+### Criterio de completitud
+
+```
+✅ El botón selecciona el vehículo con menos despachos del día
+✅ Sin vehículos configurados → botón no se muestra, endpoint retorna 404
+✅ Deploy no pisa .env, venv/, node_modules/, __pycache__
+✅ powerfin-gas status muestra health checks de los 3 servicios
+✅ powerfin-gas backup-db genera pg_dump con auto-limpieza (7 últimos)
+✅ git tag v0.23.0 -m "Vehículos predeterminados + Deploy rápido"
+```
+
+---
+
 ## FASE 13 — Admin Backend — Dashboard + Reportes (Semana 16)
 
 ### Objetivo
