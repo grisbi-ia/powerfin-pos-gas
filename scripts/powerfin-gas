@@ -52,6 +52,11 @@ cmd_deploy_frontend() {
         "$PRE_DEPLOY/frontend/" "$DEST/pos/src/"
 
     ok "Frontend desplegado"
+
+    info "Compilando frontend..."
+    (cd "$DEST/pos" && npm run build) || die "Falló la compilación del frontend"
+    ok "Frontend compilado"
+
     restart_service "pos-frontend"
 }
 
