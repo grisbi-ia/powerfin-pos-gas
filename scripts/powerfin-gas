@@ -58,6 +58,7 @@ cmd_deploy_frontend() {
     ok "Frontend compilado"
 
     restart_service "pos-frontend"
+    cmd_clean frontend
 }
 
 # ── deploy-backend ──────────────────────────────────────────────────
@@ -77,6 +78,7 @@ cmd_deploy_backend() {
 
     ok "Backend desplegado"
     restart_service "pos-backend"
+    cmd_clean backend
 }
 
 # ── deploy-fusion ───────────────────────────────────────────────────
@@ -89,6 +91,7 @@ cmd_deploy_fusion() {
 
     ok "FusionBridge desplegado"
     restart_service "fusion-bridge"
+    cmd_clean fusion
 }
 
 # ── deploy-all ──────────────────────────────────────────────────────
