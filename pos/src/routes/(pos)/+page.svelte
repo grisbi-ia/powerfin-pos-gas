@@ -149,7 +149,7 @@
 					const orderId = String(txData.orderId || '');
 					const saleId = String(txData.saleId || '');
 						if (pumpNumber > 0) {
-							pendingOrders.completeOrder(pumpNumber, hoseId > 0 ? hoseId : undefined, finalAmount, finalVolume, orderId || undefined);
+							pendingOrders.completeOrder(pumpNumber, hoseId > 0 ? hoseId : undefined, finalAmount, finalVolume, orderId || undefined, saleId || undefined);
 							console.log(`[SSE] NEW_TRANSACTION: pump=${pumpNumber} hose=${hoseId} amount=${finalAmount} volume=${finalVolume}`);
 					// Update PowerFin so other devices see COMPLETED status on reconciliation
 					if (orderId && finalAmount > 0 && get(auth).token) {

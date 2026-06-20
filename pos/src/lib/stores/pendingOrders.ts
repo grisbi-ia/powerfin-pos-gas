@@ -22,6 +22,8 @@ export interface PendingOrder {
 	authorizedBy?: string;
 	authorizedByUserId?: number;
 	invoiceNumber?: string;
+	/** Wayne Fusion sale ID — needed for payment handshake (CLEAR_SALE). */
+	fusionSaleId?: string;
 }
 
 const STORAGE_KEY = 'pendingOrders';
@@ -77,7 +79,7 @@ function createPendingOrdersStore() {
 		 * Matches by orderId when available, falls back to pump/hose match.
 		 * Only the FIRST matching FUELLING order is updated.
 		 */
-		completeOrder(fusionPumpId: number, fusionHoseId?: number, finalAmount?: number, finalVolume?: string, orderId?: string) {
+		completeOrder(fusionPumpId: number, fusionHoseId?: number, finalAmount?: number, finalVolume?: string, orderId?: string, fusionSaleId?: string) {
 			update(state => {
 				const next = new Map(state);
 				// Prefer exact orderId match
@@ -87,6 +89,7 @@ function createPendingOrdersStore() {
 						const updates: Partial<PendingOrder> = { status: 'COMPLETED' as const };
 						if (finalAmount !== undefined && finalAmount > 0) updates.finalAmount = finalAmount;
 						if (finalVolume !== undefined && finalVolume !== '0.00' && finalVolume !== '0') updates.finalVolume = finalVolume;
+						if (fusionSaleId) updates.fusionSaleId = fusionSaleId;
 						next.set(orderId, { ...exactOrder, ...updates });
 						saveToStorage(next);
 						return next;
@@ -100,6 +103,7 @@ function createPendingOrdersStore() {
 						const updates: Partial<PendingOrder> = { status: 'COMPLETED' as const };
 						if (finalAmount !== undefined && finalAmount > 0) updates.finalAmount = finalAmount;
 						if (finalVolume !== undefined && finalVolume !== '0.00' && finalVolume !== '0') updates.finalVolume = finalVolume;
+						if (fusionSaleId) updates.fusionSaleId = fusionSaleId;
 						next.set(id, { ...order, ...updates });
 						break;  // only the first match
 					}

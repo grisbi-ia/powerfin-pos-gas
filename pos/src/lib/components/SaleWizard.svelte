@@ -382,6 +382,19 @@
 			// and destroy the collect UI before the user sees the print/confirmation.
 			// The order is removed in handleNewSale() when the user clicks "Nueva Venta".
 			if (printPolicy === 'ALWAYS') await doPrint();
+
+			// ── Wayne payment handshake (clear display) ──
+			// Fire-and-forget after print. If FusionBridge is down, the display
+			// stays stuck (same as before this fix). The sale is already collected.
+			if (collectOrder.fusionSaleId) {
+				const saleId: string = collectOrder.fusionSaleId;
+				const methodLabel = String(paymentMethodId);  // use ID, not name — names can change
+				const lid = collectOrder.orderId;
+				bridge.paymentLock(saleId, lid)
+					.then(() => bridge.paymentClear(saleId, methodLabel, lid))
+					.then(() => bridge.paymentUnlock(saleId, lid))
+					.catch(() => {});  // silent — not blocking
+			}
 		} catch (err: any) { error = err?.message || 'Error al registrar cobro'; confirmed = false; }
 	}
 

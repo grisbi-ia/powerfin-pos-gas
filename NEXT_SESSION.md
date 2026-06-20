@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-17)
+## Estado actual (2026-06-20)
 
 ### ✅ Fases completadas
 
@@ -34,6 +34,66 @@
 | 11c | `v0.19.2` | Bugfix: doble autorización mismo dispensador → 409 Conflict en create_dispatch |
 | 11d | `v0.19.3` | Bugfix: preset_value persistido en BD + bloqueo cobro $0.00 (cross-page race condition) |
 | **11e** | **v0.19.4** | **Bugfix: despachos en $0.00 — carrera AM=0, collect exige COMPLETED, cancel limpia SRI** |
+| **11f** | **v0.19.6** | **Bugfix: handshake de pago Wayne (LOCK→CLEAR→UNLOCK) post-cobro + SOP despachos cero** |
+
+---
+
+## Logros de la sesión (2026-06-20) — v0.19.6
+
+### 78. Handshake de pago Wayne post-cobro ✅
+
+**Problema**: El display del Wayne se quedaba pegado mostrando "COBRAR $XX.00"
+después de cada venta cobrada. El POS ejecutaba `collect_dispatch` en el backend
+correctamente (HTTP/1.1 fix de v0.19.4 funcionando), pero nunca ejecutaba el
+handshake de 3 pasos con el Wayne: `LOCK → CLEAR_SALE → UNLOCK`.
+
+Las funciones `paymentLock()`, `paymentClear()`, `paymentUnlock()` existían en
+`bridge.ts` desde siempre pero nadie las llamaba desde el flujo de cobro.
+
+**Solución**:
+- `pendingOrders.ts`: Nuevo campo `fusionSaleId?` en `PendingOrder`. `completeOrder()`
+  lo acepta y persiste en localStorage.
+- `+page.svelte`: El handler SSE de `NEW_TRANSACTION` ya tenía `saleId` disponible —
+  ahora se lo pasa a `completeOrder()`.
+- `SaleWizard.svelte`: Después de `collectDispatch` + impresión exitosa, ejecuta
+  `paymentLock → paymentClear → paymentUnlock` como fire-and-forget (no bloquea,
+  try/catch silencioso). Si FusionBridge está caído, el display queda pegado
+  igual que antes (sin regresión).
+
+**Adicional**:
+- `payment_method_id` se usa como label en `TY` del Wayne (IDs, no nombres).
+- Documentado SOP completo en `docs/SOP_DESPACHOS_CERO.md` con 2 escenarios,
+  diagnóstico, arreglo manual, y comandos de recovery.
+
+### 79. SOP — Despachos con valores CERO o display pegado ✅
+
+**Problema**: Dos escenarios distintos requieren diagnóstico y recovery manual.
+
+**Documentación creada**: `docs/SOP_DESPACHOS_CERO.md`
+- Escenario A: `COMPLETED` con `total=0.00` (HTTP/2 body loss, arreglado en v0.19.4).
+- Escenario B: `AUTHORIZED` con `total=0.00` (Wayne ATO=180s timeout sin despachar,
+  nunca emite NEW_TRANSACTION).
+- Display Wayne pegado: cómo obtener `saleId` de logs y limpiar con 3 curls.
+- Comandos de diagnóstico SQL y journalctl.
+
+### Archivos modificados
+
+```
+POS Frontend (3):
+  stores/pendingOrders.ts        ← +fusionSaleId en PendingOrder + completeOrder()
+  routes/(pos)/+page.svelte      ← pasa saleId del SSE al store
+  components/SaleWizard.svelte   ← handshake lock→clear→unlock post-cobro
+
+Docs (1):
+  docs/SOP_DESPACHOS_CERO.md     ← nuevo: diagnóstico y recovery (2 escenarios)
+```
+
+### Tests
+
+```
+Powerfin POS — 41 tests    npm test                  # 41 passed, 0 regressions
+svelte-check — 0 errors    npm run check             # 0 errors, 16 pre-existing warnings
+```
 
 ---
 
