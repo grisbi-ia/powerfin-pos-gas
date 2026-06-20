@@ -181,9 +181,10 @@
 							${info.primaryHose.presetAmount.toFixed(2)}
 						</div>
 					{/if}
-				<!-- Cancel button (only pre-fueling + matching attendant via pending order) -->
+				<!-- Cancel button (also when IDLE but order never completed — nozzle hung up without fuel) -->
 				{@const pendingOrder = info.primaryHose ? $orderByHose.get(dispenser.dispenserId + '-' + info.primaryHose.hoseId) : null}
-				{@const canCancel = ['AUTHORIZED', 'CALLING', 'STARTING'].includes(info.primaryHose?.status ?? '') &&
+				{@const canCancel = (['AUTHORIZED', 'CALLING', 'STARTING'].includes(info.primaryHose?.status ?? '') ||
+					(info.primaryHose?.status === 'IDLE' && pendingOrder?.status === 'FUELLING')) &&
 					pendingOrder != null &&
 					pendingOrder.authorizedByUserId === $currentUser?.user_id &&
 					$shift != null}

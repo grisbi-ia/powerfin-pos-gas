@@ -788,15 +788,35 @@ async def cancel_dispatch(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Cancel a dispatch (only if not yet completed/collected)."""
+    """Cancel a dispatch.
+
+    Blocked if fuel was dispensed (COMPLETED + total>0) or already collected.
+    Allowed for AUTHORIZED (never completed) and COMPLETED+total=0
+    (Wayne race condition — no fuel dispensed).
+    """
     result = await db.execute(
         select(Dispatch).where(Dispatch.order_id == order_id)
     )
     dispatch = result.scalar_one_or_none()
-    if dispatch:
-        dispatch.status = "CANCELLED"
-        dispatch.sri_status = None  # CANCELLED dispatches must never reach SRI
-        await db.commit()
+    if not dispatch:
+        raise HTTPException(status_code=404, detail="Orden no encontrada")
+
+    # ── Double barrier: cannot cancel dispensed or collected dispatches ──
+    if dispatch.status == 'COLLECTED':
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede cancelar un despacho ya cobrado"
+        )
+    if dispatch.status == 'COMPLETED' and float(dispatch.total or 0) > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="No se puede cancelar un despacho con combustible despachado. "
+                   "Cobre el despacho normalmente."
+        )
+
+    dispatch.status = "CANCELLED"
+    dispatch.sri_status = None  # CANCELLED dispatches must never reach SRI
+    await db.commit()
     return {"status": "ok"}
 
 
