@@ -181,7 +181,15 @@
 							${info.primaryHose.presetAmount.toFixed(2)}
 						</div>
 					{/if}
-				<!-- Cancel button (also when IDLE but order never completed — nozzle hung up without fuel) -->
+				<!-- Cancel button ───────────────────────────────────────────
+				     Appears when:
+				       a) Hose is AUTHORIZED/CALLING/STARTING (pre-dispatch, normal)
+				       b) Hose is IDLE but order.status is FUELLING → nozzle was
+				          lifted and hung up without dispensing fuel. Wayne returned
+				          to IDLE without NEW_TRANSACTION → dispatch is orphaned.
+				          (v0.19.7: frontend shows Cancel; backend double-barrier
+				          blocks if fuel was actually dispensed — see cancel_dispatch)
+				     ──────────────────────────────────────────────────────────── -->
 				{@const pendingOrder = info.primaryHose ? $orderByHose.get(dispenser.dispenserId + '-' + info.primaryHose.hoseId) : null}
 				{@const canCancel = (['AUTHORIZED', 'CALLING', 'STARTING'].includes(info.primaryHose?.status ?? '') ||
 					(info.primaryHose?.status === 'IDLE' && pendingOrder?.status === 'FUELLING')) &&
