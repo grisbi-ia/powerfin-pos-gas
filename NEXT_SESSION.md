@@ -35,6 +35,7 @@
 | 11d | `v0.19.3` | Bugfix: preset_value persistido en BD + bloqueo cobro $0.00 (cross-page race condition) |
 | **11e** | **v0.19.4** | **Bugfix: despachos en $0.00 — carrera AM=0, collect exige COMPLETED, cancel limpia SRI** |
 | **11f** | **v0.19.6** | **Bugfix: handshake de pago Wayne (LOCK→CLEAR→UNLOCK) post-cobro + SOP despachos cero** |
+| **11g** | **v0.19.8** | **Bugfix: ✕ Cancelar en IDLE+FUELLING + doble barrera backend + deploy auto-build + auto-clean** |
 
 ---
 
@@ -88,11 +89,83 @@ Docs (1):
   docs/SOP_DESPACHOS_CERO.md     ← nuevo: diagnóstico y recovery (2 escenarios)
 ```
 
+Deploy (1):
+  scripts/powerfin-gas           ← +npm run build en deploy-frontend
+```
+
 ### Tests
 
 ```
 Powerfin POS — 41 tests    npm test                  # 41 passed, 0 regressions
 svelte-check — 0 errors    npm run check             # 0 errors, 16 pre-existing warnings
+```
+
+---
+
+## Logros de la sesión (2026-06-20, continuación) — v0.19.8
+
+### 80. ✕ Cancelar para despachos huérfanos (IDLE + FUELLING) ✅
+
+**Problema**: Cuando un cliente levanta la pistola y la cuelga sin despachar
+combustible, el Wayne vuelve a IDLE sin emitir NEW_TRANSACTION. El dispatch
+queda AUTHORIZED con total=$0.00. El botón ✕ Cancelar solo aparecía en estados
+AUTHORIZED/CALLING/STARTING — al llegar a IDLE desaparecía y el DispenserCard
+mostraba falsamente "COBRAR $XX" (confundiendo FUELLING+IDLE del phone-off
+recovery de v0.19.1 con un despacho real completado).
+
+El despachador quedaba atrapado: no podía cancelar (botón invisible), no podía
+cobrar (backend bloquea collect si status≠COMPLETED).
+
+**Solución — 2 capas**:
+- **Frontend** (`DispenserCard.svelte`): `canCancel` ahora incluye
+  `hose.status===IDLE && order.status===FUELLING`. El botón ✕ Cancelar aparece
+  junto al "COBRAR $XX". El despachador tiene 2 opciones: Cancelar o intentar
+  Cobrar (que fallará con mensaje claro).
+- **Backend** (`dispatches.py:cancel_dispatch`): Doble barrera de seguridad.
+  Bloquea cancelación si `status===COLLECTED` o `COMPLETED+total>0`. Esto
+  impide que alguien despache combustible, cuelgue rápido, y cancele antes
+  de que llegue NEW_TRANSACTION. El backend es la autoridad final.
+
+**Flujo visual**:
+```
+Hose IDLE
+├── order=COMPLETED → COBRAR $XX.00 (normal, cancel NO visible)
+└── order=FUELLING  → COBRAR $XX.00 + ✕ Cancelar (v0.19.7)
+                      Si total>0 en BD → backend rechaza cancel
+```
+
+### 81. Deploy: auto-build + auto-clean ✅
+
+**Problema**: `powerfin-gas deploy-frontend` copiaba fuentes y reiniciaba sin
+compilar. El build quedaba desactualizado. Adicional, los archivos en pre-deploy
+se acumulaban sin limpiar.
+
+**Solución**:
+- `cmd_deploy_frontend()`: `npm run build` después de rsync, antes de restart.
+  Si el build falla (`|| die`), no se reinicia y el pre-deploy se preserva.
+- Los 3 deploys (frontend/backend/fusion) ahora llaman `cmd_clean` al final.
+  Limpia automáticamente después de un deploy exitoso.
+
+### Archivos modificados (v0.19.8)
+
+```
+Frontend (1):
+  components/DispenserCard.svelte    ← canCancel extendido + documentación
+
+Backend (1):
+  api/dispatches.py                  ← cancel_dispatch con doble barrera
+                                       (COLLECTED + COMPLETED+total>0)
+
+Deploy (1):
+  scripts/powerfin-gas               ← +npm run build + auto-clean en 3 deploys
+```
+
+### Tests
+
+```
+Powerfin POS — 41 tests    npm test                  # ✓ 41/41
+Backend     — 93 tests    pytest                    # ✓ 93/93
+svelte-check — 0 errors    npm run check             # ✓
 ```
 
 ---
