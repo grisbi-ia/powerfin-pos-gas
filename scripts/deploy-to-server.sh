@@ -21,7 +21,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-SERVER="app@192.168.1.25"
+#LOCAL
+##SERVER="app@192.168.1.25"
+
+#REMOTE
+SERVER="app@100.97.47.123"
+
 PRE_DEPLOY="/home/app/powerfin-deploy"
 
 # Colores
