@@ -106,9 +106,9 @@
 
   <!-- Tab bar + date filters -->
   <div class="flex flex-wrap gap-2 mb-4 items-center">
-    <button class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white"><DollarSign class="w-4 h-4 inline mr-1"/>Ventas</button>
-    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='shifts'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>activeTab='shifts'}><Users class="w-4 h-4 inline mr-1"/>Turnos</button>
-    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='cash'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>activeTab='cash'}><Wallet class="w-4 h-4 inline mr-1"/>Caja</button>
+    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='sales'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='sales') load(); else activeTab='sales'}}><DollarSign class="w-4 h-4 inline mr-1"/>Ventas</button>
+    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='shifts'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='shifts') load(); else activeTab='shifts'}}><Users class="w-4 h-4 inline mr-1"/>Turnos</button>
+    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='cash'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='cash') load(); else activeTab='cash'}}><Wallet class="w-4 h-4 inline mr-1"/>Caja</button>
     <div class="flex-1 hidden sm:block"></div>
     <input type="date" bind:value={dateFrom} class="px-3 py-2 text-sm border border-gray-300 rounded-md"/>
     <span class="text-sm text-gray-500 py-2">a</span>
