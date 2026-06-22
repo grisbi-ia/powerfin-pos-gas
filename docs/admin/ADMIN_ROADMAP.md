@@ -6,9 +6,9 @@
 
 ```
 Última actualización: 2026-06-22
-Fase actual: 13 — Admin Backend Dashboard + Reportes ✅ COMPLETADA
-Progreso:  ████████████████████  Fases 12-13 completadas
-Tag: v0.26.0
+Fase actual: 14-16 completadas — Admin Frontend
+Progreso:  ████████████████████  Fases 12-16 completadas
+Tag: v0.30.0
 ```
 
 ---
@@ -170,35 +170,37 @@ Tag: v0.26.0
 
 ---
 
-## FASE 14 — Admin Frontend Layout + CRUD `[v0.24.0]`
+## FASE 14 — Admin Frontend Layout + CRUD `[v0.27.0]` ✅ COMPLETADA
 
-- [ ] Proyecto SvelteKit `admin/`
-- [ ] AdminShell + Sidebar + Topbar responsive
-- [ ] Login page admin
-- [ ] Auth store + JWT interceptor
-- [ ] DataTable + DataCard + FilterBar + Pagination
-- [ ] Pantallas CRUD (users, products, grades, prices, dispensers, emission-points, company, config, payment-methods)
+- [x] Proyecto SvelteKit `admin/` (Svelte 5 + Tailwind CSS 3)
+- [x] AdminShell + Sidebar + Topbar responsive
+- [x] Login page admin (username + password)
+- [x] Auth store + JWT interceptor (localStorage, 401 redirect)
+- [x] DataTable + Pagination + StatusBadge + ConfirmDialog + EmptyState + ErrorBanner + KpiCard
+- [x] 14 pantallas CRUD: users, roles, products, grades, price-lists (con items), dispensers (con hoses), emission-points, company-info, system-config, payment-methods
+- [x] Reports page con tabs (Ventas/Turnos/Caja) + date filter + PDF/Excel export
+- [x] svelte-sonner eliminado (incompatible Svelte 5), reemplazado por toast nativo
+- [x] SSR desactivado (ssr=false) para SPA estática
 
----
+## FASE 15 — Admin Frontend Dashboard `[v0.28.0]` ✅ COMPLETADA
 
-## FASE 15 — Admin Frontend Dashboard `[v0.25.0]`
+- [x] KPI cards (ventas totales, despachos, ticket promedio, turnos activos)
+- [x] Sales by Day (Chart.js línea multi-producto)
+- [x] Sales by Product (donut con % visibles)
+- [x] Sales by Payment (pie con % visibles)
+- [x] Dashboard "Hoy" con KPIs diarios, ventas por hora, turnos del día, últimos despachos
+- [x] Toggle Mes | Hoy con comparación vs día anterior
 
-- [ ] KPI cards
-- [ ] Sales by Day (Chart.js línea)
-- [ ] Sales by Product (donut)
-- [ ] Sales by Payment (pie)
-- [ ] Top Customers + Top Products (barras)
-- [ ] Date range picker
+## FASE 16 — Admin Frontend Reportes `[v0.29.0]` ✅ COMPLETADA
 
----
-
-## FASE 16 — Admin Frontend Reportes `[v0.26.0]`
-
-- [ ] Sales report page
-- [ ] Dispatches report page
-- [ ] Shifts report page
-- [ ] Cash summary page
-- [ ] ExportButton → PDF / Excel
+- [x] Sales report page (columnas: fecha, surtidor, lado, grado, cliente, placa, pago, monto, volumen, SRI, usuario)
+- [x] Shifts report page (histórico con collected/surplus/shortage)
+- [x] Cash summary page (flujo consolidado)
+- [x] ExportButton → PDF / Excel (Response con content-type correcto)
+- [x] Trend chart en reportes (bar chart de ventas diarias)
+- [x] Summary KPIs por tab (total registros, monto, promedio, página)
+- [x] Filtro closed_date para turnos cerrados hoy
+- [x] 10 registros por página
 
 ---
 

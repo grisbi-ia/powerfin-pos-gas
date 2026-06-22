@@ -326,10 +326,20 @@ Modificados:
 ☐ 3. Roles/permisos — enforcement real en POS endpoints
 ☐ 4. Flujo de crédito en el POS — selector en SaleWizard
 ☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar
-☐ 6. Phase 14 — Admin Frontend (proyecto SvelteKit admin/)
-☐ 7. Phase 15 — Admin Frontend Dashboard (Chart.js)
-☐ 8. Phase 16 — Admin Frontend Reportes + Export
-☐ 9. Phase 17 — Cloudflare + Deploy + Go-live
+☐ 6. Phase 17 — Cloudflare + Deploy + Go-live
+```
+
+### 🆕 Próximas tareas
+
+```
+☐ 7. Precios programados — cambio automático a las 00:00 horas
+   · Tabla: scheduled_price_changes (price_list_item_id, new_price, effective_date, applied)
+   · Backend: scheduler/hook que al iniciar el día aplique cambios pendientes
+   · Admin: CRUD para programar cambios de precio futuros
+
+☐ 8. Admin — modificar precios de Lista de Precios
+   · Pantalla price-lists/[id]: editar unit_price inline en la tabla de items
+   · Actualmente solo permite agregar/eliminar items, no editar el precio
 ```
 
 ---
