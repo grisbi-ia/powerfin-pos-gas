@@ -735,3 +735,322 @@ class UpdateProductRequest(BaseModel):
     subsidy_per_unit: float | None = None
     tax_type_id: int | None = None
     is_active: bool | None = None
+
+
+# ── Admin — Grades ─────────────────────────────────────────────────
+
+class AdminGradeListItem(BaseModel):
+    grade_id: int
+    code: str
+    name: str
+    product_id: int
+    product_name: str
+    product_code: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminGradeDetail(BaseModel):
+    grade_id: int
+    code: str
+    name: str
+    product_id: int
+    product_name: str
+    product_code: str
+    product_unit: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreateGradeRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=20, pattern=r"^[A-Z0-9_]+$")
+    name: str = Field(min_length=2, max_length=100)
+    product_id: int
+    is_active: bool = True
+
+
+class UpdateGradeRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    product_id: int | None = None
+    is_active: bool | None = None
+
+
+# ── Admin — Price Lists ─────────────────────────────────────────────
+
+class AdminPriceListItemDetail(BaseModel):
+    price_list_item_id: int
+    product_id: int
+    product_name: str
+    product_code: str
+    unit_price: float
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminPriceListListItem(BaseModel):
+    price_list_id: int
+    code: str
+    name: str
+    is_default: bool
+    item_count: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminPriceListDetail(BaseModel):
+    price_list_id: int
+    code: str
+    name: str
+    is_default: bool
+    is_active: bool
+    items: list[AdminPriceListItemDetail] = []
+
+    model_config = {"from_attributes": True}
+
+
+class CreatePriceListRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Z0-9_]+$")
+    name: str = Field(min_length=2, max_length=100)
+    is_default: bool = False
+
+
+class UpdatePriceListRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    is_default: bool | None = None
+    is_active: bool | None = None
+
+
+class CreatePriceListItemRequest(BaseModel):
+    product_id: int
+    unit_price: float = Field(gt=0)
+
+
+class UpdatePriceListItemRequest(BaseModel):
+    unit_price: float | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+# ── Admin — Dispensers ──────────────────────────────────────────────
+
+class AdminDispenserHoseDetail(BaseModel):
+    hose_id: int
+    side: str
+    fusion_pump_id: int
+    fusion_hose_id: int
+    grade_code: str
+    grade_name: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminDispenserListItem(BaseModel):
+    dispenser_id: int
+    code: str
+    name: str
+    emission_point_label: str | None = None
+    printer_ip: str | None = None
+    printer_port: int = 9100
+    hose_count: int = 0
+    sort_order: int = 0
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminDispenserDetail(BaseModel):
+    dispenser_id: int
+    code: str
+    name: str
+    emission_point_id: int | None = None
+    emission_point_label: str | None = None
+    printer_ip: str | None = None
+    printer_port: int = 9100
+    sort_order: int = 0
+    is_active: bool
+    hoses: list[AdminDispenserHoseDetail] = []
+
+    model_config = {"from_attributes": True}
+
+
+class CreateDispenserRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=20, pattern=r"^[A-Z0-9-]+$")
+    name: str = Field(min_length=2, max_length=100)
+    emission_point_id: int | None = None
+    printer_ip: str | None = None
+    printer_port: int = 9100
+    sort_order: int = 0
+
+
+class UpdateDispenserRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    emission_point_id: int | None = None
+    printer_ip: str | None = None
+    printer_port: int | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class CreateHoseRequest(BaseModel):
+    side: str = Field(min_length=1, max_length=1, pattern=r"^[AB]$")
+    fusion_pump_id: int
+    fusion_hose_id: int
+    grade_code: str = Field(min_length=2, max_length=20)
+
+
+class UpdateHoseRequest(BaseModel):
+    grade_code: str | None = Field(default=None, min_length=2, max_length=20)
+    fusion_pump_id: int | None = None
+    fusion_hose_id: int | None = None
+    is_active: bool | None = None
+
+
+# ── Admin — Emission Points ────────────────────────────────────────
+
+class AdminEmissionPointListItem(BaseModel):
+    emission_point_id: int
+    establishment: str
+    emission_point: str
+    label: str  # e.g., "001-001"
+    doc_type: str
+    current_sequential: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminEmissionPointDetail(BaseModel):
+    emission_point_id: int
+    establishment: str
+    emission_point: str
+    label: str
+    doc_type: str
+    current_sequential: int
+    sequential_start: int
+    sequential_end: int
+    authorization_number: str | None = None
+    authorization_date: date | None = None
+    authorization_expiry: date | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreateEmissionPointRequest(BaseModel):
+    establishment: str = Field(min_length=3, max_length=3, pattern=r"^[0-9]+$")
+    emission_point: str = Field(min_length=3, max_length=3, pattern=r"^[0-9]+$")
+    doc_type: str = "FACTURA"
+    sequential_start: int = Field(ge=1)
+    sequential_end: int = Field(ge=1)
+    authorization_number: str | None = None
+    authorization_date: date | None = None
+    authorization_expiry: date | None = None
+
+
+class UpdateEmissionPointRequest(BaseModel):
+    doc_type: str | None = None
+    current_sequential: int | None = Field(default=None, ge=1)
+    sequential_start: int | None = Field(default=None, ge=1)
+    sequential_end: int | None = Field(default=None, ge=1)
+    authorization_number: str | None = None
+    authorization_date: date | None = None
+    authorization_expiry: date | None = None
+    is_active: bool | None = None
+
+
+# ── Admin — Company Info ────────────────────────────────────────────
+
+class AdminCompanyInfoResponse(BaseModel):
+    company_id: int
+    ruc: str
+    name: str
+    commercial_name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    province: str | None = None
+    country: str | None = None
+    fiscal_regime: str | None = None
+    sri_environment: int | None = None
+    emission_type: int | None = None
+    logo_url: str | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class UpdateCompanyInfoRequest(BaseModel):
+    ruc: str | None = None
+    name: str | None = None
+    commercial_name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    city: str | None = None
+    province: str | None = None
+    country: str | None = None
+    fiscal_regime: str | None = None
+    sri_environment: int | None = None
+    emission_type: int | None = None
+    logo_url: str | None = None
+    is_active: bool | None = None
+
+
+# ── Admin — System Config ───────────────────────────────────────────
+
+class AdminSystemConfigItem(BaseModel):
+    key: str
+    value: str
+    description: str | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class UpdateSystemConfigRequest(BaseModel):
+    value: str
+    description: str | None = None
+
+
+# ── Admin — Payment Methods ─────────────────────────────────────────
+
+class AdminPaymentMethodListItem(BaseModel):
+    payment_method_id: int
+    code: str
+    name: str
+    sri_code: str
+    requires_reference: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminPaymentMethodDetail(BaseModel):
+    payment_method_id: int
+    code: str
+    name: str
+    sri_code: str
+    requires_reference: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreatePaymentMethodRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Z0-9_]+$")
+    name: str = Field(min_length=2, max_length=100)
+    sri_code: str = Field(min_length=2, max_length=3, default="20")
+    requires_reference: bool = False
+    is_active: bool = True
+
+
+class UpdatePaymentMethodRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    sri_code: str | None = Field(default=None, min_length=2, max_length=3)
+    requires_reference: bool | None = None
+    is_active: bool | None = None

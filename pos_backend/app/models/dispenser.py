@@ -35,5 +35,6 @@ class Hose(Base):
     fusion_pump_id: Mapped[int] = mapped_column(Integer, nullable=False)
     fusion_hose_id: Mapped[int] = mapped_column(Integer, nullable=False)
     grade_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     dispenser: Mapped["Dispenser"] = relationship(back_populates="hoses")

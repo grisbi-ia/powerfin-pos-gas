@@ -53,3 +53,4 @@ class Grade(Base):
     product_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("products.product_id"), nullable=False
     )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)

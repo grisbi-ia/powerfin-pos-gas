@@ -13,6 +13,7 @@ class PriceList(Base):
     code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class PriceListItem(Base):
@@ -31,3 +32,4 @@ class PriceListItem(Base):
         Integer, ForeignKey("products.product_id"), nullable=False
     )
     unit_price: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
