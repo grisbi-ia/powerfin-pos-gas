@@ -15,6 +15,33 @@
 
   const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899'];
 
+  // Plugin: draw percentage on donut/pie slices
+  const percentageLabelPlugin = {
+    id: 'percentageLabel',
+    afterDatasetsDraw(chart: any) {
+      const { ctx, data: chartData } = chart;
+      const dataset = chartData.datasets[0];
+      const total = dataset.data.reduce((a: number, b: number) => a + b, 0);
+      if (total === 0) return;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = 'bold 11px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      meta.data.forEach((arc: any, i: number) => {
+        const pct = Math.round((dataset.data[i] / total) * 100);
+        if (pct < 5) return; // skip tiny slices
+        const { x, y } = arc.tooltipPosition();
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 2;
+        ctx.fillText(`${pct}%`, x, y);
+        ctx.shadowBlur = 0;
+      });
+      ctx.restore();
+    }
+  };
+
   $effect(() => { (async () => {
     loadDashboard();
   })();
@@ -44,13 +71,15 @@
       if (byProduct.length && salesByProductCanvas) {
         new Chart(salesByProductCanvas, {
           type: 'doughnut', data: { labels: byProduct.map((d:any)=>d.product_name), datasets: [{ data:byProduct.map((d:any)=>d.total_amount), backgroundColor:colors.slice(0,byProduct.length) }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:15 } } } }
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:15, generateLabels(chart:any){ const data=chart.data; return data.labels.map((label:string,i:number)=>({text:`${label} (${Math.round(data.datasets[0].data[i]/data.datasets[0].data.reduce((a:number,b:number)=>a+b,0)*100)}%)`,fillStyle:data.datasets[0].backgroundColor[i],strokeStyle:data.datasets[0].backgroundColor[i],index:i,hidden:!chart.getDataVisibility(i),pointStyle:'circle'})); } } } } },
+          plugins: [percentageLabelPlugin]
         });
       }
       if (byPayment.length && salesByPaymentCanvas) {
         new Chart(salesByPaymentCanvas, {
           type: 'pie', data: { labels: byPayment.map((d:any)=>d.method_name), datasets: [{ data:byPayment.map((d:any)=>d.total), backgroundColor:colors.slice(0,byPayment.length) }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:15 } } } }
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:15, generateLabels(chart:any){ const data=chart.data; return data.labels.map((label:string,i:number)=>({text:`${label} (${Math.round(data.datasets[0].data[i]/data.datasets[0].data.reduce((a:number,b:number)=>a+b,0)*100)}%)`,fillStyle:data.datasets[0].backgroundColor[i],strokeStyle:data.datasets[0].backgroundColor[i],index:i,hidden:!chart.getDataVisibility(i),pointStyle:'circle'})); } } } } },
+          plugins: [percentageLabelPlugin]
         });
       }
     } catch (err: any) {
