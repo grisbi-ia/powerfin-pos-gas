@@ -89,8 +89,7 @@
   $effect(() => { activeTab; dateFrom; dateTo; page=1; load(); });
 
   const cols:Record<string,{key:string;label:string;sortable?:boolean}[]> = {
-    sales: [{key:'date',label:'Fecha'},{key:'dispenser_name',label:'Surtidor'},{key:'grade',label:'Grado'},{key:'customer_name',label:'Cliente'},{key:'plate',label:'Placa'},{key:'payment_method',label:'Pago'},{key:'amount',label:'Monto'},{key:'status',label:'Estado'}],
-    dispatches: [{key:'date',label:'Fecha'},{key:'dispenser_name',label:'Surtidor'},{key:'grade',label:'Grado'},{key:'customer_name',label:'Cliente'},{key:'plate',label:'Placa'},{key:'payment_method',label:'Pago'},{key:'amount',label:'Monto'},{key:'volume',label:'Volumen'},{key:'sri_status',label:'SRI'}],
+    sales: [{key:'date',label:'Fecha'},{key:'dispenser_name',label:'Surtidor'},{key:'hose_side',label:'Lado'},{key:'grade',label:'Grado'},{key:'customer_name',label:'Cliente'},{key:'plate',label:'Placa'},{key:'payment_method',label:'Pago'},{key:'amount',label:'Monto'},{key:'volume',label:'Volumen'},{key:'sri_status',label:'SRI'},{key:'authorized_by',label:'Usuario'},{key:'status',label:'Estado'}],
     shifts: [{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'opened_at',label:'Apertura'},{key:'closed_at',label:'Cierre'},{key:'status',label:'Estado'},{key:'opening_cash',label:'Caja Inicial'},{key:'collected',label:'Cobrado'},{key:'surplus',label:'Sobrante'},{key:'shortage',label:'Faltante'}],
     cash: [{key:'date',label:'Fecha'},{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'type',label:'Tipo'},{key:'amount',label:'Monto'},{key:'observation',label:'Observación'}],
   };
@@ -107,8 +106,7 @@
 
   <!-- Tab bar + date filters -->
   <div class="flex flex-wrap gap-2 mb-4 items-center">
-    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='sales'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>activeTab='sales'}><DollarSign class="w-4 h-4 inline mr-1"/>Ventas</button>
-    <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='dispatches'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>activeTab='dispatches'}><ShoppingCart class="w-4 h-4 inline mr-1"/>Despachos</button>
+    <button class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white"><DollarSign class="w-4 h-4 inline mr-1"/>Ventas</button>
     <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='shifts'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>activeTab='shifts'}><Users class="w-4 h-4 inline mr-1"/>Turnos</button>
     <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='cash'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>activeTab='cash'}><Wallet class="w-4 h-4 inline mr-1"/>Caja</button>
     <div class="flex-1 hidden sm:block"></div>

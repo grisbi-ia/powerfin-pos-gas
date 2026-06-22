@@ -41,23 +41,26 @@ router = APIRouter(
 # ── Helpers ────────────────────────────────────────────────────────
 
 
-async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map) -> dict:
+async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map) -> dict:
     """Convert a Dispatch row to ReportSalesItem dict."""
     d = row[0] if isinstance(row, tuple) else row
+    detail = detail_map.get(d.dispatch_id)
     return {
         "order_id": d.order_id,
         "date": d.created_at.isoformat() if d.created_at else None,
         "dispenser_name": dispenser_map.get(d.dispenser_id, f"#{d.dispenser_id}"),
+        "hose_side": hose_map.get(d.hose_id, {}).get("side") if d.hose_id else None,
         "grade": d.grade_id,
         "customer_name": person_map.get(d.person_id, {}).get("name"),
         "id_number": person_map.get(d.person_id, {}).get("id_number"),
         "plate": vehicle_map.get(d.vehicle_id),
         "payment_method": pay_map.get(d.dispatch_id),
         "amount": float(d.total or 0),
-        "volume": None,
+        "volume": float(detail.quantity) if detail else None,
         "status": d.status,
         "sri_status": d.sri_status,
         "access_key": d.access_key,
+        "authorized_by": user_map.get(d.authorized_by_user_id),
     }
 
 
@@ -136,7 +139,14 @@ async def _preload_maps(db, dispatches):
         for det in result.scalars():
             detail_map[det.dispatch_id] = det
 
-    return dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map
+    user_ids = list({d.authorized_by_user_id for d in dispatches if d.authorized_by_user_id})
+    user_map = {}
+    if user_ids:
+        result = await db.execute(select(User).where(User.user_id.in_(user_ids)))
+        for u in result.scalars():
+            user_map[u.user_id] = u.name
+
+    return dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map
 
 
 # ── Sales Report ────────────────────────────────────────────────────
@@ -196,9 +206,9 @@ async def sales_report(
     )
     dispatches = result.scalars().all()
 
-    dispenser_map, _, pay_map, person_map, vehicle_map, _ = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map = await _preload_maps(db, dispatches)
 
-    items = [await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map) for d in dispatches]
+    items = [await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map) for d in dispatches]
 
     return PaginatedResponse(items=items, total=total, page=page, page_size=page_size, pages=pages)
 
@@ -262,7 +272,7 @@ async def dispatches_report(
     )
     dispatches = result.scalars().all()
 
-    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, _ = await _preload_maps(db, dispatches)
 
     items = [
         await _build_dispatch_row(d, dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map)
@@ -432,12 +442,12 @@ async def export_sales(
     _admin: User = Depends(require_permission("reports", "read")),
 ):
     dispatches = await _query_all_sales_export(db, date_from, date_to, status, search, payment_method)
-    dispenser_map, _, pay_map, person_map, vehicle_map, _ = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map = await _preload_maps(db, dispatches)
 
     columns = ["Order ID", "Fecha", "Surtidor", "Grado", "Cliente", u"Cédula/RUC", "Placa", "Pago", "Monto", "Estado", "SRI"]
     rows = []
     for d in dispatches:
-        row = await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map)
+        row = await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map)
         rows.append([
             row["order_id"], row["date"] or "", row["dispenser_name"] or "",
             row["grade"] or "", row["customer_name"] or "", row["id_number"] or "",
@@ -488,7 +498,7 @@ async def export_dispatches(
         ))
     result = await db.execute(base.order_by(Dispatch.created_at.desc()))
     dispatches = result.scalars().all()
-    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, _ = await _preload_maps(db, dispatches)
 
     columns = ["Order ID", "Fecha", "Turno", "Surtidor", "Lado", "Grado", "Cliente",
                "Placa", "Pago", "Monto", "Volumen", "Precio Unit", "IVA",
