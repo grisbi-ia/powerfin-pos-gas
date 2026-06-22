@@ -69,14 +69,13 @@
     try{
       let endpoint='';
       if(activeTab==='sales') endpoint='/reports/sales/export';
-      else if(activeTab==='dispatches') endpoint='/reports/dispatches/export';
       else if(activeTab==='shifts') endpoint='/reports/shifts/export';
       else endpoint='/reports/cash-summary/export';
       let url=`/api/admin${endpoint}?format=${format}`;
       if(dateFrom) url+=`&date_from=${dateFrom}`; if(dateTo) url+=`&date_to=${dateTo}`;
       if(search) url+=`&search=${encodeURIComponent(search)}`;
       const token = (await import('$lib/api/api')).getToken();
-      const res=await fetch(url,{headers:{Authorization:`Bearer ${token}`}});
+      const res=await fetch(url,{method:'POST',headers:{Authorization:`Bearer ${token}`}});
       if(!res.ok)throw new Error('Error al exportar');
       const blob=await res.blob();
       const objUrl=URL.createObjectURL(blob);
