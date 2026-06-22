@@ -47,6 +47,12 @@
           options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:15 } } } }
         });
       }
+      if (byPayment.length && salesByPaymentCanvas) {
+        new Chart(salesByPaymentCanvas, {
+          type: 'pie', data: { labels: byPayment.map((d:any)=>d.method_name), datasets: [{ data:byPayment.map((d:any)=>d.total), backgroundColor:colors.slice(0,byPayment.length) }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:15 } } } }
+        });
+      }
     } catch (err: any) {
       error = err.message;
       loading = false;
@@ -67,9 +73,29 @@
       <KpiCard title="Ticket Promedio" value={formatCurrency(summary.avg_ticket)} icon={Receipt} color="purple"/>
       <KpiCard title="Turnos Activos" value={String(summary.active_shifts)} icon={Users} color="orange"/>
     </div>
+
+    <!-- Ventas por Día — full width -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Día</h3>
+      <div class="relative h-72 md:h-80">
+        <canvas bind:this={salesByDayCanvas}></canvas>
+      </div>
+    </div>
+
+    <!-- Ventas por Producto | Ventas por Método de Pago -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6"><h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Día</h3><div class="h-64"><canvas bind:this={salesByDayCanvas}></canvas></div></div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6"><h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto</h3><div class="h-64"><canvas bind:this={salesByProductCanvas}></canvas></div></div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto</h3>
+        <div class="relative h-64 md:h-72">
+          <canvas bind:this={salesByProductCanvas}></canvas>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Método de Pago</h3>
+        <div class="relative h-64 md:h-72">
+          <canvas bind:this={salesByPaymentCanvas}></canvas>
+        </div>
+      </div>
     </div>
   {/if}
 </div>
