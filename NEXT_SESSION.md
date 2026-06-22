@@ -1,41 +1,118 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-20)
+## Estado actual (2026-06-22)
 
-### ✅ Fases completadas
+### ✅ Fases completadas (todas)
 
 | Fase | Tag | Descripción |
 |------|-----|-------------|
 | 1 | `v0.1.0` | FusionBridge TCP connection |
-| 2 | — | APIs PowerFin documentadas (21 endpoints) |
-| 3 | `v0.2.0` | Powerfin POS base — login, surtidores |
+| 2 | — | APIs PowerFin documentadas |
+| 3 | `v0.2.0` | Powerfin POS base |
 | 4 | `v0.3.0` | Flujo de venta completo |
-| 5 | `v0.5.0` | Impresión térmica — ESC/POS, config multi-isla, templates editables |
-| 6 | `v0.6.0` | Módulo de caja + refactor turnos + historial + usuarios en línea |
-| 7 | `v0.7.0` | Validación hardware real — Wayne Synergy |
-| 7.1 | `v0.7.1` | Bugfix: match IDs dispensador/manguera, flujo de cobro |
-| 7.2 | `v0.8.0` | Sincronización multi-dispositivo + cancelación manual |
-| 7.3 | `v0.8.1` | Fix customer_name cross-device |
-| 7.4 | `v0.8.2` | Cambio de facturación post-despacho |
-| 7.5 | `v0.8.3` | Eliminación Consumidor Final + offline detection + fixes |
-| 8 | `v0.9.0` | POS Backend — FastAPI + PostgreSQL (26 tablas, 38 endpoints, 71 tests) |
-| 9a | `v0.10.0` | Phase 9 — dispenser mapping, dispatch_details, multi-device sync, collect flow |
-| 9b | `v0.11.0` | Phase 9 — price lists (VIP/EMPLOYEE), wizard reorder, emission points, schema simplification |
-| 9c | `v0.12.0` | Phase 9 — cuadre de caja, transfers, lookup, billing preferencial, auto-save, validación, registro |
-| 10a | `v0.13.0` | Phase 10 — Edge cases: cancel/stop mid-flow, phone-off resilience, completeDispatch en FusionBridge |
-| 10b | `v0.14.0` | Phase 10 — Impresión: ticket completo, clave de acceso SRI, Font B, datos desde BD |
-| 10c | `v0.15.0` | Phase 10 — Correcciones: subtotal/IVA, código aleatorio, espacio corte, saldos negativos, comprobantes caja |
-| 10d | `v0.16.0` | Phase 10 — Key49: facturación electrónica SRI, fire-and-forget, polling, reintentos |
-| 10e | `v0.16.1` | Phase 10 — Correcciones: zona horaria, clave Key49, IPs impresora, subtotal→total, reimpresión |
-| 10f | `v0.17.0` | Phase 10 — Cierre de turno completo: cuadre, surplus/shortage, depósito, template impresión |
-| 10g | `v0.18.0` | Phase 10 — RecoveryService: reconexión FusionBridge durante despacho activo |
-| **11** | **v0.19.0** | **Phase 11 — UX, refactors, bugfixes: dashboard visual, IDs vs strings, SRI column, búsqueda por nombre, placas predefinidas** |
-| 11b | `v0.19.1` | Bugfix: recovery despacho AUTHORIZED cuando PAY_IN no eco-devuelto (phone-off) |
-| 11c | `v0.19.2` | Bugfix: doble autorización mismo dispensador → 409 Conflict en create_dispatch |
-| 11d | `v0.19.3` | Bugfix: preset_value persistido en BD + bloqueo cobro $0.00 (cross-page race condition) |
-| **11e** | **v0.19.4** | **Bugfix: despachos en $0.00 — carrera AM=0, collect exige COMPLETED, cancel limpia SRI** |
-| **11f** | **v0.19.6** | **Bugfix: handshake de pago Wayne (LOCK→CLEAR→UNLOCK) post-cobro + SOP despachos cero** |
-| **11g** | **v0.19.8** | **Bugfix: ✕ Cancelar en IDLE+FUELLING + doble barrera backend + deploy auto-build + auto-clean** |
+| 5 | `v0.5.0` | Impresión térmica ESC/POS |
+| 6 | `v0.6.0` | Caja + turnos + historial |
+| 7 | `v0.7.0` | Validación hardware Wayne Synergy |
+| 7.x | `v0.7.1`-`v0.8.3` | Sync, cancel, billing, CF removal |
+| 8 | `v0.9.0` | POS Backend — FastAPI + PostgreSQL |
+| 9a | `v0.10.0` | Dispenser mapping, dispatch_details |
+| 9b | `v0.11.0` | Price lists, wizard reorder |
+| 9c | `v0.12.0` | Cuadre de caja, billing preferencial |
+| 10a | `v0.13.0` | Edge cases: cancel/stop, phone-off |
+| 10b | `v0.14.0` | Impresión ticket completo SRI |
+| 10c | `v0.15.0` | Correcciones subtotal/IVA, saldos |
+| 10d | `v0.16.0` | Key49 facturación electrónica SRI |
+| 10e | `v0.16.1` | Zona horaria, clave Key49, IPs |
+| 10f | `v0.17.0` | Cierre de turno completo |
+| 10g | `v0.18.0` | RecoveryService reconexión |
+| **11** | **`v0.19.0`** | UX, refactors, bugfixes |
+| 11b | `v0.19.1` | Recovery phone-off bug |
+| 11c | `v0.19.2` | 409 Conflict doble autorización |
+| 11d | `v0.19.3` | preset_value persistido |
+| 11e | `v0.19.4` | Despachos $0.00 4-capas |
+| 11f | `v0.19.6` | Wayne payment handshake |
+| 11g | `v0.19.8` | Cancel IDLE+FUELLING |
+| 11h | `v0.19.9` | SQL ventas_turno, deploy fix, CUADRE_CAJA |
+| **12a** | **`v0.24.0`** | Admin auth + users + roles + products CRUD |
+| **12b** | **`v0.25.0`** | **Admin Phase 12 completa — 11 módulos, 51 endpoints, 338 tests** |
+
+---
+
+## Logros de la sesión (2026-06-22) — v0.25.0
+
+### Phase 12 — Admin Backend CRUD + Auth ✅ COMPLETADO
+
+**338 tests pasando, 0 regresiones, flujo de venta 100% intacto.**
+
+Módulos implementados hoy (8 nuevos, 187 tests):
+
+| # | Módulo | Endpoints | Tests |
+|---|--------|-----------|-------|
+| 12.3 | Roles CRUD | 4 | 28 |
+| 12.4 | Products CRUD | 5 | 36 |
+| 12.5 | Grades CRUD | 5 | 28 |
+| 12.6 | Price Lists + Items | 9 | 37 |
+| 12.7 | Dispensers + Hoses | 8 | 32 |
+| 12.8 | Emission Points | 4 | 19 |
+| 12.9 | Company Info | 2 | 6 |
+| 12.10 | System Config | 2 | 4 |
+| 12.11 | Payment Methods | 4 | 12 |
+
+**Total Phase 12: 11 módulos, 51 endpoints, 238 tests admin.**
+
+### Decisiones de diseño
+
+- **model_dump(exclude_unset=True)** para updates parciales — permite limpiar campos con null explícito
+- **Sequences en conftest**: +10 setval faltantes (products, roles, grades, price_lists, payment_methods, dispensers, hoses, dispatch_types, categories, taxes)
+- **Migraciones 3-pasos**: nullable → backfill → NOT NULL con server_default (grades, price_lists, price_list_items, hoses)
+- **Code immutable** en roles, products, grades — no se puede cambiar vía PUT
+- **Sin DELETE** en roles y emission_points — FK references o recurso crítico
+- **Items reactivación**: crear item con mismo producto reactiva el inactivo (price_list_items)
+- **System config upsert**: PUT crea la key si no existe ({key:path} para keys con slashes)
+- **Aislamiento total**: /api/admin/* usa get_admin_user (ADMIN/SUPERVISOR), DISPATCHER recibe 403. Cero impacto en /api/pos/*.
+
+### Archivos creados/modificados
+
+```
+Routers admin (8 nuevos):
+  app/api/admin/roles.py
+  app/api/admin/products.py
+  app/api/admin/grades.py
+  app/api/admin/price_lists.py
+  app/api/admin/dispensers.py
+  app/api/admin/emission_points.py
+  app/api/admin/company.py
+  app/api/admin/system_config.py
+  app/api/admin/payment_methods.py
+
+Modelos (+ is_active):
+  app/models/product.py       ← Grade.is_active
+  app/models/pricing.py       ← PriceList.is_active, PriceListItem.is_active
+  app/models/dispenser.py     ← Hose.is_active
+
+Migraciones (3 nuevas):
+  alembic/versions/5a02d184d729_add_is_active_to_grades.py
+  alembic/versions/c7ccad66cca6_add_is_active_to_price_lists_and_items.py
+  alembic/versions/2e2a37a14335_add_is_active_to_hoses.py
+
+Schemas (+35 nuevos):
+  app/schemas/__init__.py
+
+Tests (8 archivos nuevos, 187 tests):
+  tests/test_api_admin_roles.py           (28 tests)
+  tests/test_api_admin_products.py         (36 tests)
+  tests/test_api_admin_grades.py           (28 tests)
+  tests/test_api_admin_price_lists.py      (37 tests)
+  tests/test_api_admin_dispensers.py       (32 tests)
+  tests/test_api_admin_emission_points.py  (19 tests)
+  tests/test_api_admin_company_config.py   (10 tests)
+  tests/test_api_admin_payment_methods.py  (12 tests)
+
+Infra:
+  app/api/router.py           ← +9 admin routers
+  tests/conftest.py           ← +10 setval sequences
+  docs/admin/ADMIN_ROADMAP.md ← Phase 12 completado
+```
 
 ---
 

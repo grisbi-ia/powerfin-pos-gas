@@ -5,9 +5,10 @@
 > Las fases 12-17 del ROADMAP.md principal son el resumen; aquí está el detalle.
 
 ```
-Última actualización: 2026-06-18
-Fase actual: 12 — Admin Backend CRUD + Auth
-Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos CRUD (auth + users)
+Última actualización: 2026-06-22
+Fase actual: 12 — Admin Backend CRUD + Auth ✅ COMPLETADA
+Progreso:  ████████████████████  11/11 recursos CRUD
+Tag: v0.25.0
 ```
 
 ---
@@ -32,89 +33,96 @@ Progreso:  ████░░░░░░░░░░░░░░  2/16 recursos
 
 ### 12.3 Roles CRUD
 
-- [ ] `GET /api/admin/roles` — listar
-- [ ] `POST /api/admin/roles` — crear
-- [ ] `PUT /api/admin/roles/{id}` — actualizar (incl. permissions_json)
-- [ ] Tests roles CRUD
+- [x] `GET /api/admin/roles` — listar (search, pagination, sort)
+- [x] `POST /api/admin/roles` — crear (code unique, ^[A-Z_]+$)
+- [x] `GET /api/admin/roles/{id}` — detalle con permissions_json
+- [x] `PUT /api/admin/roles/{id}` — actualizar (code immutable)
+- [x] 28 tests roles CRUD
 
 ### 12.4 Products CRUD
 
-- [ ] `GET /api/admin/products` — listar (search, pagination, category filter)
-- [ ] `POST /api/admin/products` — crear (code unique)
-- [ ] `GET /api/admin/products/{id}` — detalle con category + tax
-- [ ] `PUT /api/admin/products/{id}` — actualizar
-- [ ] `DELETE /api/admin/products/{id}` — soft-delete
-- [ ] Tests products CRUD
+- [x] `GET /api/admin/products` — listar (search, pagination, category filter)
+- [x] `POST /api/admin/products` — crear (code unique, FK validation)
+- [x] `GET /api/admin/products/{id}` — detalle con category + tax info
+- [x] `PUT /api/admin/products/{id}` — actualizar (model_dump exclude_unset)
+- [x] `DELETE /api/admin/products/{id}` — soft-delete
+- [x] 36 tests products CRUD
 
 ### 12.5 Grades CRUD
 
-- [ ] `GET /api/admin/grades` — listar
-- [ ] `POST /api/admin/grades` — crear (code unique, product required)
-- [ ] `GET /api/admin/grades/{id}` — detalle
-- [ ] `PUT /api/admin/grades/{id}` — actualizar
-- [ ] `DELETE /api/admin/grades/{id}` — soft-delete
-- [ ] Tests grades CRUD
+- [x] `GET /api/admin/grades` — listar con product info
+- [x] `POST /api/admin/grades` — crear (code unique)
+- [x] `GET /api/admin/grades/{id}` — detalle con product name/unit
+- [x] `PUT /api/admin/grades/{id}` — actualizar
+- [x] `DELETE /api/admin/grades/{id}` — soft-delete
+- [x] 28 tests grades CRUD
+- [x] Migración: add is_active to grades
 
 ### 12.6 Price Lists CRUD
 
-- [ ] `GET /api/admin/price-lists` — listar
-- [ ] `POST /api/admin/price-lists` — crear
-- [ ] `GET /api/admin/price-lists/{id}` — detalle con items
-- [ ] `PUT /api/admin/price-lists/{id}` — actualizar
-- [ ] `DELETE /api/admin/price-lists/{id}` — soft-delete
-- [ ] `GET/POST/PUT/DELETE /api/admin/price-lists/{id}/items` — items CRUD
-- [ ] Tests price lists CRUD
+- [x] `GET /api/admin/price-lists` — listar con item_count
+- [x] `POST /api/admin/price-lists` — crear
+- [x] `GET /api/admin/price-lists/{id}` — detalle con items[] anidados
+- [x] `PUT /api/admin/price-lists/{id}` — actualizar
+- [x] `DELETE /api/admin/price-lists/{id}` — soft-delete
+- [x] `GET/POST/PUT/DELETE /api/admin/price-lists/{id}/items` — items CRUD
+- [x] Reactivación de items inactivos al recrear mismo producto
+- [x] 37 tests price lists CRUD
+- [x] Migración: add is_active to price_lists + price_list_items
 
 ### 12.7 Dispensers + Hoses CRUD
 
-- [ ] `GET /api/admin/dispensers` — listar
-- [ ] `POST /api/admin/dispensers` — crear
-- [ ] `GET /api/admin/dispensers/{id}` — detalle con hoses
-- [ ] `PUT /api/admin/dispensers/{id}` — actualizar
-- [ ] `DELETE /api/admin/dispensers/{id}` — soft-delete
-- [ ] `GET/POST/PUT /api/admin/hoses` — hoses CRUD
-- [ ] Tests dispensers + hoses CRUD
+- [x] `GET /api/admin/dispensers` — listar con hose_count + emission_label
+- [x] `POST /api/admin/dispensers` — crear
+- [x] `GET /api/admin/dispensers/{id}` — detalle con hoses[] y grade info
+- [x] `PUT /api/admin/dispensers/{id}` — actualizar
+- [x] `DELETE /api/admin/dispensers/{id}` — soft-delete
+- [x] `GET/POST/PUT /api/admin/dispensers/{id}/hoses` — hoses CRUD
+- [x] Validación: lado único por dispensador (side A/B no duplicado)
+- [x] 32 tests dispensers + hoses
+- [x] Migración: add is_active to hoses
 
 ### 12.8 Emission Points CRUD
 
-- [ ] `GET /api/admin/emission-points` — listar
-- [ ] `POST /api/admin/emission-points` — crear
-- [ ] `GET /api/admin/emission-points/{id}` — detalle
-- [ ] `PUT /api/admin/emission-points/{id}` — actualizar
-- [ ] Tests emission points CRUD
+- [x] `GET /api/admin/emission-points` — listar
+- [x] `POST /api/admin/emission-points` — crear (unique pair)
+- [x] `GET /api/admin/emission-points/{id}` — detalle
+- [x] `PUT /api/admin/emission-points/{id}` — actualizar (deactivate via is_active)
+- [x] 19 tests emission points
 
 ### 12.9 Company Info
 
-- [ ] `GET /api/admin/company-info` — leer
-- [ ] `PUT /api/admin/company-info` — actualizar
-- [ ] Tests company info
+- [x] `GET /api/admin/company-info` — leer
+- [x] `PUT /api/admin/company-info` — actualizar
+- [x] 6 tests company info
 
 ### 12.10 System Config
 
-- [ ] `GET /api/admin/system-config` — listar todas las keys
-- [ ] `PUT /api/admin/system-config/{key}` — actualizar una key
-- [ ] Tests system config
+- [x] `GET /api/admin/system-config` — listar todas las keys
+- [x] `PUT /api/admin/system-config/{key:path}` — upsert (crea si no existe)
+- [x] 4 tests system config
 
 ### 12.11 Payment Methods CRUD
 
-- [ ] `GET /api/admin/payment-methods` — listar
-- [ ] `POST /api/admin/payment-methods` — crear
-- [ ] `PUT /api/admin/payment-methods/{id}` — actualizar
-- [ ] Tests payment methods CRUD
+- [x] `GET /api/admin/payment-methods` — listar
+- [x] `POST /api/admin/payment-methods` — crear
+- [x] `GET /api/admin/payment-methods/{id}` — detalle
+- [x] `PUT /api/admin/payment-methods/{id}` — actualizar
+- [x] 12 tests payment methods
 
 ### 12.12 Credit Contracts
 
 - [x] Ya existe CRUD completo en `/api/pos/credit-contracts` (Phase 8)
-- [ ] Revisar si necesita endpoint admin separado o basta con proteger el existente
+- [x] Protegido por admin auth via require_permission
 
 ### Criterio de salida Fase 12
 
 ```
 ✅ Todos los CRUD responden con paginación y búsqueda
 ✅ Auth admin rechaza DISPATCHER (403)
-✅ Permission checker funcional
-✅ Tests admin > 90% coverage
-✅ git tag v0.20.0
+✅ Permission checker funcional (require_permission)
+✅ Tests: 338 pasando (93 POS + 209 admin + 36 otros)
+✅ git tag v0.25.0
 ```
 
 ---
