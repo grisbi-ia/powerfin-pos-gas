@@ -17,12 +17,14 @@ from app.api.vehicles import router as vehicles_router
 
 from app.api.admin.auth import router as admin_auth_router
 from app.api.admin.company import router as admin_company_router
+from app.api.admin.dashboard import router as admin_dashboard_router
 from app.api.admin.dispensers import router as admin_dispensers_router
 from app.api.admin.emission_points import router as admin_emission_points_router
 from app.api.admin.grades import router as admin_grades_router
 from app.api.admin.payment_methods import router as admin_payment_methods_router
 from app.api.admin.price_lists import router as admin_price_lists_router
 from app.api.admin.products import router as admin_products_router
+from app.api.admin.reports import router as admin_reports_router
 from app.api.admin.roles import router as admin_roles_router
 from app.api.admin.system_config import router as admin_system_config_router
 from app.api.admin.users import router as admin_users_router
@@ -43,12 +45,14 @@ router.include_router(credit_router)
 router.include_router(products_router)
 router.include_router(admin_auth_router)
 router.include_router(admin_company_router)
+router.include_router(admin_dashboard_router)
 router.include_router(admin_dispensers_router)
 router.include_router(admin_emission_points_router)
 router.include_router(admin_grades_router)
 router.include_router(admin_payment_methods_router)
 router.include_router(admin_price_lists_router)
 router.include_router(admin_products_router)
+router.include_router(admin_reports_router)
 router.include_router(admin_roles_router)
 router.include_router(admin_system_config_router)
 router.include_router(admin_users_router)

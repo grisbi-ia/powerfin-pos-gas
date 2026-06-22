@@ -1054,3 +1054,116 @@ class UpdatePaymentMethodRequest(BaseModel):
     sri_code: str | None = Field(default=None, min_length=2, max_length=3)
     requires_reference: bool | None = None
     is_active: bool | None = None
+
+
+# ── Admin — Dashboard ──────────────────────────────────────────────
+
+class DashboardSummary(BaseModel):
+    total_sales: float = 0
+    dispatch_count: int = 0
+    avg_ticket: float = 0
+    cash_collected: float = 0
+    non_cash_collected: float = 0
+    active_shifts: int = 0
+    date_from: date
+    date_to: date
+
+
+class SalesByDayItem(BaseModel):
+    date: date
+    total: float
+    count: int
+
+
+class SalesByProductItem(BaseModel):
+    product_name: str
+    product_code: str
+    total_amount: float
+    total_liters: float = 0
+    count: int
+
+
+class SalesByPaymentItem(BaseModel):
+    method_name: str
+    method_code: str
+    total: float
+    count: int
+
+
+class TopCustomerItem(BaseModel):
+    person_id: int | None = None
+    customer_name: str
+    id_number: str | None = None
+    total: float
+    count: int
+
+
+class TopProductItem(BaseModel):
+    product_name: str
+    product_code: str
+    total_amount: float
+    total_liters: float = 0
+    count: int
+
+
+# ── Admin — Reports ─────────────────────────────────────────────────
+
+class ReportSalesItem(BaseModel):
+    order_id: str
+    date: str | None = None
+    dispenser_name: str | None = None
+    grade: str | None = None
+    customer_name: str | None = None
+    id_number: str | None = None
+    plate: str | None = None
+    payment_method: str | None = None
+    amount: float = 0
+    volume: float | None = None
+    status: str
+    sri_status: str | None = None
+    access_key: str | None = None
+
+
+class ReportDispatchItem(BaseModel):
+    order_id: str
+    date: str | None = None
+    shift_id: int
+    dispenser_name: str | None = None
+    hose_side: str | None = None
+    grade: str | None = None
+    customer_name: str | None = None
+    id_number: str | None = None
+    plate: str | None = None
+    payment_method: str | None = None
+    amount: float = 0
+    volume: float | None = None
+    unit_price: float | None = None
+    tax_amount: float | None = None
+    status: str
+    sri_status: str | None = None
+    access_key: str | None = None
+    credit_status: str | None = None
+    authorized_by: str | None = None
+
+
+class ReportShiftItem(BaseModel):
+    shift_id: int
+    user_name: str
+    opened_at: str | None = None
+    closed_at: str | None = None
+    status: str
+    opening_cash: float = 0
+    collected: float = 0
+    surplus: float = 0
+    shortage: float = 0
+    dispatch_count: int = 0
+
+
+class ReportCashSummaryItem(BaseModel):
+    shift_id: int
+    user_name: str
+    type: str
+    amount: float = 0
+    observation: str | None = None
+    date: str | None = None
+    running_balance: float = 0
