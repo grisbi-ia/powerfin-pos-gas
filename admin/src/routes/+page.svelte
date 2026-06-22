@@ -30,8 +30,8 @@
         <div class="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center mx-auto mb-3">
           <span class="text-white font-bold text-xl">P</span>
         </div>
-        <h1 class="text-xl font-semibold text-gray-900">Powerfin Admin</h1>
-        <p class="text-sm text-gray-500 mt-1">Acceso administrativo</p>
+        <h1 class="text-xl font-semibold text-gray-900">Powerfin GAS</h1>
+        <p class="text-sm text-gray-500 mt-1">Admin</p>
       </div>
 
       <form onsubmit={handleSubmit} class="space-y-4">

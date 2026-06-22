@@ -2,10 +2,17 @@
   import { Menu, LayoutDashboard, Users, Shield, Package, Ruler, DollarSign, Truck, FileCode, Building2, Settings, CreditCard, BarChart3, LogOut } from 'lucide-svelte';
   import { currentUser, logout } from '$stores/auth';
   import { page } from '$app/stores';
+  import { onMount } from 'svelte';
+  import { api } from '$lib/api/api';
 
   let { children } = $props();
-
   let mobileOpen = $state(false);
+  let companyName = $state('NEOGAS');
+
+  $effect(() => { (async () => {
+    try { const c = await api.get<any>('/company-info'); companyName = c.commercial_name || c.name || 'NEOGAS'; } catch {}
+  })();
+  });
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -40,8 +47,8 @@
     <div class="flex items-center gap-3 px-6 py-5 border-b border-primary-700">
       <div class="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center font-bold text-sm">P</div>
       <div>
-        <div class="font-semibold text-sm">Powerfin Admin</div>
-        <div class="text-xs text-primary-200">Gestión</div>
+        <div class="font-semibold text-sm">Powerfin GAS</div>
+        <div class="text-xs text-primary-200">{companyName}</div>
       </div>
     </div>
 
@@ -70,10 +77,13 @@
 
   <div class="flex-1 flex flex-col min-w-0">
     <header class="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between">
-      <button class="lg:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg"
-              onclick={() => mobileOpen = !mobileOpen}>
-        <Menu class="w-5 h-5" />
-      </button>
+      <div class="flex items-center gap-3">
+        <button class="lg:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 rounded-lg"
+                onclick={() => mobileOpen = !mobileOpen}>
+          <Menu class="w-5 h-5" />
+        </button>
+        <span class="text-sm font-semibold text-gray-700 hidden sm:block lg:hidden">{companyName}</span>
+      </div>
       <div class="flex-1"></div>
       <div class="flex items-center gap-3">
         {#if $currentUser}
