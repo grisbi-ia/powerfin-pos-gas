@@ -122,7 +122,7 @@
         api.get<any[]>(`/dashboard/sales-by-hour?date=${today}`),
         api.get<any[]>(`/dashboard/sales-by-payment?date_from=${today}&date_to=${today}`),
         api.get<any>(`/reports/sales?date_from=${today}&date_to=${today}&page_size=10`),
-        api.get<any>(`/reports/shifts?date_from=${today}&date_to=${today}&page_size=50`),
+        api.get<any>(`/reports/shifts?date_from=${today}&date_to=${today}&closed_date_from=${today}&closed_date_to=${today}&page_size=50`),
       ]);
       todaySummary = tSum; yesterdaySummary = ySum; lastDispatches = dispatches.items || [];
       todayShifts = shifts.items || []; loading = false;
@@ -203,7 +203,7 @@
         <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Turnos de Hoy</h3>
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Turno</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Apertura</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cierre</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Cobrado</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Sobrante</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Faltante</th></tr></thead>
+            <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Turno</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Apertura</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cierre</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Sobrante</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Faltante</th></tr></thead>
             <tbody class="divide-y divide-gray-100">
               {#each todayShifts as s}
                 <tr class="hover:bg-gray-50">
@@ -212,7 +212,6 @@
                   <td class="px-4 py-2 text-gray-600">{s.opened_at ? new Date(s.opened_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
                   <td class="px-4 py-2 text-gray-600">{s.closed_at ? new Date(s.closed_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
                   <td class="px-4 py-2">{#if s.status === 'OPEN'}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Abierto</span>{:else}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Cerrado</span>{/if}</td>
-                  <td class="px-4 py-2 text-right font-mono text-gray-900">{s.collected > 0 ? formatCurrency(s.collected) : '—'}</td>
                   <td class="px-4 py-2 text-right font-mono text-green-600">{s.surplus > 0 ? formatCurrency(s.surplus) : '—'}</td>
                   <td class="px-4 py-2 text-right font-mono text-red-600">{s.shortage > 0 ? formatCurrency(s.shortage) : '—'}</td>
                 </tr>

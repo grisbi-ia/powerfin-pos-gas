@@ -289,6 +289,8 @@ async def dispatches_report(
 async def shifts_report(
     date_from: date = Query(default=None),
     date_to: date = Query(default=None),
+    closed_date_from: date = Query(default=None, description="Filter by closed date"),
+    closed_date_to: date = Query(default=None, description="Filter by closed date"),
     status: str = Query("", description="OPEN, CLOSED, or empty for all"),
     search: str = Query("", description="Search by user name"),
     page: int = Query(1, ge=1),
@@ -304,12 +306,22 @@ async def shifts_report(
         base = base.where(Shift.status == status)
         count_q = count_q.where(Shift.status == status)
 
+    # Build date conditions: opened date OR closed date
+    from sqlalchemy import or_
+    date_conditions = []
     if date_from:
-        base = base.where(func.date(Shift.opened_at) >= date_from)
-        count_q = count_q.where(func.date(Shift.opened_at) >= date_from)
+        date_conditions.append(func.date(Shift.opened_at) >= date_from)
     if date_to:
-        base = base.where(func.date(Shift.opened_at) <= date_to)
-        count_q = count_q.where(func.date(Shift.opened_at) <= date_to)
+        date_conditions.append(func.date(Shift.opened_at) <= date_to)
+    if closed_date_from:
+        date_conditions.append(func.date(Shift.closed_at) >= closed_date_from)
+    if closed_date_to:
+        date_conditions.append(func.date(Shift.closed_at) <= closed_date_to)
+
+    if date_conditions:
+        combined = date_conditions[0] if len(date_conditions) == 1 else or_(*date_conditions)
+        base = base.where(combined)
+        count_q = count_q.where(combined)
 
     if search:
         pattern = f"%{search.strip().lower()}%"
