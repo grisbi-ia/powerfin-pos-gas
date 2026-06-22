@@ -16,6 +16,8 @@ from app.api.shifts import router as shifts_router
 from app.api.vehicles import router as vehicles_router
 
 from app.api.admin.auth import router as admin_auth_router
+from app.api.admin.products import router as admin_products_router
+from app.api.admin.roles import router as admin_roles_router
 from app.api.admin.users import router as admin_users_router
 
 router = APIRouter()
@@ -33,4 +35,6 @@ router.include_router(cash_router)
 router.include_router(credit_router)
 router.include_router(products_router)
 router.include_router(admin_auth_router)
+router.include_router(admin_products_router)
+router.include_router(admin_roles_router)
 router.include_router(admin_users_router)

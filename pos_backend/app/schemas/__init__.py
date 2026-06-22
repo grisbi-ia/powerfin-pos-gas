@@ -647,3 +647,91 @@ class UpdateUserRequest(BaseModel):
     role_id: int | None = None
     accounting_cash_code: str | None = None
     is_active: bool | None = None
+
+
+# ── Admin — Roles ─────────────────────────────────────────────────
+
+class AdminRoleListItem(BaseModel):
+    role_id: int
+    code: str
+    name: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminRoleDetail(BaseModel):
+    role_id: int
+    code: str
+    name: str
+    permissions_json: dict | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreateRoleRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Z_]+$")
+    name: str = Field(min_length=2, max_length=100)
+    permissions_json: dict | None = None
+    is_active: bool = True
+
+
+class UpdateRoleRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    permissions_json: dict | None = None
+    is_active: bool | None = None
+
+
+# ── Admin — Products ───────────────────────────────────────────────
+
+class AdminProductListItem(BaseModel):
+    product_id: int
+    code: str
+    name: str
+    category_id: int
+    category_name: str
+    unit: str
+    base_price: float
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdminProductDetail(BaseModel):
+    product_id: int
+    code: str
+    name: str
+    category_id: int
+    category_name: str
+    is_fuel: bool
+    unit: str
+    base_price: float
+    subsidy_per_unit: float | None = None
+    tax_type_id: int | None = None
+    tax_type_name: str | None = None
+    tax_rate: float | None = None
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CreateProductRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Z0-9_]+$")
+    name: str = Field(min_length=2, max_length=150)
+    category_id: int
+    unit: str = "UNIDAD"
+    base_price: float = Field(default=0, ge=0)
+    subsidy_per_unit: float | None = Field(default=None, ge=0)
+    tax_type_id: int | None = None
+    is_active: bool = True
+
+
+class UpdateProductRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=150)
+    category_id: int | None = None
+    unit: str | None = None
+    base_price: float | None = Field(default=None, ge=0)
+    subsidy_per_unit: float | None = None
+    tax_type_id: int | None = None
+    is_active: bool | None = None
