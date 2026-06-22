@@ -37,7 +37,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   if (res.status === 401) {
     clearToken();
-    if (typeof window !== 'undefined') window.location.href = '/login';
+    if (typeof window !== 'undefined') window.location.href = '/';
     throw new Error('Sesión expirada');
   }
 

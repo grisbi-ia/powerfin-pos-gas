@@ -7,8 +7,8 @@
   let { children } = $props();
 
   $effect(() => {
-    if (!$isAuthenticated && $page.url.pathname !== '/login') {
-      goto('/login');
+    if (!$isAuthenticated && $page.url.pathname !== '/') {
+      goto('/');
     }
   });
 </script>
