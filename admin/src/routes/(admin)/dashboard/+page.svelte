@@ -4,7 +4,7 @@
   import { DollarSign, ShoppingCart, Receipt, Users, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
   import KpiCard from '$components/KpiCard.svelte';
 
-  let viewMode = $state<'month' | 'today'>('month');
+  let viewMode = $state<'month' | 'today'>('today');
   let loading = $state(true);
   let error = $state('');
 
@@ -148,8 +148,8 @@
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
     <div class="flex bg-gray-100 rounded-lg p-1">
-      <button class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {viewMode==='month'?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}" onclick={()=>viewMode='month'}>Mes</button>
       <button class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {viewMode==='today'?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}" onclick={()=>viewMode='today'}>Hoy</button>
+      <button class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {viewMode==='month'?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}" onclick={()=>viewMode='month'}>Mes</button>
     </div>
   </div>
 
