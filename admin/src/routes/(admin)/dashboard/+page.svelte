@@ -20,6 +20,7 @@
   let salesByHourCanvas = $state<HTMLCanvasElement>();
   let todayPaymentCanvas = $state<HTMLCanvasElement>();
   let lastDispatches: any[] = [];
+  let todayShifts: any[] = [];
 
   const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899'];
 
@@ -115,14 +116,16 @@
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     try {
-      const [tSum, ySum, byHour, byPayment, dispatches] = await Promise.all([
+      const [tSum, ySum, byHour, byPayment, dispatches, shifts] = await Promise.all([
         api.get<any>(`/dashboard/summary?date_from=${today}&date_to=${today}`),
         api.get<any>(`/dashboard/summary?date_from=${yesterday}&date_to=${yesterday}`).catch(() => null),
         api.get<any[]>(`/dashboard/sales-by-hour?date=${today}`),
         api.get<any[]>(`/dashboard/sales-by-payment?date_from=${today}&date_to=${today}`),
         api.get<any>(`/reports/sales?date_from=${today}&date_to=${today}&page_size=10`),
+        api.get<any>(`/reports/shifts?date_from=${today}&date_to=${today}&page_size=50`),
       ]);
-      todaySummary = tSum; yesterdaySummary = ySum; lastDispatches = dispatches.items || []; loading = false;
+      todaySummary = tSum; yesterdaySummary = ySum; lastDispatches = dispatches.items || [];
+      todayShifts = shifts.items || []; loading = false;
 
       const { Chart, registerables } = await import('chart.js');
       Chart.register(...registerables);
@@ -193,6 +196,31 @@
         <div class="relative h-64 md:h-72"><canvas bind:this={todayPaymentCanvas}></canvas></div>
       </div>
     </div>
+
+    <!-- Today shifts -->
+    {#if todayShifts.length > 0}
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Turnos de Hoy</h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Turno</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Apertura</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cierre</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Sobrante</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Faltante</th></tr></thead>
+            <tbody class="divide-y divide-gray-100">
+              {#each todayShifts as s}
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-2 font-mono text-gray-900">#{s.shift_id}</td>
+                  <td class="px-4 py-2 text-gray-700">{s.user_name || '—'}</td>
+                  <td class="px-4 py-2 text-gray-600">{s.opened_at ? new Date(s.opened_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                  <td class="px-4 py-2 text-gray-600">{s.closed_at ? new Date(s.closed_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                  <td class="px-4 py-2">{#if s.status === 'OPEN'}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Abierto</span>{:else}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Cerrado</span>{/if}</td>
+                  <td class="px-4 py-2 text-right font-mono text-green-600">{s.surplus > 0 ? formatCurrency(s.surplus) : '—'}</td>
+                  <td class="px-4 py-2 text-right font-mono text-red-600">{s.shortage > 0 ? formatCurrency(s.shortage) : '—'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {/if}
 
     <!-- Last dispatches -->
     {#if lastDispatches.length > 0}
