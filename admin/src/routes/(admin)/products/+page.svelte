@@ -6,7 +6,7 @@
   import StatusBadge from '$components/StatusBadge.svelte';
   import ConfirmDialog from '$components/ConfirmDialog.svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   interface ProductItem { product_id: number; code: string; name: string; category_name: string; unit: string; base_price: number; is_active: boolean; }
 

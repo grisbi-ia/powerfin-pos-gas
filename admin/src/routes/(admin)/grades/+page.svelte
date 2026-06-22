@@ -5,7 +5,7 @@
   import DataTable from '$components/DataTable.svelte';
   import ConfirmDialog from '$components/ConfirmDialog.svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   interface Item { grade_id:number; code:string; name:string; product_name:string; is_active:boolean }
   let items=$state<Item[]>([]); let total=$state(0); let page=$state(1); let pages=$state(1);

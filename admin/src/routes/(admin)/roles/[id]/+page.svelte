@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   let roleId=$derived($page.params.id); let isNew=$derived(roleId==='new');
   let form=$state({code:'',name:'',permissions_json:null as any,is_active:true});

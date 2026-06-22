@@ -4,7 +4,7 @@
   import { formatCurrency, formatDate } from '$lib/utils/format';
   import { DollarSign, ShoppingCart, Users, Wallet, Download } from 'lucide-svelte';
   import DataTable from '$components/DataTable.svelte';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   let activeTab = $state<'sales'|'dispatches'|'shifts'|'cash'>('sales');
   let items=$state<any[]>([]); let total=$state(0); let page=$state(1); let pages=$state(1);

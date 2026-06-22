@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   let epId=$derived($page.params.id); let isNew=$derived(epId==='new');
   let form=$state({establishment:'',emission_point:'',doc_type:'FACTURA',sequential_start:1,sequential_end:9999,current_sequential:1,is_active:true});

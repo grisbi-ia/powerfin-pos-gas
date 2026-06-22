@@ -26,8 +26,6 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "chart.js": "^4.4.7",
-    "svelte-chartjs": "^3.1.5",
-    "svelte-sonner": "^0.3.28"
+    "chart.js": "^4.4.7"
   }
 }

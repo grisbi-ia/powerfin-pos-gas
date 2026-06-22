@@ -5,7 +5,7 @@
   import DataTable from '$components/DataTable.svelte';
   import ConfirmDialog from '$components/ConfirmDialog.svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   interface Item { dispenser_id:number; code:string; name:string; emission_point_label:string|null; printer_ip:string|null; hose_count:number; sort_order:number; is_active:boolean }
   let items=$state<Item[]>([]); let total=$state(0); let page=$state(1); let pages=$state(1);

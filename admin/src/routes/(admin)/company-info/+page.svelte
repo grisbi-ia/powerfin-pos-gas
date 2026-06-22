@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Save, Building2 } from 'lucide-svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   let form = $state({ ruc:'', name:'', commercial_name:'', address:'', phone:'', email:'', city:'', province:'', country:'', fiscal_regime:'', sri_environment: null as number|null, emission_type: null as number|null });
   let loading = $state(true); let saving = $state(false); let error = $state('');

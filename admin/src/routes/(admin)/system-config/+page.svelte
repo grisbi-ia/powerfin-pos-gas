@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Check, X, Save } from 'lucide-svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   interface ConfigItem { key:string; value:string; description:string|null }
   let configs = $state<ConfigItem[]>([]);

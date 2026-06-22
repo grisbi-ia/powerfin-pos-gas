@@ -6,7 +6,7 @@
   import StatusBadge from '$components/StatusBadge.svelte';
   import ConfirmDialog from '$components/ConfirmDialog.svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
   import type { PaginatedResponse, UserListItem } from '$lib/types';
 
   let items = $state<UserListItem[]>([]);

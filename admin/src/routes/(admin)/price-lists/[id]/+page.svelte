@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-svelte';
   import { api } from '$lib/api/api';
-  import { toast } from 'svelte-sonner';
+  import { toast } from '$lib/utils/toast';
 
   let plId=$derived($page.params.id); let isNew=$derived(plId==='new');
   let form=$state({code:'',name:'',is_default:false,is_active:true});
