@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
@@ -10,7 +9,8 @@
   let form=$state({code:'',name:'',permissions_json:null as any,is_active:true});
   let loading=$state(false); let error=$state('');
 
-  onMount(async()=>{if(!isNew){try{const r=await api.get<any>(`/roles/${roleId}`);form={code:r.code,name:r.name,permissions_json:r.permissions_json,is_active:r.is_active};}catch(e:any){error=e.message;}}});
+  async function init(){if(!isNew){try{const r=await api.get<any>(`/roles/${roleId}`);form={code:r.code,name:r.name,permissions_json:r.permissions_json,is_active:r.is_active};}catch(e:any){error=e.message;}}}
+  $effect(() => { init(); });
 
   async function handleSubmit(e:Event){e.preventDefault();loading=true;error='';
     try{const body:any={name:form.name,permissions_json:form.permissions_json,is_active:form.is_active};

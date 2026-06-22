@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
@@ -14,7 +13,7 @@
   let form = $state({ code: '', name: '', category_id: 0, unit: 'UNIDAD', base_price: 0, subsidy_per_unit: null as number|null, tax_type_id: null as number|null, is_active: true });
   let loading = $state(false); let error = $state('');
 
-  onMount(async () => {
+  $effect(() => { (async () => {
     try { const c = await api.get<{items:Option[]}>('/products?page_size=100'); /* reuse existing */ } catch {}
     try { const r = await api.get<{items:Option[]}>('/../product-categories'); categories = Array.isArray(r)?r:(r as any).items||[]; } catch {}
     try { const t = await api.get<any[]>('/../tax-types'); taxTypes = t||[]; } catch { taxTypes = [{tax_type_id:1,code:'IVA_15',name:'IVA 15%'},{tax_type_id:2,code:'IVA_0',name:'IVA 0%'}]; }
@@ -24,7 +23,8 @@
         form = { code: p.code, name: p.name, category_id: p.category_id, unit: p.unit, base_price: p.base_price, subsidy_per_unit: p.subsidy_per_unit, tax_type_id: p.tax_type_id, is_active: p.is_active };
       } catch (e: any) { error = e.message; }
     }
-  });
+  })();
+});
 
   async function handleSubmit(e: Event) {
     e.preventDefault(); loading = true; error = '';

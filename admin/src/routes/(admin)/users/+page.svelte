@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { Pencil, Trash2 } from 'lucide-svelte';
   import DataTable from '$components/DataTable.svelte';
@@ -57,7 +56,7 @@
     }
   }
 
-  onMount(load);
+  $effect(() => { load(); });
 </script>
 
 <DataTable title="Usuarios" {items} {columns} {loading} {error} {total} {page} {pages}

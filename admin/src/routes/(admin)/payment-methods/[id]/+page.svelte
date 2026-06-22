@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
@@ -10,7 +9,8 @@
   let form=$state({code:'',name:'',sri_code:'20',requires_reference:false,is_active:true});
   let loading=$state(false); let error=$state('');
 
-  onMount(async()=>{if(!isNew){try{const r=await api.get<any>(`/payment-methods/${pmId}`);form={code:r.code,name:r.name,sri_code:r.sri_code,requires_reference:r.requires_reference,is_active:r.is_active}}catch(e:any){error=e.message}}});
+  async function init(){if(!isNew){try{const r=await api.get<any>(`/payment-methods/${pmId}`);form={code:r.code,name:r.name,sri_code:r.sri_code,requires_reference:r.requires_reference,is_active:r.is_active}}catch(e:any){error=e.message}}}
+  $effect(() => { init(); });
 
   async function handleSubmit(e:Event){e.preventDefault();loading=true;error='';
     try{const body:any={name:form.name,sri_code:form.sri_code,requires_reference:form.requires_reference,is_active:form.is_active};

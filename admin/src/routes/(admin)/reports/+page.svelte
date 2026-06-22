@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { api } from '$lib/api/api';
   import { formatCurrency, formatDate } from '$lib/utils/format';
   import { DollarSign, ShoppingCart, Users, Wallet, Download } from 'lucide-svelte';
@@ -132,5 +131,7 @@
 
   <DataTable title="" {items} columns={cols[activeTab]} {loading}{error}{total}{page}{pages}{search} sortKey="" sortOrder="asc"
     onSearch={(q:string)=>{search=q;page=1;load()}} onSort={()=>{}}
-    onPage={(p:number)=>{page=p;load()}} onCreate={()=>{}} createLabel="" />
+    onPage={(p:number)=>{page=p;load()}} onCreate={()=>{}} createLabel="">
+    {#snippet children(_: any)}{/snippet}
+  </DataTable>
 </div>

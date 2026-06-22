@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { Pencil, Trash2 } from 'lucide-svelte';
   import DataTable from '$components/DataTable.svelte';
@@ -14,7 +13,7 @@
 
   async function load(){loading=true;error='';try{const d=await api.get<any>(`/grades?search=${encodeURIComponent(search)}&page=${page}&page_size=10&sort=${sortKey}&order=${sortOrder}`);items=d.items;total=d.total;pages=d.pages}catch(e:any){error=e.message}finally{loading=false}}
   async function handleDelete(){if(!deleteTarget)return;try{await api.delete(`/grades/${deleteTarget.grade_id}`);toast.success('Grado desactivado');deleteTarget=null;load()}catch(e:any){toast.error(e.message)}}
-  onMount(load);
+  $effect(() => { load(); });
 </script>
 <DataTable title="Grados" {items} columns={[{key:'name',label:'Nombre',sortable:true},{key:'code',label:'Código',sortable:true},{key:'product_name',label:'Producto'},{key:'is_active',label:'Estado',sortable:true}]}
   {loading}{error}{total}{page}{pages}{search}{sortKey}{sortOrder}

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-svelte';
@@ -14,10 +13,11 @@
   let newItem=$state({product_id:0,unit_price:0});
   let savingItem=$state(false);
 
-  onMount(async()=>{
+  $effect(() => { (async () => {
     try{const d=await api.get<any>('/products?page_size=100');products=d.items||[]}catch{}
     if(!isNew){try{const r=await api.get<any>(`/price-lists/${plId}`);form={code:r.code,name:r.name,is_default:r.is_default,is_active:r.is_active};items=r.items||[]}catch(e:any){error=e.message}}
-  });
+  })();
+});
 
   async function handleSubmit(e:Event){e.preventDefault();loading=true;error='';
     try{const body:any={name:form.name,is_default:form.is_default,is_active:form.is_active};

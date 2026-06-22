@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
@@ -10,7 +9,10 @@
   let form=$state({establishment:'',emission_point:'',doc_type:'FACTURA',sequential_start:1,sequential_end:9999,current_sequential:1,is_active:true});
   let loading=$state(false); let error=$state('');
 
-  onMount(async()=>{if(!isNew){try{const r=await api.get<any>(`/emission-points/${epId}`);form={establishment:r.establishment,emission_point:r.emission_point,doc_type:r.doc_type,sequential_start:r.sequential_start,sequential_end:r.sequential_end,current_sequential:r.current_sequential,is_active:r.is_active}}catch(e:any){error=e.message}}});
+  async function init() {
+    if(!isNew){try{const r=await api.get<any>(`/emission-points/${epId}`);form={establishment:r.establishment,emission_point:r.emission_point,doc_type:r.doc_type,sequential_start:r.sequential_start,sequential_end:r.sequential_end,current_sequential:r.current_sequential,is_active:r.is_active}}catch(e:any){error=e.message}}
+  }
+  $effect(() => { init(); });
 
   async function handleSubmit(e:Event){e.preventDefault();loading=true;error='';
     try{const body:any={doc_type:form.doc_type,sequential_start:form.sequential_start,sequential_end:form.sequential_end,current_sequential:form.current_sequential,is_active:form.is_active};

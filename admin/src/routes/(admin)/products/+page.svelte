@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { Pencil, Trash2 } from 'lucide-svelte';
   import DataTable from '$components/DataTable.svelte';
@@ -28,7 +27,7 @@
     try { await api.delete(`/products/${deleteTarget.product_id}`); toast.success('Producto desactivado'); deleteTarget = null; load(); }
     catch (e: any) { toast.error(e.message); }
   }
-  onMount(load);
+  $effect(() => { load(); });
 </script>
 
 <DataTable title="Productos" {items} columns={[{key:'name',label:'Nombre',sortable:true},{key:'code',label:'Código',sortable:true},{key:'category_name',label:'Categoría'},{key:'unit',label:'Unidad'},{key:'is_active',label:'Estado',sortable:true}]}

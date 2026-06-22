@@ -15,9 +15,10 @@
 
   const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899'];
 
-  $effect(() => {
+  $effect(() => { (async () => {
     loadDashboard();
-  });
+  })();
+});
 
   async function loadDashboard() {
     try {

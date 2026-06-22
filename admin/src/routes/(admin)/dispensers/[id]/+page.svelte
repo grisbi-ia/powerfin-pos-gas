@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-svelte';
@@ -14,10 +13,11 @@
   let newHose=$state({side:'A',fusion_pump_id:0,fusion_hose_id:0,grade_code:''});
   let savingHose=$state(false);
 
-  onMount(async()=>{
+  $effect(() => { (async () => {
     try{const d=await api.get<any>('/emission-points?page_size=100');emissionPoints=(d.items||[]).map((e:any)=>({emission_point_id:e.emission_point_id,label:e.label}))}catch{}
     if(!isNew){try{const r=await api.get<any>(`/dispensers/${dispId}`);form={code:r.code,name:r.name,emission_point_id:r.emission_point_id,printer_ip:r.printer_ip||'',printer_port:r.printer_port,sort_order:r.sort_order,is_active:r.is_active};hoses=r.hoses||[]}catch(e:any){error=e.message}}
-  });
+  })();
+});
 
   async function handleSubmit(e:Event){e.preventDefault();loading=true;error='';
     try{const body:any={name:form.name,emission_point_id:form.emission_point_id,printer_ip:form.printer_ip||null,printer_port:form.printer_port,sort_order:form.sort_order,is_active:form.is_active};

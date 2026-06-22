@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
@@ -22,7 +21,7 @@
   let loading = $state(false);
   let error = $state('');
 
-  onMount(async () => {
+  $effect(() => { (async () => {
     try {
       const rolesData = await api.get<{ items: RoleOption[] }>('/roles?page_size=100');
       roles = rolesData.items;
@@ -43,7 +42,8 @@
         error = err.message;
       }
     }
-  });
+  })();
+});
 
   async function handleSubmit(e: Event) {
     e.preventDefault();

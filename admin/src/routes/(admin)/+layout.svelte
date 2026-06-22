@@ -6,11 +6,12 @@
 
   let { children } = $props();
 
-  $effect(() => {
+  $effect(() => { (async () => {
     if (!$isAuthenticated && $page.url.pathname !== '/') {
       goto('/');
     }
-  });
+  })();
+});
 </script>
 
 {#if $isAuthenticated}

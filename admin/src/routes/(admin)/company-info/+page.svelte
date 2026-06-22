@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { Save, Building2 } from 'lucide-svelte';
   import { api } from '$lib/api/api';
   import { toast } from '$lib/utils/toast';
@@ -7,7 +6,7 @@
   let form = $state({ ruc:'', name:'', commercial_name:'', address:'', phone:'', email:'', city:'', province:'', country:'', fiscal_regime:'', sri_environment: null as number|null, emission_type: null as number|null });
   let loading = $state(true); let saving = $state(false); let error = $state('');
 
-  onMount(async () => {
+  $effect(() => { (async () => {
     try {
       const data = await api.get<any>('/company-info');
       form = { ruc: data.ruc || '', name: data.name || '', commercial_name: data.commercial_name || '', address: data.address || '',
@@ -15,7 +14,8 @@
                country: data.country || '', fiscal_regime: data.fiscal_regime || '', sri_environment: data.sri_environment,
                emission_type: data.emission_type };
     } catch (e: any) { error = e.message; } finally { loading = false; }
-  });
+  })();
+});
 
   async function handleSubmit(e: Event) {
     e.preventDefault(); saving = true; error = '';

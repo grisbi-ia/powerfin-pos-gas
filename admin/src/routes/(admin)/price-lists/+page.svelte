@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { Pencil, Trash2 } from 'lucide-svelte';
   import DataTable from '$components/DataTable.svelte';
@@ -14,7 +13,7 @@
 
   async function load(){loading=true;error='';try{const d=await api.get<any>(`/price-lists?search=${encodeURIComponent(search)}&page=${page}&page_size=10&sort=${sortKey}&order=${sortOrder}`);items=d.items;total=d.total;pages=d.pages}catch(e:any){error=e.message}finally{loading=false}}
   async function handleDelete(){if(!deleteTarget)return;try{await api.delete(`/price-lists/${deleteTarget.price_list_id}`);toast.success('Lista desactivada');deleteTarget=null;load()}catch(e:any){toast.error(e.message)}}
-  onMount(load);
+  $effect(() => { load(); });
 </script>
 <DataTable title="Listas de Precios" {items} columns={[{key:'name',label:'Nombre',sortable:true},{key:'code',label:'Código',sortable:true},{key:'item_count',label:'Items'},{key:'is_active',label:'Estado',sortable:true}]}
   {loading}{error}{total}{page}{pages}{search}{sortKey}{sortOrder}

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { ArrowLeft, Save } from 'lucide-svelte';
@@ -11,10 +10,11 @@
   let products=$state<{product_id:number;name:string}[]>([]);
   let loading=$state(false); let error=$state('');
 
-  onMount(async()=>{
+  $effect(() => { (async () => {
     try{const d=await api.get<any>('/products?page_size=100');products=d.items||[]}catch{}
     if(!isNew){try{const g=await api.get<any>(`/grades/${gradeId}`);form={code:g.code,name:g.name,product_id:g.product_id,is_active:g.is_active}}catch(e:any){error=e.message}}
-  });
+  })();
+});
 
   async function handleSubmit(e:Event){e.preventDefault();loading=true;error='';
     try{const body:any={name:form.name,product_id:form.product_id,is_active:form.is_active};
@@ -31,7 +31,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="space-y-1"><label class="block text-sm font-medium text-gray-700">Código <span class="text-red-500">*</span></label><input type="text" bind:value={form.code} required disabled={!isNew} class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"/></div>
         <div class="space-y-1"><label class="block text-sm font-medium text-gray-700">Nombre <span class="text-red-500">*</span></label><input type="text" bind:value={form.name} required class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"/></div>
-        <div class="space-y-1"><label class="block text-sm font-medium text-gray-700">Producto <span class="text-red-500">*</span></label><select bind:value={form.product_id} required class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"><option value={0}>Seleccionar...</option>{#each products as p}<option value={p.product_id}>{p.name} ({p.code})</option>{/each}</select></div>
+        <div class="space-y-1"><label class="block text-sm font-medium text-gray-700">Producto <span class="text-red-500">*</span></label><select bind:value={form.product_id} required class="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"><option value={0}>Seleccionar...</option>{#each products as p}<option value={p.product_id}>{p.name}</option>{/each}</select></div>
         <div class="space-y-1 flex items-end pb-1"><label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" bind:checked={form.is_active} class="w-4 h-4 text-primary-500 border-gray-300 rounded"/><span class="text-sm text-gray-700">Activo</span></label></div>
       </div>
       <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">

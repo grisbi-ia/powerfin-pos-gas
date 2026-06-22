@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { Check, X, Save } from 'lucide-svelte';
   import { api } from '$lib/api/api';
   import { toast } from '$lib/utils/toast';
@@ -9,9 +8,10 @@
   let loading = $state(true); let error = $state('');
   let editKey = $state(''); let editValue = $state(''); let editDesc = $state(''); let saving = $state(false);
 
-  onMount(async()=>{
+  $effect(() => { (async () => {
     try { configs = await api.get<ConfigItem[]>('/system-config'); } catch(e:any) { error=e.message; } finally { loading=false; }
-  });
+  })();
+});
 
   function startEdit(item:ConfigItem) { editKey=item.key; editValue=item.value; editDesc=item.description||''; }
   function cancelEdit() { editKey=''; }
