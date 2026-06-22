@@ -173,11 +173,11 @@
     </div>
 
   {:else if viewMode === 'today' && todaySummary}
+    {@const t = trendIcon(todaySummary.total_sales, yesterdaySummary?.total_sales || 0)}
+    {@const d = trendIcon(todaySummary.dispatch_count, yesterdaySummary?.dispatch_count || 0)}
     <!-- TODAY VIEW -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {@const t = trendIcon(todaySummary.total_sales, yesterdaySummary?.total_sales || 0)}
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Ventas Hoy</p><p class="text-xl font-bold text-gray-900 mt-1">{formatCurrency(todaySummary.total_sales)}</p><span class="text-xs {t.color}">{t.pct} vs ayer</span></div>
-      {@const d = trendIcon(todaySummary.dispatch_count, yesterdaySummary?.dispatch_count || 0)}
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Despachos</p><p class="text-xl font-bold text-gray-900 mt-1">{todaySummary.dispatch_count}</p><span class="text-xs {d.color}">{d.pct} vs ayer</span></div>
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Ticket Promedio</p><p class="text-xl font-bold text-gray-900 mt-1">{formatCurrency(todaySummary.avg_ticket)}</p></div>
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Turnos Activos</p><p class="text-xl font-bold text-gray-900 mt-1">{todaySummary.active_shifts}</p></div>
