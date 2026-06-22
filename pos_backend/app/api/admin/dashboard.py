@@ -174,6 +174,33 @@ async def sales_by_day_product(
 # ── Sales by Product ───────────────────────────────────────────────
 
 
+@router.get("/sales-by-hour", response_model=list)
+async def sales_by_hour(
+    date: date = Query(default=None, description="Date to query (defaults to today)"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("dashboard", "read")),
+):
+    """Sales grouped by hour for a given day (bar chart)."""
+    if date is None:
+        date = date.today()
+
+    rows = (await db.execute(
+        select(
+            func.extract("hour", Dispatch.created_at).label("hour"),
+            func.coalesce(func.sum(Dispatch.total), 0).label("total"),
+            func.count(Dispatch.dispatch_id).label("count"),
+        ).where(
+            Dispatch.status == "COLLECTED",
+            func.date(Dispatch.created_at) == date,
+        ).group_by(text("hour")).order_by(text("hour"))
+    )).all()
+
+    return [
+        {"hour": int(row[0]), "total": round(float(row[1]), 2), "count": int(row[2])}
+        for row in rows
+    ]
+
+
 @router.get("/sales-by-product", response_model=list[SalesByProductItem])
 async def sales_by_product(
     date_from: date = Query(default=None),
