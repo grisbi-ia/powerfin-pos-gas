@@ -21,7 +21,7 @@
   async function load(){
     loading=true;error='';items=[];total=0;chartDataReady=false;
     try{
-      let endpoint=''; let params=`search=${encodeURIComponent(search)}&page=${page}&page_size=20`;
+      let endpoint=''; let params=`search=${encodeURIComponent(search)}&page=${page}&page_size=10`;
       if(dateFrom) params+=`&date_from=${dateFrom}`; if(dateTo) params+=`&date_to=${dateTo}`;
 
       if(activeTab==='sales') endpoint=`/reports/sales?${params}`;
