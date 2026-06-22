@@ -252,6 +252,26 @@ async def update_product(
     return await _product_to_detail(product, db)
 
 
+@router.get("/categories", response_model=list)
+async def list_categories(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("products", "read")),
+):
+    """List all product categories (for dropdowns)."""
+    result = await db.execute(select(ProductCategory).order_by(ProductCategory.name))
+    return [{"category_id": c.category_id, "code": c.code, "name": c.name, "is_fuel": c.is_fuel} for c in result.scalars().all()]
+
+
+@router.get("/tax-types", response_model=list)
+async def list_tax_types(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("products", "read")),
+):
+    """List all tax types (for dropdowns)."""
+    result = await db.execute(select(TaxType).order_by(TaxType.name))
+    return [{"tax_type_id": t.tax_type_id, "code": t.code, "name": t.name, "rate": float(t.rate)} for t in result.scalars().all()]
+
+
 @router.delete(
     "/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
