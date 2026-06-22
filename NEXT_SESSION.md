@@ -6,35 +6,9 @@
 
 | Fase | Tag | Descripción |
 |------|-----|-------------|
-| 1 | `v0.1.0` | FusionBridge TCP connection |
-| 2 | — | APIs PowerFin documentadas |
-| 3 | `v0.2.0` | Powerfin POS base |
-| 4 | `v0.3.0` | Flujo de venta completo |
-| 5 | `v0.5.0` | Impresión térmica ESC/POS |
-| 6 | `v0.6.0` | Caja + turnos + historial |
-| 7 | `v0.7.0` | Validación hardware Wayne Synergy |
-| 7.x | `v0.7.1`-`v0.8.3` | Sync, cancel, billing, CF removal |
-| 8 | `v0.9.0` | POS Backend — FastAPI + PostgreSQL |
-| 9a | `v0.10.0` | Dispenser mapping, dispatch_details |
-| 9b | `v0.11.0` | Price lists, wizard reorder |
-| 9c | `v0.12.0` | Cuadre de caja, billing preferencial |
-| 10a | `v0.13.0` | Edge cases: cancel/stop, phone-off |
-| 10b | `v0.14.0` | Impresión ticket completo SRI |
-| 10c | `v0.15.0` | Correcciones subtotal/IVA, saldos |
-| 10d | `v0.16.0` | Key49 facturación electrónica SRI |
-| 10e | `v0.16.1` | Zona horaria, clave Key49, IPs |
-| 10f | `v0.17.0` | Cierre de turno completo |
-| 10g | `v0.18.0` | RecoveryService reconexión |
-| **11** | **`v0.19.0`** | UX, refactors, bugfixes |
-| 11b | `v0.19.1` | Recovery phone-off bug |
-| 11c | `v0.19.2` | 409 Conflict doble autorización |
-| 11d | `v0.19.3` | preset_value persistido |
-| 11e | `v0.19.4` | Despachos $0.00 4-capas |
-| 11f | `v0.19.6` | Wayne payment handshake |
-| 11g | `v0.19.8` | Cancel IDLE+FUELLING |
-| 11h | `v0.19.9` | SQL ventas_turno, deploy fix, CUADRE_CAJA |
-| **12a** | **`v0.24.0`** | Admin auth + users + roles + products CRUD |
-| **12b** | **`v0.25.0`** | **Admin Phase 12 completa — 11 módulos, 51 endpoints, 338 tests** |
+| 1-11 | v0.1.0-v0.19.9 | POS + FusionBridge + Hardware + Edge Cases |
+| **12** | **`v0.25.0`** | **Admin Backend CRUD + Auth — 11 módulos, 51 endpoints, 238 tests admin** |
+| **13** | **`v0.26.0`** | **Admin Dashboard + Reports + Export Engine — 14 endpoints, PDF/Excel, 371 tests** |
 
 ---
 
@@ -301,19 +275,61 @@ para la lista STANDARD. `products.base_price` solo es referencia/fallback.
 
 ---
 
+## Logros de la sesión (2026-06-22, continuación) — v0.26.0
+
+### Phase 13 — Admin Dashboard + Reportes + Export Engine ✅ COMPLETADO
+
+**371 tests pasando, 0 regresiones, flujo de venta 100% intacto.**
+
+Dashboard (6 endpoints + 11 tests):
+- summary: KPI cards (total sales, dispatch count, avg ticket, cash/non-cash)
+- sales-by-day, sales-by-product, sales-by-payment (chart data)
+- top-customers, top-products (with limit)
+
+Reports (4 GET + 4 POST + 22 tests):
+- sales: paginated with filters (date, status, payment, search)
+- dispatches: detailed with all fields (volume, unit_price, tax, SRI, credit)
+- shifts: history with collected/surplus/shortage/dispatch_count
+- cash-summary: consolidated (INCOME, EXPENSE, DEPOSIT, TRANSFERS, SAFE_DROPS)
+
+Export Engine (reportlab 5.0.0 + openpyxl 3.1.5 + pillow 12.2.0):
+- generate_pdf(): landscape A4, styled header, alternating rows
+- generate_excel(): frozen header, auto-fit columns, borders
+- StreamingResponse with correct content-type (PDF/XLSX)
+- format=pdf|xlsx query param on all 4 export endpoints
+
+### Archivos creados/modificados
+
+```
+Nuevos:
+  app/api/admin/dashboard.py          (+6 endpoints, 11 tests)
+  app/api/admin/reports.py            (+4 GET + 4 POST, 22 tests)
+  app/services/export_service.py       (PDF + Excel generators)
+  tests/test_api_admin_dashboard.py
+  tests/test_api_admin_reports.py
+
+Modificados:
+  app/schemas/__init__.py  (+12 schemas: Dashboard + Reports)
+  app/api/router.py        (+2 includes)
+  docs/admin/ADMIN_ROADMAP.md
+```
+
+---
+
 ## Pendiente para próxima sesión
 
 ### 🟡 Backlog
 
 ```
 ☐ 1. Pago mixto (efectivo + tarjeta)
-☐ 2. identity_service.py — mover URL y token a .env o system_config
-☐ 3. Roles/permisos — implementar enforcement real:
-   · ADMIN: todo
-   · SUPERVISOR: ventas, reportes, cierre de turno, SRI retry
-   · DISPATCHER: ventas, cierre de turno
+☐ 2. identity_service.py — mover URL y token a system_config
+☐ 3. Roles/permisos — enforcement real en POS endpoints
 ☐ 4. Flujo de crédito en el POS — selector en SaleWizard
-☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar manualmente
+☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar
+☐ 6. Phase 14 — Admin Frontend (proyecto SvelteKit admin/)
+☐ 7. Phase 15 — Admin Frontend Dashboard (Chart.js)
+☐ 8. Phase 16 — Admin Frontend Reportes + Export
+☐ 9. Phase 17 — Cloudflare + Deploy + Go-live
 ```
 
 ---

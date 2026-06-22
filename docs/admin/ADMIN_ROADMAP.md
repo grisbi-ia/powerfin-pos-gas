@@ -6,9 +6,9 @@
 
 ```
 Última actualización: 2026-06-22
-Fase actual: 12 — Admin Backend CRUD + Auth ✅ COMPLETADA
-Progreso:  ████████████████████  11/11 recursos CRUD
-Tag: v0.25.0
+Fase actual: 13 — Admin Backend Dashboard + Reportes ✅ COMPLETADA
+Progreso:  ████████████████████  Fases 12-13 completadas
+Tag: v0.26.0
 ```
 
 ---
@@ -127,33 +127,46 @@ Tag: v0.25.0
 
 ---
 
-## FASE 13 — Admin Backend Dashboard + Reportes `[v0.23.0]`
+## FASE 13 — Admin Backend Dashboard + Reportes `[v0.26.0]`
 
-### 13.1 Dashboard
+### 13.1 Dashboard ✅
 
-- [ ] `GET /api/admin/dashboard/summary?date_from=&date_to=`
-- [ ] `GET /api/admin/dashboard/sales-by-day?date_from=&date_to=`
-- [ ] `GET /api/admin/dashboard/sales-by-product?date_from=&date_to=`
-- [ ] `GET /api/admin/dashboard/sales-by-payment?date_from=&date_to=`
-- [ ] `GET /api/admin/dashboard/top-customers?date_from=&date_to=&limit=`
-- [ ] `GET /api/admin/dashboard/top-products?date_from=&date_to=&limit=`
+- [x] `GET /api/admin/dashboard/summary?date_from=&date_to=`
+- [x] `GET /api/admin/dashboard/sales-by-day?date_from=&date_to=`
+- [x] `GET /api/admin/dashboard/sales-by-product?date_from=&date_to=`
+- [x] `GET /api/admin/dashboard/sales-by-payment?date_from=&date_to=`
+- [x] `GET /api/admin/dashboard/top-customers?date_from=&date_to=&limit=`
+- [x] `GET /api/admin/dashboard/top-products?date_from=&date_to=&limit=`
+- [x] 11 tests dashboard
 
-### 13.2 Reportes
+### 13.2 Reportes ✅
 
-- [ ] `GET /api/admin/reports/sales` — paginado con filtros
-- [ ] `POST /api/admin/reports/sales/export` — PDF + Excel
-- [ ] `GET /api/admin/reports/dispatches` — detalle con filtros
-- [ ] `POST /api/admin/reports/dispatches/export` — PDF + Excel
-- [ ] `GET /api/admin/reports/shifts` — histórico
-- [ ] `POST /api/admin/reports/shifts/export` — PDF + Excel
-- [ ] `GET /api/admin/reports/cash-summary` — flujo consolidado
-- [ ] `POST /api/admin/reports/cash-summary/export` — PDF + Excel
+- [x] `GET /api/admin/reports/sales` — paginado con filtros (date, status, payment, search)
+- [x] `POST /api/admin/reports/sales/export` — PDF + Excel
+- [x] `GET /api/admin/reports/dispatches` — detalle con filtros (date, status, search)
+- [x] `POST /api/admin/reports/dispatches/export` — PDF + Excel
+- [x] `GET /api/admin/reports/shifts` — histórico con collected/surplus/shortage
+- [x] `POST /api/admin/reports/shifts/export` — PDF + Excel
+- [x] `GET /api/admin/reports/cash-summary` — flujo consolidado (INCOME, EXPENSE, DEPOSIT, etc.)
+- [x] `POST /api/admin/reports/cash-summary/export` — PDF + Excel
+- [x] 22 tests reports
 
-### 13.3 Export Engine
+### 13.3 Export Engine ✅
 
-- [ ] PDF engine (reportlab) — logo, header, tabla, footer
-- [ ] Excel engine (openpyxl) — estilos, auto-filtro, congelar paneles
-- [ ] Tests export
+- [x] PDF engine (reportlab) — landscape A4, header, tabla, filas alternadas
+- [x] Excel engine (openpyxl) — frozen header, auto-fit, bordes, estilos
+- [x] StreamingResponse con content-type correcto
+- [x] Dependencias: reportlab 5.0.0, openpyxl 3.1.5, pillow 12.2.0
+
+### Criterio de salida Fase 13
+
+```
+✅ Dashboard con 6 endpoints y filtros de fecha
+✅ Reportes con 4 GET + 4 POST export (PDF + Excel)
+✅ Export engine con reportlab + openpyxl
+✅ Tests: 371 pasando (93 POS + 242 admin + 36 otros)
+✅ git tag v0.26.0
+```
 
 ---
 
