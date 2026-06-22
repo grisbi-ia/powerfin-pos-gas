@@ -132,6 +132,45 @@ async def sales_by_day(
     ]
 
 
+@router.get("/sales-by-day-product", response_model=list)
+async def sales_by_day_product(
+    date_from: date = Query(default=None),
+    date_to: date = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("dashboard", "read")),
+):
+    """Sales by day AND product for multi-line chart."""
+    if date_from is None or date_to is None:
+        date_from, date_to = _default_date_range()
+
+    rows = (await db.execute(
+        select(
+            func.date(Dispatch.created_at).label("day"),
+            Product.name.label("product_name"),
+            Product.code.label("product_code"),
+            func.coalesce(func.sum(DispatchDetail.total), 0).label("total"),
+        ).select_from(DispatchDetail)
+        .join(Dispatch, DispatchDetail.dispatch_id == Dispatch.dispatch_id)
+        .join(Product, DispatchDetail.product_id == Product.product_id)
+        .where(
+            Dispatch.status == "COLLECTED",
+            func.date(Dispatch.created_at) >= date_from,
+            func.date(Dispatch.created_at) <= date_to,
+        ).group_by(text("day"), Product.name, Product.code)
+        .order_by(text("day"), Product.name)
+    )).all()
+
+    result = []
+    for row in rows:
+        result.append({
+            "date": str(row[0]),
+            "product_name": row[1],
+            "product_code": row[2],
+            "total": round(float(row[3]), 2),
+        })
+    return result
+
+
 # ── Sales by Product ───────────────────────────────────────────────
 
 

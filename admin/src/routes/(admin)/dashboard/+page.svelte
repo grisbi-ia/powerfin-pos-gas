@@ -49,9 +49,10 @@
 
   async function loadDashboard() {
     try {
-      const [sum, byDay, byProduct, byPayment, topCust] = await Promise.all([
+      const [sum, byDay, byDayProduct, byProduct, byPayment, topCust] = await Promise.all([
         api.get<any>('/dashboard/summary'),
         api.get<any[]>('/dashboard/sales-by-day'),
+        api.get<any[]>('/dashboard/sales-by-day-product'),
         api.get<any[]>('/dashboard/sales-by-product'),
         api.get<any[]>('/dashboard/sales-by-payment'),
         api.get<any[]>('/dashboard/top-customers?limit=8'),
@@ -63,9 +64,24 @@
       Chart.register(...registerables);
 
       if (byDay.length && salesByDayCanvas) {
+        // Build datasets: total line + one line per product
+        const dates = [...new Set(byDayProduct.map((d:any)=>d.date))].sort();
+        const products = [...new Set(byDayProduct.map((d:any)=>d.product_name))];
+        const productColors = ['#22c55e','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899','#3b82f6'];
+
+        const datasets: any[] = [
+          { label:'Total', data:dates.map(date=>{ const found=byDay.find((d:any)=>d.date===date); return found?found.total:0 }), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:false, tension:0.3, pointRadius:3, borderWidth:2.5 },
+        ];
+        products.forEach((product,i)=>{
+          datasets.push({
+            label:product, data:dates.map(date=>{ const found=byDayProduct.find((d:any)=>d.date===date&&d.product_name===product); return found?found.total:0 }),
+            borderColor:productColors[i%productColors.length], backgroundColor:'transparent', fill:false, tension:0.3, pointRadius:2, borderWidth:2, borderDash:[4,2]
+          });
+        });
+
         new Chart(salesByDayCanvas, {
-          type: 'line', data: { labels: byDay.map((d:any)=>d.date), datasets: [{ label:'Ventas', data:byDay.map((d:any)=>d.total), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3 }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ ticks:{ callback:(v:any)=>'$'+v } } } }
+          type: 'line', data: { labels:dates, datasets },
+          options: { responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{ position:'bottom', labels:{ usePointStyle:true, padding:12, font:{ size:11 } } } }, scales:{ y:{ ticks:{ callback:(v:any)=>'$'+v } } } }
         });
       }
       if (byProduct.length && salesByProductCanvas) {
