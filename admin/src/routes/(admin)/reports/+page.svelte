@@ -14,11 +14,12 @@
   let totalAmount=$state(0); let itemCount=$state(0);
 
   // Chart
-  let chartCanvas: HTMLCanvasElement;
+  let chartCanvas = $state<HTMLCanvasElement>();
   let chartInstance: any = null;
+  let chartDataReady = $state(false);
 
   async function load(){
-    loading=true;error='';items=[];total=0;
+    loading=true;error='';items=[];total=0;chartDataReady=false;
     try{
       let endpoint=''; let params=`search=${encodeURIComponent(search)}&page=${page}&page_size=20`;
       if(dateFrom) params+=`&date_from=${dateFrom}`; if(dateTo) params+=`&date_to=${dateTo}`;
@@ -30,26 +31,33 @@
 
       const d=await api.get<any>(endpoint);items=d.items;total=d.total;pages=d.pages;
 
-      // Calculate summary
       itemCount = total;
       if(activeTab==='sales'||activeTab==='dispatches') totalAmount=items.reduce((s:number,i:any)=>s+(i.amount||0),0);
       else if(activeTab==='shifts') totalAmount=items.reduce((s:number,i:any)=>s+(i.collected||0),0);
       else totalAmount=items.reduce((s:number,i:any)=>s+(i.amount||0),0);
 
-      // Load chart data for sales/dispatches
-      if((activeTab==='sales'||activeTab==='dispatches') && chartCanvas && items.length>0) await loadChart();
-      else if(chartInstance){chartInstance.destroy();chartInstance=null;}
+      chartDataReady = (activeTab==='sales'||activeTab==='dispatches') && items.length>0;
     }catch(e:any){error=e.message}finally{loading=false}
   }
 
-  async function loadChart(){
+  // Render chart when data is ready and canvas is mounted (after loading=false)
+  $effect(() => {
+    if (chartDataReady && chartCanvas) {
+      renderChart();
+    } else if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+  });
+
+  async function renderChart(){
     try{
       const data=await api.get<any[]>(`/dashboard/sales-by-day${dateFrom?'?date_from='+dateFrom:''}${dateFrom&&dateTo?'&':!dateFrom&&dateTo?'?':''}${dateTo?'date_to='+dateTo:''}`);
       if(data.length===0)return;
       const { Chart, registerables } = await import('chart.js');
       Chart.register(...registerables);
       if(chartInstance) chartInstance.destroy();
-      chartInstance = new Chart(chartCanvas, {
+      chartInstance = new Chart(chartCanvas!, {
         type:'bar', data:{ labels:data.map((d:any)=>d.date), datasets:[{ label:'Ventas', data:data.map((d:any)=>d.total), backgroundColor:'#3b82f6', borderRadius:4 }] },
         options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ ticks:{ callback:(v:any)=>'$'+v } } } }
       });
