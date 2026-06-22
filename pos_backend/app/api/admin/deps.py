@@ -53,7 +53,14 @@ def require_permission(resource: str, action: str):
         if not perms:
             return current_user
 
+        # Convention: {"all": true} means full access to everything
+        if perms.get("all") is True:
+            return current_user
+
+        # Expected format: {role_code: {resource: [actions]}}
         role_perms = perms.get(role.code if role else "", {})
+        if not isinstance(role_perms, dict):
+            role_perms = {}
         allowed = role_perms.get(resource, [])
         if action not in allowed:
             raise HTTPException(
