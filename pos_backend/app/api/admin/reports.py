@@ -8,7 +8,7 @@ import math
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -448,7 +448,32 @@ async def cash_summary_report(
 
 # ── Export Endpoints ───────────────────────────────────────────────
 
-import io as _io
+
+
+async def _query_all_sales_export(db, date_from, date_to, status, search, payment_method):
+    """Reuse sales query logic for export (no pagination)."""
+    base = select(Dispatch).where(Dispatch.status == status)
+    if date_from:
+        base = base.where(func.date(Dispatch.created_at) >= date_from)
+    if date_to:
+        base = base.where(func.date(Dispatch.created_at) <= date_to)
+    if search:
+        pattern = f"%{search.strip().lower()}%"
+        base = base.outerjoin(Person, Dispatch.person_id == Person.person_id).where(
+            func.lower(Person.name).like(pattern)
+        )
+    if payment_method:
+        pm_ids = (await db.execute(
+            select(DispatchPayment.dispatch_id)
+            .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+            .where(PaymentMethod.code == payment_method.upper())
+        )).scalars().all()
+        if pm_ids:
+            base = base.where(Dispatch.dispatch_id.in_(pm_ids))
+        else:
+            return []
+    result = await db.execute(base.order_by(Dispatch.created_at.desc()))
+    return result.scalars().all()
 
 
 @router.post("/sales/export")
@@ -484,7 +509,7 @@ async def export_sales(
         data = generate_excel("Reporte de Ventas", columns, rows)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ext = "xlsx"
-    return StreamingResponse(_io.BytesIO(data), media_type=media,
+    return Response(content=data, media_type=media,
                             headers={"Content-Disposition": f"attachment; filename=ventas.{ext}"})
 
 
@@ -545,7 +570,7 @@ async def export_dispatches(
         data = generate_excel("Reporte de Despachos", columns, rows)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ext = "xlsx"
-    return StreamingResponse(_io.BytesIO(data), media_type=media,
+    return Response(content=data, media_type=media,
                             headers={"Content-Disposition": f"attachment; filename=despachos.{ext}"})
 
 
@@ -604,7 +629,7 @@ async def export_shifts(
         data = generate_excel("Reporte de Turnos", columns, rows)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ext = "xlsx"
-    return StreamingResponse(_io.BytesIO(data), media_type=media,
+    return Response(content=data, media_type=media,
                             headers={"Content-Disposition": f"attachment; filename=turnos.{ext}"})
 
 
@@ -655,31 +680,6 @@ async def export_cash_summary(
         data = generate_excel("Resumen de Caja", columns, rows)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ext = "xlsx"
-    return StreamingResponse(_io.BytesIO(data), media_type=media,
+    return Response(content=data, media_type=media,
                             headers={"Content-Disposition": f"attachment; filename=caja.{ext}"})
 
-
-async def _query_all_sales_export(db, date_from, date_to, status, search, payment_method):
-    """Reuse sales query logic for export (no pagination)."""
-    base = select(Dispatch).where(Dispatch.status == status)
-    if date_from:
-        base = base.where(func.date(Dispatch.created_at) >= date_from)
-    if date_to:
-        base = base.where(func.date(Dispatch.created_at) <= date_to)
-    if search:
-        pattern = f"%{search.strip().lower()}%"
-        base = base.outerjoin(Person, Dispatch.person_id == Person.person_id).where(
-            func.lower(Person.name).like(pattern)
-        )
-    if payment_method:
-        pm_ids = (await db.execute(
-            select(DispatchPayment.dispatch_id)
-            .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
-            .where(PaymentMethod.code == payment_method.upper())
-        )).scalars().all()
-        if pm_ids:
-            base = base.where(Dispatch.dispatch_id.in_(pm_ids))
-        else:
-            return []
-    result = await db.execute(base.order_by(Dispatch.created_at.desc()))
-    return result.scalars().all()
