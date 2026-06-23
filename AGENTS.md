@@ -256,10 +256,12 @@ Ready for production integration with POS frontend.
 - [ ] Pantallas de reportes con filtros avanzados
 - [ ] ExportButton → PDF / Excel con feedback de descarga
 
-**Phase 17 — Cloudflare + Deploy + Go-live (v1.0.0).**
+**Phase 17 — Cloudflare + Deploy + Go-live (v1.0.0 — en progreso v0.31.0).**
+- [x] Deploy script actualizado (deploy-to-server.sh + powerfin-gas con admin)
+- [x] Admin funcionando en producción (neoguayas2, :5174)
+- [x] Alembic migrations en git
 - [ ] Cloudflare Tunnel + DNS + WAF
 - [ ] Nginx config con rate limiting
-- [ ] Deploy script actualizado
 - [ ] Prueba E2E: admin → POS
 
 ## When building

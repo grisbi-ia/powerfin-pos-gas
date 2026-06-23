@@ -1,18 +1,78 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-22)
+## Estado actual (2026-06-23)
 
-### ✅ Fases completadas (todas)
+### ✅ Fases completadas
 
 | Fase | Tag | Descripción |
 |------|-----|-------------|
 | 1-11 | v0.1.0-v0.19.9 | POS + FusionBridge + Hardware + Edge Cases |
 | **12** | **`v0.25.0`** | **Admin Backend CRUD + Auth — 11 módulos, 51 endpoints, 238 tests admin** |
 | **13** | **`v0.26.0`** | **Admin Dashboard + Reports + Export Engine — 14 endpoints, PDF/Excel, 371 tests** |
+| **14-16** | **`v0.27.0-v0.30.0`** | **Admin Frontend — Layout + Dashboard + Reportes** |
+| **17** | **`v0.31.0`** | **Deploy readiness — admin en producción, scripts, docs** |
 
 ---
 
-## Logros de la sesión (2026-06-22) — v0.25.0
+## Logros de la sesión (2026-06-23) — v0.31.0
+
+### Admin deploy readiness + bugfixes ✅
+
+**Admin funcionando en producción (neoguayas2, :5174).**
+
+- [x] deploy-to-server.sh: target `admin` (rsync admin/src/ + config files)
+- [x] powerfin-gas: deploy-admin, start/stop/restart-admin, status + health :5174
+- [x] INSTALL.md: admin-frontend.service, Nginx /admin location, firewall :5174
+- [x] Alembic migrations tracked in git (4 archivos un-ignored)
+- [x] requirements.txt: +reportlab, +openpyxl, +Pillow
+- [x] package.json: @sveltejs/vite-plugin-svelte ^5.0.0 (vite 6 compat)
+- [x] Dashboard: fixed UTC timezone bug — toISOString() → localDate()
+- [x] Deploy path fix: admin/src sin trailing slash en rsync
+- [x] Backend crash fix: pip install reportlab en producción
+
+### Problemas resueltos en producción
+
+| Problema | Causa | Fix |
+|----------|-------|-----|
+| Backend caído (exit code 1) | reportlab no instalado en venv | pip install reportlab openpyxl Pillow |
+| npm install fallaba | vite-plugin-svelte ^4.0.0 incompatible con vite 6 | Bump a ^5.0.0 |
+| deploy-admin: src/ no encontrado | rsync con trailing slash aplanaba directorio | admin/src → admin/src (sin /) |
+| Dashboard "Hoy" vacío (fecha mañana) | toISOString() usa UTC | toLocalDate() con getFullYear/getMonth/getDate |
+| admin-frontend.service not found | Primer deploy, servicio no creado | Creado manualmente + documentado en INSTALL.md |
+| powerfin-gas sin admin en status | Edit silencioso falló (typo old_str) | Corregido + recommit |
+
+### Archivos modificados
+
+```
+Scripts (3):
+  scripts/deploy-to-server.sh    ← +admin target
+  scripts/powerfin-gas            ← +deploy-admin, start/stop/restart-admin, status
+  pos_backend/requirements.txt    ← +reportlab, openpyxl, Pillow
+
+Config (1):
+  admin/package.json              ← @sveltejs/vite-plugin-svelte ^4 → ^5
+
+Frontend (1):
+  admin/src/routes/(admin)/dashboard/+page.svelte  ← UTC timezone fix
+
+Git (1):
+  pos_backend/.gitignore          ← removido alembic/versions/*.py
+
+Migrations (4 — ahora trackeadas):
+  pos_backend/alembic/versions/7c643d01b45d_add_preset_type_to_dispatches.py
+  pos_backend/alembic/versions/5a02d184d729_add_is_active_to_grades.py
+  pos_backend/alembic/versions/c7ccad66cca6_add_is_active_to_price_lists_and_items.py
+  pos_backend/alembic/versions/2e2a37a14335_add_is_active_to_hoses.py
+
+Docs (3):
+  docs/DEPLOY_QUICK.md            ← +admin en flujo y comandos
+  docs/INSTALL.md                 ← +admin-frontend.service, Nginx, firewall
+  docs/admin/ADMIN_ROADMAP.md     ← v0.31.0 + Fase 17 avances
+```
+
+---
+
+## Logros de la sesión (2026-06-22) — v0.30.0
 
 ### Phase 12 — Admin Backend CRUD + Auth ✅ COMPLETADO
 
@@ -326,7 +386,21 @@ Modificados:
 ☐ 3. Roles/permisos — enforcement real en POS endpoints
 ☐ 4. Flujo de crédito en el POS — selector en SaleWizard
 ☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar
-☐ 6. Phase 17 — Cloudflare + Deploy + Go-live
+```
+
+### 🔵 Phase 17 — Cloudflare + Deploy + Go-live (en progreso)
+
+```
+✅ Deploy scripts con admin (deploy-to-server.sh + powerfin-gas)
+✅ Nginx /admin location documentado (INSTALL.md)
+✅ Admin funcionando en producción (neoguayas2, :5174)
+✅ Alembic migrations tracked in git
+☐ cloudflared instalado + configurado
+☐ Cloudflare Tunnel + DNS
+☐ Nginx /admin config en producción
+☐ Rate limiting login
+☐ Prueba E2E pública
+☐ Documentación final
 ```
 
 ### 🆕 Próximas tareas

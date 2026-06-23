@@ -743,12 +743,15 @@ y puesta en producción.
 ### Tareas
 
 ```
+✅ Deploy script admin (deploy-to-server.sh + powerfin-gas)
+✅ Nginx /admin location documentado (INSTALL.md)
+✅ Admin funcionando en producción (neoguayas2, :5174)
+✅ Alembic migrations tracked in git
 ☐ Instalar y configurar cloudflared en servidor Debian
 ☐ Configurar Cloudflare Tunnel + DNS (admin.gasolinera.com)
 ☐ Configurar Nginx para admin con rate limiting en login
 ☐ Cloudflare WAF rules (rate limit, country block Ecuador-only)
 ☐ Certbot SSL para dominio (cloudflared → nginx)
-☐ Script deploy.sh actualizado para admin/
 ☐ systemd service cloudflared
 ☐ Auditoría: opcional tabla audit_log para cambios desde admin
 ☐ Prueba de acceso público: https://admin.gasolinera.com

@@ -5,10 +5,10 @@
 > Las fases 12-17 del ROADMAP.md principal son el resumen; aquí está el detalle.
 
 ```
-Última actualización: 2026-06-22
-Fase actual: 14-16 completadas — Admin Frontend
-Progreso:  ████████████████████  Fases 12-16 completadas
-Tag: v0.30.0
+Última actualización: 2026-06-23
+Fase actual: 17 — Cloudflare + Deploy (en progreso)
+Progreso:  ████████████████████  Fases 12-17
+Tag: v0.31.0
 ```
 
 ---
@@ -202,15 +202,26 @@ Tag: v0.30.0
 - [x] Filtro closed_date para turnos cerrados hoy
 - [x] 10 registros por página
 
+### v0.31.0 — Deploy readiness + bugfixes (2026-06-23)
+
+- [x] deploy-to-server.sh: admin target (rsync admin/src/ + config)
+- [x] powerfin-gas: deploy-admin, start/stop/restart-admin, status + health :5174
+- [x] INSTALL.md: admin-frontend.service, Nginx /admin location, firewall :5174
+- [x] Alembic migrations tracked in git (4 archivos de schema admin)
+- [x] requirements.txt: +reportlab, +openpyxl, +Pillow
+- [x] package.json: @sveltejs/vite-plugin-svelte ^5.0.0 (vite 6 compat)
+- [x] Dashboard: fixed UTC timezone bug — "Hoy" usaba toISOString()
+- [x] Admin funcionando en producción (neoguayas2, :5174)
+
 ---
 
 ## FASE 17 — Cloudflare + Deploy `[v1.0.0]`
 
 - [ ] cloudflared instalado + configurado
 - [ ] Cloudflare Tunnel + DNS
-- [ ] Nginx config `/admin`
+- [x] Nginx config `/admin` (documentado en INSTALL.md)
 - [ ] Rate limiting login
-- [ ] Deploy script
+- [x] Deploy script (deploy-to-server.sh + powerfin-gas con admin)
 - [ ] Prueba E2E pública
 - [ ] Documentación final
 
