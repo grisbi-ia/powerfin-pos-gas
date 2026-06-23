@@ -105,7 +105,7 @@ deploy_admin() {
         --exclude='build/' \
         --exclude='.env' \
         --exclude='.git/' \
-        admin/src/ "$SERVER:$PRE_DEPLOY/admin/"
+        admin/src "$SERVER:$PRE_DEPLOY/admin/"
     # También subir package.json y config files para el build
     rsync -av \
         admin/package.json \
