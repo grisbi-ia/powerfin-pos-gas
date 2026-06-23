@@ -113,8 +113,9 @@
 
   async function loadToday() {
     loading = true; error = '';
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const toLocalDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = toLocalDate(new Date());
+    const yesterday = toLocalDate(new Date(Date.now() - 86400000));
     try {
       const [tSum, ySum, byHour, byPayment, dispatches, shifts] = await Promise.all([
         api.get<any>(`/dashboard/summary?date_from=${today}&date_to=${today}`),
