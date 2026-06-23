@@ -260,9 +260,10 @@ Ready for production integration with POS frontend.
 - [x] Deploy script actualizado (deploy-to-server.sh + powerfin-gas con admin)
 - [x] Admin funcionando en producción (neoguayas2, :5174)
 - [x] Alembic migrations en git
-- [ ] Cloudflare Tunnel + DNS + WAF
+- [x] Cloudflare Tunnel + DNS + WAF
 - [ ] Nginx config con rate limiting
 - [ ] Prueba E2E: admin → POS
+- [x] Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
 
 ## When building
 

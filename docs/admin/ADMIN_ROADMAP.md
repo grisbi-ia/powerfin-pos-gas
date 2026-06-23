@@ -6,9 +6,9 @@
 
 ```
 Última actualización: 2026-06-23
-Fase actual: 17 — Cloudflare + Deploy (en progreso)
-Progreso:  ████████████████████  Fases 12-17
-Tag: v0.31.0
+Fase actual: 17 — Cloudflare + Deploy (completado)
+Progreso:  ████████████████████  Fases 12-17 ✅
+Tag: v0.32.0
 ```
 
 ---
@@ -217,13 +217,13 @@ Tag: v0.31.0
 
 ## FASE 17 — Cloudflare + Deploy `[v1.0.0]`
 
-- [ ] cloudflared instalado + configurado
-- [ ] Cloudflare Tunnel + DNS
+- [x] cloudflared instalado + configurado
+- [x] Cloudflare Tunnel + DNS
 - [x] Nginx config `/admin` (documentado en INSTALL.md)
 - [ ] Rate limiting login
 - [x] Deploy script (deploy-to-server.sh + powerfin-gas con admin)
-- [ ] Prueba E2E pública
-- [ ] Documentación final
+- [x] Prueba E2E pública
+- [x] Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
 
 ---
 

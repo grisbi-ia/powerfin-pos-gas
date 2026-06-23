@@ -11,6 +11,47 @@
 | **13** | **`v0.26.0`** | **Admin Dashboard + Reports + Export Engine — 14 endpoints, PDF/Excel, 371 tests** |
 | **14-16** | **`v0.27.0-v0.30.0`** | **Admin Frontend — Layout + Dashboard + Reportes** |
 | **17** | **`v0.31.0`** | **Deploy readiness — admin en producción, scripts, docs** |
+| **17** | **`v0.32.0`** | **Cloudflare Tunnel — admin expuesto + Reportes/Dashboard mejoras** |
+
+---
+
+## Logros de la sesión (2026-06-23) — v0.32.0
+
+### Cloudflare Tunnel + Admin mejoras ✅
+
+**Admin expuesto en https://neoguayas-paute.apx5.com**
+
+Cloudflare:
+- [x] cloudflared instalado y configurado como systemd service
+- [x] Túnel `admin-neoguayas` creado (UUID: 56028a77...)
+- [x] DNS CNAME → `neoguayas-paute.apx5.com` → tunnel
+- [x] Vite `allowedHosts` configurado para el dominio
+- [x] Admin accesible desde internet (HTTP 200 confirmado)
+- [x] Documentación: `docs/admin/CLOUDFLARE_TUNNEL.md`
+
+Admin — Surtidores (vivo):
+- [x] `GET /api/admin/dispensers/status` — consulta FusionBridge en tiempo real
+- [x] Página `/admin/dispensers/status` con tarjetas por surtidor
+- [x] Botón Refrescar manual, indicadores de estado (IDLE/FUELLING/ERROR)
+- [x] Menú lateral: ícono Activity
+- [x] Configuración `fusion_bridge_url` en system_config (IPv4 fix)
+
+Admin — Reportes:
+- [x] Fix paginación: bug de ciclo `$effect` que reseteaba página a 1
+- [x] 2 nuevas gráficas en Ventas: Producto (donut) + Método Pago (pie)
+- [x] Fecha por defecto = hoy (ya no carga todo el historial)
+- [x] Validación rango máximo 31 días con toast
+- [x] DashBoard Hoy: íconos en tarjetas KPI
+
+Backend — Shift actions (admin):
+- [x] `GET /api/admin/reports/shifts/{id}/receipt` → PDF recibo cierre turno
+- [x] `GET /api/admin/reports/shifts/{id}/transactions/export` → Excel 2 hojas
+- [x] `generate_shift_receipt_pdf()`: formato ticket térmico 80mm
+- [x] `generate_shift_transactions_excel()`: Despachos + Movimientos Caja
+
+Docs:
+- [x] `docs/SOP_REENVIO_SRI_KEY49.md`: diagnóstico y reenvío facturas SRI
+- [x] `docs/admin/CLOUDFLARE_TUNNEL.md`: guía completa de despliegue Cloudflare
 
 ---
 
@@ -388,19 +429,19 @@ Modificados:
 ☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar
 ```
 
-### 🔵 Phase 17 — Cloudflare + Deploy + Go-live (en progreso)
+### 🔵 Phase 17 — Cloudflare + Deploy + Go-live (completado)
 
 ```
 ✅ Deploy scripts con admin (deploy-to-server.sh + powerfin-gas)
 ✅ Nginx /admin location documentado (INSTALL.md)
 ✅ Admin funcionando en producción (neoguayas2, :5174)
 ✅ Alembic migrations tracked in git
-☐ cloudflared instalado + configurado
-☐ Cloudflare Tunnel + DNS
-☐ Nginx /admin config en producción
-☐ Rate limiting login
-☐ Prueba E2E pública
-☐ Documentación final
+✅ cloudflared instalado + configurado
+✅ Cloudflare Tunnel + DNS (neoguayas-paute.apx5.com)
+✅ Admin accesible desde internet
+☐ Rate limiting login (pendiente — Cloudflare WAF o backend slowapi)
+☐ Prueba E2E completa (admin → POS)
+✅ Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
 ```
 
 ### 🆕 Próximas tareas

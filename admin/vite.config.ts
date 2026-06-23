@@ -16,6 +16,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts}']
   },
   server: {
+    allowedHosts: ['neoguayas-paute.apx5.com', 'localhost', '127.0.0.1', '192.168.1.25'],
     proxy: {
       '/api': 'http://localhost:8080'
     }

@@ -747,16 +747,15 @@ y puesta en producción.
 ✅ Nginx /admin location documentado (INSTALL.md)
 ✅ Admin funcionando en producción (neoguayas2, :5174)
 ✅ Alembic migrations tracked in git
-☐ Instalar y configurar cloudflared en servidor Debian
-☐ Configurar Cloudflare Tunnel + DNS (admin.gasolinera.com)
+✅ Instalar y configurar cloudflared en servidor Debian
+✅ Configurar Cloudflare Tunnel + DNS (neoguayas-paute.apx5.com)
 ☐ Configurar Nginx para admin con rate limiting en login
-☐ Cloudflare WAF rules (rate limit, country block Ecuador-only)
-☐ Certbot SSL para dominio (cloudflared → nginx)
-☐ systemd service cloudflared
+✅ Cloudflare WAF rules (rate limit, country block Ecuador-only)
+✅ systemd service cloudflared
 ☐ Auditoría: opcional tabla audit_log para cambios desde admin
-☐ Prueba de acceso público: https://admin.gasolinera.com
+✅ Prueba de acceso público: https://neoguayas-paute.apx5.com
 ☐ Prueba end-to-end: login admin → crear producto → visible en POS
-☐ Documentación final actualizada (docs/admin/ADMIN_UI.md, INFRAESTRUCTURA.md)
+✅ Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
 ```
 
 ### Criterio de completitud
