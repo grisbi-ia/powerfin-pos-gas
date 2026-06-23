@@ -181,10 +181,44 @@
     {@const d = trendIcon(todaySummary.dispatch_count, yesterdaySummary?.dispatch_count || 0)}
     <!-- TODAY VIEW -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Ventas Hoy</p><p class="text-xl font-bold text-gray-900 mt-1">{formatCurrency(todaySummary.total_sales)}</p><span class="text-xs {t.color}">{t.pct} vs ayer</span></div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Despachos</p><p class="text-xl font-bold text-gray-900 mt-1">{todaySummary.dispatch_count}</p><span class="text-xs {d.color}">{d.pct} vs ayer</span></div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Ticket Promedio</p><p class="text-xl font-bold text-gray-900 mt-1">{formatCurrency(todaySummary.avg_ticket)}</p></div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4"><p class="text-xs text-gray-500 uppercase">Turnos Activos</p><p class="text-xl font-bold text-gray-900 mt-1">{todaySummary.active_shifts}</p></div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600 flex-shrink-0"><DollarSign class="w-5 h-5"/></div>
+          <div>
+            <p class="text-xs text-gray-500 uppercase">Ventas Hoy</p>
+            <p class="text-xl font-bold text-gray-900">{formatCurrency(todaySummary.total_sales)}</p>
+            <span class="text-xs {t.color}">{t.pct} vs ayer</span>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-green-50 text-green-600 flex-shrink-0"><ShoppingCart class="w-5 h-5"/></div>
+          <div>
+            <p class="text-xs text-gray-500 uppercase">Despachos</p>
+            <p class="text-xl font-bold text-gray-900">{todaySummary.dispatch_count}</p>
+            <span class="text-xs {d.color}">{d.pct} vs ayer</span>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-50 text-purple-600 flex-shrink-0"><Receipt class="w-5 h-5"/></div>
+          <div>
+            <p class="text-xs text-gray-500 uppercase">Ticket Promedio</p>
+            <p class="text-xl font-bold text-gray-900">{formatCurrency(todaySummary.avg_ticket)}</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-orange-50 text-orange-600 flex-shrink-0"><Users class="w-5 h-5"/></div>
+          <div>
+            <p class="text-xs text-gray-500 uppercase">Turnos Activos</p>
+            <p class="text-xl font-bold text-gray-900">{todaySummary.active_shifts}</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

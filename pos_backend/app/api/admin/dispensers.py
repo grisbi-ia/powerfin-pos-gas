@@ -6,6 +6,8 @@ Each hose maps to a Fusion pump/hose ID and a fuel grade.
 
 import math
 
+import httpx
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.admin.deps import get_admin_user, require_permission
 from app.database import get_db
+from app.models.company import SystemConfig
 from app.models.dispenser import Dispenser, Hose
 from app.models.product import Grade
 from app.models.tributary import EmissionPoint
@@ -198,6 +201,92 @@ async def _dispenser_to_detail(d: Dispenser, db: AsyncSession) -> dict:
         "sort_order": d.sort_order,
         "is_active": d.is_active,
         "hoses": hoses,
+    }
+
+
+# ── Live Status ────────────────────────────────────────────────────
+
+
+@router.get("/dispensers/status")
+async def dispenser_live_status(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("dispensers", "read")),
+):
+    """Get live dispenser status from FusionBridge, enriched with DB names."""
+    # FusionBridge URL — default localhost, overridable via system_config
+    bridge_url = "http://localhost:8090"
+    cfg = await db.execute(
+        select(SystemConfig).where(SystemConfig.key == "fusion_bridge_url")
+    )
+    cfg_row = cfg.scalar_one_or_none()
+    if cfg_row and cfg_row.value:
+        bridge_url = cfg_row.value.rstrip("/")
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+            resp = await client.get(f"{bridge_url}/api/dispensers")
+            resp.raise_for_status()
+            fusion_data = resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=502, detail="FusionBridge no responde (timeout 5s)")
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Error de FusionBridge: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"FusionBridge no accesible: {str(e)}")
+
+    fusion_connected = fusion_data.get("fusionConnected", False)
+    fusion_dispensers = fusion_data.get("dispensers", [])
+
+    result = await db.execute(
+        select(Dispenser).options(selectinload(Dispenser.hoses))
+    )
+    db_dispensers: dict[int, Dispenser] = {d.dispenser_id: d for d in result.scalars()}
+
+    pump_to_disp: dict[int, Dispenser] = {}
+    for d in db_dispensers.values():
+        for h in d.hoses:
+            if h.fusion_pump_id:
+                pump_to_disp[h.fusion_pump_id] = d
+                break
+
+    enriched = []
+    for fd in fusion_dispensers:
+        fusion_pump_id: int = fd.get("dispenserId", 0)
+        status_val: str = fd.get("status", "UNKNOWN")
+        connected: bool = fd.get("connected", False)
+        preset_amount: float = fd.get("presetAmount", 0.0)
+        active_hose: int = fd.get("activeHose", 0)
+
+        db_disp = pump_to_disp.get(fusion_pump_id)
+
+        # Skip Fusion pumps not mapped to any DB dispenser (e.g. pumps 5-8 if only 4 configured)
+        if not db_disp:
+            continue
+
+        # Build hose info from DB
+        hoses_data: list[dict] = []
+        for h in sorted(db_disp.hoses, key=lambda x: x.side or ""):
+            active = (h.fusion_hose_id == active_hose) if active_hose > 0 else False
+            hoses_data.append({
+                "side": h.side or "?",
+                "grade": h.grade_id or "",
+                "active": active,
+            })
+
+        enriched.append({
+            "dispenser_id": db_disp.dispenser_id,
+            "name": db_disp.name,
+            "status": status_val,
+            "connected": connected,
+            "preset_amount": preset_amount,
+            "hoses": hoses_data,
+        })
+
+    enriched.sort(key=lambda d: d["dispenser_id"])
+
+    return {
+        "dispensers": enriched,
+        "fusion_connected": fusion_connected,
     }
 
 

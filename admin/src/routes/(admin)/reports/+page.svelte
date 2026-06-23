@@ -1,25 +1,128 @@
 <script lang="ts">
-  import { api } from '$lib/api/api';
+  import { api, getToken } from '$lib/api/api';
   import { formatCurrency, formatDate } from '$lib/utils/format';
-  import { DollarSign, ShoppingCart, Users, Wallet, Download } from 'lucide-svelte';
+  import { DollarSign, ShoppingCart, Users, Wallet, Download, FileText, FileSpreadsheet } from 'lucide-svelte';
   import DataTable from '$components/DataTable.svelte';
   import { toast } from '$lib/utils/toast';
 
   let activeTab = $state<'sales'|'dispatches'|'shifts'|'cash'>('sales');
   let items=$state<any[]>([]); let total=$state(0); let page=$state(1); let pages=$state(1);
-  let loading=$state(true); let error=$state(''); let search=$state(''); let dateFrom=$state(''); let dateTo=$state('');
+  let loading=$state(true); let error=$state(''); let search=$state('');
+
+  function todayStr(d: Date = new Date()): string {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  let dateFrom=$state(todayStr());
+  let dateTo=$state(todayStr());
   let exporting=$state(false);
+  let actionLoading = $state<number | null>(null);  // shift_id being actioned
 
   // Summary stats per tab
   let totalAmount=$state(0); let itemCount=$state(0);
 
-  // Chart
+  // Charts
   let chartCanvas = $state<HTMLCanvasElement>();
   let chartInstance: any = null;
+  let productCanvas = $state<HTMLCanvasElement>();
+  let productInstance: any = null;
+  let paymentCanvas = $state<HTMLCanvasElement>();
+  let paymentInstance: any = null;
   let chartDataReady = $state(false);
+  let chartSkip = $state(false);
+
+  const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899'];
+
+  const percentageLabelPlugin = {
+    id: 'percentageLabel',
+    afterDatasetsDraw(chart: any) {
+      const { ctx, data: chartData } = chart;
+      const dataset = chartData.datasets[0];
+      const total = dataset.data.reduce((a: number, b: number) => a + b, 0);
+      if (total === 0) return;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      meta.data.forEach((arc: any, i: number) => {
+        const pct = Math.round((dataset.data[i] / total) * 100);
+        if (pct < 5) return;
+        const { x, y } = arc.tooltipPosition();
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 2;
+        ctx.fillText(`${pct}%`, x, y);
+        ctx.shadowBlur = 0;
+      });
+      ctx.restore();
+    }
+  };
+
+  function legendWithPct(chart: any) {
+    const data = chart.data;
+    const total = data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
+    return data.labels.map((label: string, i: number) => ({
+      text: `${label} (${Math.round(data.datasets[0].data[i] / total * 100)}%)`,
+      fillStyle: data.datasets[0].backgroundColor[i],
+      strokeStyle: data.datasets[0].backgroundColor[i],
+      index: i, hidden: !chart.getDataVisibility(i), pointStyle: 'circle',
+    }));
+  }
+
+  async function downloadShiftReceipt(shiftId: number) {
+    actionLoading = shiftId;
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/admin/reports/shifts/${shiftId}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).detail || 'Error al generar PDF');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cierre_turno_${shiftId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`PDF del turno #${shiftId} generado`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      actionLoading = null;
+    }
+  }
+
+  async function downloadShiftTransactions(shiftId: number) {
+    actionLoading = shiftId;
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/admin/reports/shifts/${shiftId}/transactions/export?format=xlsx`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).detail || 'Error al generar Excel');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transacciones_turno_${shiftId}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Excel del turno #${shiftId} generado`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      actionLoading = null;
+    }
+  }
 
   async function load(){
-    loading=true;error='';items=[];total=0;chartDataReady=false;
+    loading=true;error='';items=[];total=0;chartDataReady=false;chartSkip=false;
     try{
       let endpoint=''; let params=`search=${encodeURIComponent(search)}&page=${page}&page_size=10`;
       if(dateFrom) params+=`&date_from=${dateFrom}`; if(dateTo) params+=`&date_to=${dateTo}`;
@@ -40,31 +143,80 @@
     }catch(e:any){error=e.message}finally{loading=false}
   }
 
-  // Render chart when data is ready and canvas is mounted (after loading=false)
+  // Render charts when data is ready and canvas is mounted (after loading=false)
   $effect(() => {
-    if (chartDataReady && chartCanvas) {
-      renderChart();
-    } else if (chartInstance) {
-      chartInstance.destroy();
-      chartInstance = null;
+    if ((activeTab==='sales'||activeTab==='dispatches') && !loading && !error && items.length > 0 && !chartSkip) {
+      renderCharts();
+    } else {
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+      if (productInstance) { productInstance.destroy(); productInstance = null; }
+      if (paymentInstance) { paymentInstance.destroy(); paymentInstance = null; }
     }
   });
 
-  async function renderChart(){
-    try{
-      const data=await api.get<any[]>(`/dashboard/sales-by-day${dateFrom?'?date_from='+dateFrom:''}${dateFrom&&dateTo?'&':!dateFrom&&dateTo?'?':''}${dateTo?'date_to='+dateTo:''}`);
-      if(data.length===0)return;
+  async function renderCharts(){
+    chartSkip = true;  // prevent double-render from $effect reactivity
+
+    try {
       const { Chart, registerables } = await import('chart.js');
       Chart.register(...registerables);
-      if(chartInstance) chartInstance.destroy();
-      chartInstance = new Chart(chartCanvas!, {
-        type:'bar', data:{ labels:data.map((d:any)=>d.date), datasets:[{ label:'Ventas', data:data.map((d:any)=>d.total), backgroundColor:'#3b82f6', borderRadius:4 }] },
-        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ ticks:{ callback:(v:any)=>'$'+v } } } }
-      });
-    }catch{}
+
+      const params = [];
+      if (dateFrom) params.push(`date_from=${dateFrom}`);
+      if (dateTo) params.push(`date_to=${dateTo}`);
+      const qs = params.length ? '?' + params.join('&') : '';
+
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+      if (productInstance) { productInstance.destroy(); productInstance = null; }
+      if (paymentInstance) { paymentInstance.destroy(); paymentInstance = null; }
+
+      // 1. Sales by Day (bar) — both sales & dispatch tabs
+      const byDay = await api.get<any[]>(`/dashboard/sales-by-day${qs}`);
+      if (byDay.length && chartCanvas) {
+        chartInstance = new Chart(chartCanvas, {
+          type: 'bar',
+          data: { labels: byDay.map((d: any) => d.date), datasets: [{ label: 'Ventas', data: byDay.map((d: any) => d.total), backgroundColor: '#3b82f6', borderRadius: 4 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v: any) => '$' + v } } } },
+        });
+      }
+
+      // 2 & 3: Product + Payment distribution (donut + pie) — sales tab only
+      if (activeTab === 'sales') {
+        const byProduct = await api.get<any[]>(`/dashboard/sales-by-product${qs}`);
+        if (byProduct.length && productCanvas) {
+          productInstance = new Chart(productCanvas, {
+            type: 'doughnut',
+            data: { labels: byProduct.map((d: any) => d.product_name), datasets: [{ data: byProduct.map((d: any) => d.total_amount), backgroundColor: colors.slice(0, byProduct.length) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, generateLabels: legendWithPct } } } },
+            plugins: [percentageLabelPlugin],
+          });
+        }
+
+        const byPayment = await api.get<any[]>(`/dashboard/sales-by-payment${qs}`);
+        if (byPayment.length && paymentCanvas) {
+          paymentInstance = new Chart(paymentCanvas, {
+            type: 'pie',
+            data: { labels: byPayment.map((d: any) => d.method_name), datasets: [{ data: byPayment.map((d: any) => d.total), backgroundColor: colors.slice(0, byPayment.length) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, generateLabels: legendWithPct } } } },
+            plugins: [percentageLabelPlugin],
+          });
+        }
+      }
+    } catch { /* chart failure is non-blocking */ }
   }
 
   async function export_(format:'pdf'|'xlsx'){
+    // Validate date range: max 31 days
+    if (dateFrom && dateTo) {
+      const from = new Date(dateFrom + 'T00:00:00');
+      const to = new Date(dateTo + 'T00:00:00');
+      const diffDays = Math.round((to.getTime() - from.getTime()) / 86400000);
+      if (diffDays > 31) {
+        toast.info('El rango máximo es de 31 días. Ajuste las fechas.');
+        return;
+      }
+    }
+
     exporting=true;
     try{
       let endpoint='';
@@ -85,7 +237,31 @@
     }catch(e:any){toast.error(e.message)}finally{exporting=false}
   }
 
-  $effect(() => { activeTab; dateFrom; dateTo; page=1; load(); });
+  // Reset page to 1 when tab or date filters change
+  $effect(() => { activeTab; dateFrom; dateTo; page = 1; });
+
+  // Load data when page, tab, or date filters change
+  $effect(() => {
+    page; activeTab; dateFrom; dateTo;
+
+    // Validate date range: max 31 days
+    if (dateFrom && dateTo) {
+      const from = new Date(dateFrom + 'T00:00:00');
+      const to = new Date(dateTo + 'T00:00:00');
+      const diffDays = Math.round((to.getTime() - from.getTime()) / 86400000);
+      if (diffDays > 31) {
+        toast.info('El rango máximo es de 31 días. Ajuste las fechas.');
+        return;
+      }
+      if (diffDays < 0) {
+        toast.error('La fecha "desde" no puede ser posterior a "hasta".');
+        dateTo = dateFrom;
+        return;
+      }
+    }
+
+    load();
+  });
 
   const cols:Record<string,{key:string;label:string;sortable?:boolean}[]> = {
     sales: [{key:'date',label:'Fecha'},{key:'dispenser_name',label:'Surtidor'},{key:'hose_side',label:'Lado'},{key:'grade',label:'Grado'},{key:'customer_name',label:'Cliente'},{key:'plate',label:'Placa'},{key:'payment_method',label:'Pago'},{key:'amount',label:'Monto'},{key:'volume',label:'Volumen'},{key:'sri_status',label:'SRI'},{key:'authorized_by',label:'Usuario'},{key:'status',label:'Estado'}],
@@ -124,6 +300,20 @@
     </div>
   {/if}
 
+  <!-- Charts (only for sales) -->
+  {#if activeTab === 'sales' && !loading && !error && items.length > 0}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto</h3>
+        <div class="relative h-60 md:h-64"><canvas bind:this={productCanvas}></canvas></div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Método de Pago</h3>
+        <div class="relative h-60 md:h-64"><canvas bind:this={paymentCanvas}></canvas></div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Chart (only for sales/dispatches) -->
   {#if (activeTab==='sales'||activeTab==='dispatches') && !loading && !error && items.length > 0}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
@@ -135,8 +325,35 @@
   {/if}
 
   <DataTable title="" {items} columns={cols[activeTab]} {loading}{error}{total}{page}{pages}{search} sortKey="" sortOrder="asc"
-    onSearch={(q:string)=>{search=q;page=1;load()}} onSort={()=>{}}
-    onPage={(p:number)=>{page=p;load()}} onCreate={()=>{}} createLabel="">
-    {#snippet children(_: any)}{/snippet}
+    onSearch={(q:string)=>{search=q;page=1}} onSort={()=>{}}
+    onPage={(p:number)=>{page=p}} onCreate={()=>{}} createLabel="">
+    {#snippet children(row: { item: any })}
+      {#if activeTab === 'shifts' && row.item.status === 'CLOSED'}
+        <button
+          onclick={() => downloadShiftReceipt(row.item.shift_id)}
+          disabled={actionLoading === row.item.shift_id}
+          class="p-1.5 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+          title="Reimprimir cierre de turno (PDF)"
+        >
+          {#if actionLoading === row.item.shift_id}
+            <span class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin inline-block"></span>
+          {:else}
+            <FileText class="w-4 h-4" />
+          {/if}
+        </button>
+        <button
+          onclick={() => downloadShiftTransactions(row.item.shift_id)}
+          disabled={actionLoading === row.item.shift_id}
+          class="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+          title="Exportar transacciones del turno (Excel)"
+        >
+          {#if actionLoading === row.item.shift_id}
+            <span class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin inline-block"></span>
+          {:else}
+            <FileSpreadsheet class="w-4 h-4" />
+          {/if}
+        </button>
+      {/if}
+    {/snippet}
   </DataTable>
 </div>

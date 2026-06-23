@@ -22,13 +22,18 @@ from app.models.person import Person, Vehicle
 from app.models.shift import Shift
 from app.models.user import User
 from app.models import CashMovement
-from app.services.export_service import generate_excel, generate_pdf
+from app.models.company import CompanyInfo
+from app.services.export_service import (
+    generate_excel, generate_pdf,
+    generate_shift_receipt_pdf, generate_shift_transactions_excel,
+)
 from app.schemas import (
     PaginatedResponse,
     ReportCashSummaryItem,
     ReportDispatchItem,
     ReportSalesItem,
     ReportShiftItem,
+    CloseShiftResponse,
 )
 
 router = APIRouter(
@@ -682,4 +687,216 @@ async def export_cash_summary(
         ext = "xlsx"
     return Response(content=data, media_type=media,
                             headers={"Content-Disposition": f"attachment; filename=caja.{ext}"})
+
+
+# ── Per-Shift Actions ─────────────────────────────────────────────
+
+
+@router.get("/shifts/{shift_id}/receipt")
+async def shift_receipt_pdf(
+    shift_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("reports", "read")),
+):
+    """Generate shift close receipt PDF (same layout as thermal ticket)."""
+    # Fetch shift
+    result = await db.execute(select(Shift).where(Shift.shift_id == shift_id))
+    shift = result.scalar_one_or_none()
+    if not shift:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+    if shift.status != "CLOSED":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="El turno aún no está cerrado")
+
+    # Recompute financial summary
+    from app.api.shifts import _compute_shift_summary
+    summary = await _compute_shift_summary(db, shift_id)
+
+    # Cashier name
+    cashier = await db.scalar(
+        select(User.name).where(User.user_id == shift.user_id)
+    ) or ""
+
+    # Company info
+    company_name = company_ruc = company_address = company_phone = ""
+    ci_result = await db.execute(select(CompanyInfo).limit(1))
+    ci = ci_result.scalar_one_or_none()
+    if ci:
+        company_name = ci.commercial_name or ci.name or "NEOGAS"
+        company_ruc = ci.ruc or ""
+        company_address = ci.address or ""
+        company_phone = ci.phone or ""
+
+    surplus = float(shift.surplus or 0)
+    shortage = float(shift.shortage or 0)
+    total_sales = round(summary["sales_cash"] + sum(n["total"] for n in summary["non_cash_sales"]), 2)
+
+    pdf_bytes = generate_shift_receipt_pdf(
+        shift_id=shift_id,
+        opened_at=shift.opened_at.strftime("%Y-%m-%d %H:%M") if shift.opened_at else "",
+        closed_at=shift.closed_at.strftime("%Y-%m-%d %H:%M") if shift.closed_at else "",
+        cashier=cashier,
+        opening_cash=float(shift.opening_cash or 0),
+        cash_income=round(summary["income"], 2),
+        cash_income_count=summary["income_count"],
+        cash_expense=round(summary["expense"], 2),
+        cash_expense_count=summary["expense_count"],
+        cash_deposits=round(summary["deposits"], 2),
+        cash_deposits_count=summary["deposit_count"],
+        cash_transfers_out=round(summary["transfers_out"], 2),
+        cash_transfers_out_count=summary["transfer_out_count"],
+        cash_transfers_in=round(summary["transfers_recv_amount"], 2),
+        cash_transfers_in_count=summary["transfers_recv_count"],
+        cash_safe_drops=round(summary["safe_drops"], 2),
+        cash_safe_drops_count=summary["safe_drop_count"],
+        sales_cash=round(summary["sales_cash"], 2),
+        sales_cash_count=summary["sales_cash_count"],
+        surplus=surplus,
+        shortage=shortage,
+        non_cash_sales=summary["non_cash_sales"],
+        total_sales=total_sales,
+        dispatch_count=summary["dispatch_count"],
+        company_name=company_name,
+        company_ruc=company_ruc,
+        company_address=company_address,
+        company_phone=company_phone,
+        is_reprint=True,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=cierre_turno_{shift_id}.pdf"},
+    )
+
+
+@router.get("/shifts/{shift_id}/transactions/export")
+async def shift_transactions_export(
+    shift_id: int,
+    format: str = Query("xlsx", pattern=r"^(xlsx)$"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("reports", "read")),
+):
+    """Export shift transactions as Excel (dispatches + cash movements)."""
+    # Verify shift exists
+    result = await db.execute(select(Shift).where(Shift.shift_id == shift_id))
+    shift = result.scalar_one_or_none()
+    if not shift:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+    # Company info
+    company_name = "NEOGAS"
+    ci_result = await db.execute(select(CompanyInfo).limit(1))
+    ci = ci_result.scalar_one_or_none()
+    if ci:
+        company_name = ci.commercial_name or ci.name or "NEOGAS"
+
+    # Fetch dispatches for this shift
+    dispatch_rows = await db.execute(
+        select(Dispatch)
+        .where(Dispatch.shift_id == shift_id)
+        .where(Dispatch.status != "CANCELLED")
+        .order_by(Dispatch.created_at.asc())
+    )
+    dispatches = dispatch_rows.scalars().all()
+
+    # Build lookup maps
+    hose_ids = [d.hose_id for d in dispatches if d.hose_id]
+    hose_map = {}
+    if hose_ids:
+        hr = await db.execute(select(Hose).where(Hose.hose_id.in_(hose_ids)))
+        for h in hr.scalars():
+            hose_map[h.hose_id] = h
+
+    dispatch_ids = [d.dispatch_id for d in dispatches]
+    detail_map = {}
+    if dispatch_ids:
+        dr = await db.execute(select(DispatchDetail).where(DispatchDetail.dispatch_id.in_(dispatch_ids)))
+        for det in dr.scalars():
+            detail_map[det.dispatch_id] = det
+
+    person_ids = [d.person_id for d in dispatches if d.person_id]
+    person_map = {}
+    if person_ids:
+        pr = await db.execute(select(Person).where(Person.person_id.in_(person_ids)))
+        for p in pr.scalars():
+            person_map[p.person_id] = p
+
+    vehicle_ids = [d.vehicle_id for d in dispatches if d.vehicle_id]
+    vehicle_map = {}
+    if vehicle_ids:
+        from app.models.person import Vehicle as VehicleModel
+        vr = await db.execute(select(VehicleModel).where(VehicleModel.vehicle_id.in_(vehicle_ids)))
+        for v in vr.scalars():
+            vehicle_map[v.vehicle_id] = v
+
+    pay_map = {}
+    if dispatch_ids:
+        pay_result = await db.execute(
+            select(DispatchPayment.dispatch_id, PaymentMethod.name)
+            .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+            .where(DispatchPayment.dispatch_id.in_(dispatch_ids))
+        )
+        for did, pname in pay_result:
+            pay_map[did] = pname
+
+    # Format dispatches
+    dispatch_data = []
+    for d in dispatches:
+        side = hose_map[d.hose_id].side if d.hose_id and d.hose_id in hose_map else "?"
+        person = person_map.get(d.person_id)
+        vehicle = vehicle_map.get(d.vehicle_id)
+        detail = detail_map.get(d.dispatch_id)
+        dispatch_data.append({
+            "order_id": d.order_id,
+            "dispenser_id": d.dispenser_id,
+            "side": side,
+            "grade": d.grade_id or "",
+            "customer_name": person.name if person else None,
+            "plate": vehicle.plate if vehicle else None,
+            "payment_method_name": pay_map.get(d.dispatch_id, ""),
+            "final_amount": float(d.total or 0),
+            "final_volume": str(detail.quantity) if detail and detail.quantity else "0",
+            "unit_price": float(detail.unit_price) if detail and detail.unit_price else 0,
+            "subsidy_amount": float(detail.subsidy_amount) if detail and detail.subsidy_amount else 0,
+            "status": d.status,
+            "sri_status": d.sri_status,
+            "created_at": d.created_at.isoformat() if d.created_at else "",
+        })
+
+    # Fetch cash movements
+    cm_result = await db.execute(
+        select(CashMovement)
+        .where(CashMovement.shift_id == shift_id)
+        .order_by(CashMovement.movement_id.asc())
+    )
+    cash_movements = cm_result.scalars().all()
+
+    cash_data = []
+    for cm in cash_movements:
+        cash_data.append({
+            "movement_id": cm.movement_id,
+            "type": cm.type,
+            "amount": float(cm.amount or 0),
+            "observation": cm.observation,
+            "running_balance": float(cm.running_balance or 0),
+            "related_user_name": cm.related_user_name,
+            "created_at": cm.created_at.isoformat() if cm.created_at else "",
+        })
+
+    xlsx_bytes = generate_shift_transactions_excel(
+        shift_id=shift_id,
+        dispatches=dispatch_data,
+        cash_movements=cash_data,
+        company_name=company_name,
+    )
+
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=transacciones_turno_{shift_id}.xlsx"},
+    )
 

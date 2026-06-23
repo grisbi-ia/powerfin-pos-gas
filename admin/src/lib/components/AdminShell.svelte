@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Menu, LayoutDashboard, Users, Shield, Package, Ruler, DollarSign, Truck, FileCode, Building2, Settings, CreditCard, BarChart3, LogOut } from 'lucide-svelte';
+  import { Menu, LayoutDashboard, Users, Shield, Package, Ruler, DollarSign, Truck, FileCode, Building2, Settings, CreditCard, BarChart3, LogOut, Activity } from 'lucide-svelte';
   import { currentUser, logout } from '$stores/auth';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
@@ -21,6 +21,7 @@
     { href: '/products', label: 'Productos', icon: Package },
     { href: '/grades', label: 'Grados', icon: Ruler },
     { href: '/price-lists', label: 'Listas de Precios', icon: DollarSign },
+    { href: '/dispensers/status', label: 'Surtidores (vivo)', icon: Activity },
     { href: '/dispensers', label: 'Surtidores', icon: Truck },
     { href: '/emission-points', label: 'Puntos Emisión', icon: FileCode },
     { href: '/company-info', label: 'Empresa', icon: Building2 },
@@ -82,7 +83,7 @@
                 onclick={() => mobileOpen = !mobileOpen}>
           <Menu class="w-5 h-5" />
         </button>
-        <span class="text-sm font-semibold text-gray-700 hidden sm:block lg:hidden">{companyName}</span>
+        <span class="text-sm font-semibold text-gray-700 block lg:hidden">{companyName}</span>
       </div>
       <div class="flex-1"></div>
       <div class="flex items-center gap-3">
