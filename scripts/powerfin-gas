@@ -166,7 +166,7 @@ cmd_status() {
     echo "══════════════════════════════════════════════════"
     echo ""
 
-    for svc in pos-backend pos-frontend fusion-bridge; do
+    for svc in pos-backend pos-frontend admin-frontend fusion-bridge; do
         local state
         state=$(systemctl is-active "$svc" 2>/dev/null || echo "unknown")
         case "$state" in
@@ -181,10 +181,11 @@ cmd_status() {
     echo "── Health checks ─────────────────────────────────"
     echo ""
 
-    local backend_ok fusion_ok frontend_ok
+    local backend_ok fusion_ok frontend_ok admin_ok
     backend_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health 2>/dev/null || echo "000")
     fusion_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8090/health 2>/dev/null || echo "000")
     frontend_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173 2>/dev/null || echo "000")
+    admin_ok=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5174 2>/dev/null || echo "000")
 
     case "$backend_ok" in
         200) echo "  🟢 Backend      :8080  → $backend_ok" ;;
@@ -197,6 +198,10 @@ cmd_status() {
     case "$frontend_ok" in
         200) echo "  🟢 Frontend     :5173  → $frontend_ok" ;;
         *)   echo "  🔴 Frontend     :5173  → $frontend_ok" ;;
+    esac
+    case "$admin_ok" in
+        200) echo "  🟢 Admin        :5174  → $admin_ok" ;;
+        *)   echo "  🔴 Admin        :5174  → $admin_ok" ;;
     esac
 
     echo ""
