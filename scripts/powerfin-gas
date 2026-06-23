@@ -81,6 +81,35 @@ cmd_deploy_backend() {
     cmd_clean backend
 }
 
+# ── deploy-admin ──────────────────────────────────────────────────
+cmd_deploy_admin() {
+    require_pre_deploy "admin"
+    echo "→ Desplegando admin desde $PRE_DEPLOY/admin/ → $DEST/admin/src/"
+
+    # Copiar fuentes
+    rsync -av \
+        --exclude='node_modules/' \
+        --exclude='.svelte-kit/' \
+        --exclude='build/' \
+        --exclude='.env' \
+        --exclude='.git/' \
+        "$PRE_DEPLOY/admin/src/" "$DEST/admin/src/"
+
+    # Copiar archivos de configuración (necesarios para build)
+    for f in package.json package-lock.json svelte.config.js vite.config.ts tsconfig.json postcss.config.js tailwind.config.js; do
+        [ -f "$PRE_DEPLOY/admin/$f" ] && cp "$PRE_DEPLOY/admin/$f" "$DEST/admin/$f"
+    done
+
+    ok "Admin desplegado"
+
+    info "Compilando admin..."
+    (cd "$DEST/admin" && npm run build) || die "Falló la compilación del admin"
+    ok "Admin compilado"
+
+    restart_service "admin-frontend"
+    cmd_clean admin
+}
+
 # ── deploy-fusion ───────────────────────────────────────────────────
 cmd_deploy_fusion() {
     require_pre_deploy "fusion"
@@ -96,30 +125,38 @@ cmd_deploy_fusion() {
 
 # ── deploy-all ──────────────────────────────────────────────────────
 cmd_deploy_all() {
-    cmd_deploy_frontend
     cmd_deploy_backend
     if [ -d "$PRE_DEPLOY/fusion" ] && [ -n "$(ls -A "$PRE_DEPLOY/fusion" 2>/dev/null)" ]; then
         cmd_deploy_fusion
     else
         echo "ℹ️  Sin cambios en FusionBridge — omitiendo"
     fi
+    cmd_deploy_frontend
+    if [ -d "$PRE_DEPLOY/admin" ] && [ -n "$(ls -A "$PRE_DEPLOY/admin" 2>/dev/null)" ]; then
+        cmd_deploy_admin
+    else
+        echo "ℹ️  Sin cambios en Admin — omitiendo"
+    fi
 }
 
 # ── Service control ─────────────────────────────────────────────────
-cmd_start_frontend()  { sudo systemctl start pos-frontend  && ok "pos-frontend  arrancado"; }
-cmd_start_backend()   { sudo systemctl start pos-backend   && ok "pos-backend   arrancado"; }
-cmd_start_fusion()    { sudo systemctl start fusion-bridge && ok "fusion-bridge arrancado"; }
-cmd_start_all()       { cmd_start_backend; sleep 2; cmd_start_fusion; sleep 2; cmd_start_frontend; }
+cmd_start_frontend()  { sudo systemctl start pos-frontend   && ok "pos-frontend   arrancado"; }
+cmd_start_admin()     { sudo systemctl start admin-frontend && ok "admin-frontend arrancado"; }
+cmd_start_backend()   { sudo systemctl start pos-backend    && ok "pos-backend    arrancado"; }
+cmd_start_fusion()    { sudo systemctl start fusion-bridge  && ok "fusion-bridge  arrancado"; }
+cmd_start_all()       { cmd_start_backend; sleep 2; cmd_start_fusion; sleep 2; cmd_start_frontend; cmd_start_admin; }
 
-cmd_stop_frontend()   { sudo systemctl stop pos-frontend  && ok "pos-frontend  detenido"; }
-cmd_stop_backend()    { sudo systemctl stop pos-backend   && ok "pos-backend   detenido"; }
-cmd_stop_fusion()     { sudo systemctl stop fusion-bridge && ok "fusion-bridge detenido"; }
-cmd_stop_all()        { cmd_stop_frontend; cmd_stop_backend; cmd_stop_fusion; }
+cmd_stop_frontend()   { sudo systemctl stop pos-frontend   && ok "pos-frontend   detenido"; }
+cmd_stop_admin()      { sudo systemctl stop admin-frontend && ok "admin-frontend detenido"; }
+cmd_stop_backend()    { sudo systemctl stop pos-backend    && ok "pos-backend    detenido"; }
+cmd_stop_fusion()     { sudo systemctl stop fusion-bridge  && ok "fusion-bridge  detenido"; }
+cmd_stop_all()        { cmd_stop_frontend; cmd_stop_admin; cmd_stop_backend; cmd_stop_fusion; }
 
-cmd_restart_frontend(){ sudo systemctl restart pos-frontend  && ok "pos-frontend  reiniciado"; }
-cmd_restart_backend() { sudo systemctl restart pos-backend   && ok "pos-backend   reiniciado"; }
-cmd_restart_fusion()  { sudo systemctl restart fusion-bridge && ok "fusion-bridge reiniciado"; }
-cmd_restart_all()     { cmd_restart_backend; sleep 2; cmd_restart_fusion; sleep 2; cmd_restart_frontend; }
+cmd_restart_frontend(){ sudo systemctl restart pos-frontend   && ok "pos-frontend   reiniciado"; }
+cmd_restart_admin()   { sudo systemctl restart admin-frontend && ok "admin-frontend reiniciado"; }
+cmd_restart_backend() { sudo systemctl restart pos-backend    && ok "pos-backend    reiniciado"; }
+cmd_restart_fusion()  { sudo systemctl restart fusion-bridge  && ok "fusion-bridge  reiniciado"; }
+cmd_restart_all()     { cmd_restart_backend; sleep 2; cmd_restart_fusion; sleep 2; cmd_restart_frontend; cmd_restart_admin; }
 
 # ── Status ───────────────────────────────────────────────────────────
 cmd_status() {
@@ -166,7 +203,7 @@ cmd_status() {
     echo "── Pre-deploy ─────────────────────────────────────"
     echo ""
 
-    for dir in frontend backend fusion; do
+    for dir in frontend admin backend fusion; do
         if [ -d "$PRE_DEPLOY/$dir" ] && [ -n "$(ls -A "$PRE_DEPLOY/$dir" 2>/dev/null)" ]; then
             local count
             count=$(find "$PRE_DEPLOY/$dir" -type f | wc -l)
@@ -178,26 +215,24 @@ cmd_status() {
 
     echo ""
 }
-
-# ── Logs ─────────────────────────────────────────────────────────────
 cmd_logs() {
     local filter="${1:-}"
     if [ -n "$filter" ]; then
         sudo journalctl -u "$filter" -f
     else
-        sudo journalctl -u pos-backend -u pos-frontend -u fusion-bridge -f
+        sudo journalctl -u pos-backend -u pos-frontend -u admin-frontend -u fusion-bridge -f
     fi
 }
 
 cmd_logs_tail() {
     local lines="${1:-50}"
-    sudo journalctl -u pos-backend -u pos-frontend -u fusion-bridge -n "$lines" --no-pager
+    sudo journalctl -u pos-backend -u pos-frontend -u admin-frontend -u fusion-bridge -n "$lines" --no-pager
 }
 
 # ── Pre-deploy (listar archivos pendientes) ─────────────────────────
 cmd_pending() {
     echo ""
-    for dir in frontend backend fusion; do
+    for dir in frontend admin backend fusion; do
         if [ -d "$PRE_DEPLOY/$dir" ] && [ -n "$(ls -A "$PRE_DEPLOY/$dir" 2>/dev/null)" ]; then
             echo "── $PRE_DEPLOY/$dir/ ──"
             find "$PRE_DEPLOY/$dir" -type f | head -30
@@ -218,10 +253,11 @@ cmd_clean() {
     local target="${1:-all}"
     case "$target" in
         frontend) rm -rf "$PRE_DEPLOY/frontend"/* && ok "Pre-deploy frontend limpiado" ;;
+        admin)    rm -rf "$PRE_DEPLOY/admin"/*    && ok "Pre-deploy admin limpiado" ;;
         backend)  rm -rf "$PRE_DEPLOY/backend"/*  && ok "Pre-deploy backend limpiado" ;;
         fusion)   rm -rf "$PRE_DEPLOY/fusion"/*   && ok "Pre-deploy fusion limpiado" ;;
-        all)      rm -rf "$PRE_DEPLOY/frontend"/* "$PRE_DEPLOY/backend"/* "$PRE_DEPLOY/fusion"/* && ok "Pre-deploy limpiado" ;;
-        *)        die "Uso: $APP_NAME clean [frontend|backend|fusion|all]" ;;
+        all)      rm -rf "$PRE_DEPLOY/frontend"/* "$PRE_DEPLOY/admin"/* "$PRE_DEPLOY/backend"/* "$PRE_DEPLOY/fusion"/* && ok "Pre-deploy limpiado" ;;
+        *)        die "Uso: $APP_NAME clean [frontend|admin|backend|fusion|all]" ;;
     esac
 }
 
@@ -267,14 +303,15 @@ cmd_help() {
     echo ""
     echo "── Deploy (desde pre-deploy → /opt/powerfin/pos/) ──"
     echo "  deploy-frontend    Copiar frontend y reiniciar"
+    echo "  deploy-admin       Copiar admin, compilar y reiniciar"
     echo "  deploy-backend     Copiar backend y reiniciar"
     echo "  deploy-fusion      Copiar FusionBridge y reiniciar"
-    echo "  deploy-all         Deploy de los 3 (solo si hay cambios)"
+    echo "  deploy-all         Deploy de los 4 (solo si hay cambios)"
     echo ""
     echo "── Control de servicios ──"
-    echo "  start-frontend     start-backend     start-fusion     start-all"
-    echo "  stop-frontend      stop-backend      stop-fusion      stop-all"
-    echo "  restart-frontend   restart-backend   restart-fusion   restart-all"
+    echo "  start-frontend     start-backend     start-fusion     start-admin     start-all"
+    echo "  stop-frontend      stop-backend      stop-fusion      stop-admin      stop-all"
+    echo "  restart-frontend   restart-backend   restart-fusion   restart-admin   restart-all"
     echo ""
     echo "── Monitoreo ──"
     echo "  status             Estado + health checks + pre-deploy pendiente"
@@ -285,7 +322,7 @@ cmd_help() {
     echo "  backup-db          Backup de base de datos (pg_dump)"
     echo ""
     echo "── Flujo típico ──"
-    echo "  1. Desde desarrollo: scripts/deploy-to-server.sh"
+    echo "  1. Desde desarrollo: scripts/deploy-to-server.sh frontend|admin|backend|fusion|all"
     echo "  2. En servidor:      powerfin-gas pending    (ver qué hay)"
     echo "  3. En servidor:      powerfin-gas deploy-all  (aplicar)"
     echo "  4. En servidor:      powerfin-gas status     (verificar)"
@@ -296,24 +333,28 @@ cmd_help() {
 case "${1:-help}" in
     # Deploy
     deploy-frontend)  cmd_deploy_frontend ;;
+    deploy-admin)     cmd_deploy_admin ;;
     deploy-backend)   cmd_deploy_backend ;;
     deploy-fusion)    cmd_deploy_fusion ;;
     deploy-all)       cmd_deploy_all ;;
 
     # Start
     start-frontend)   cmd_start_frontend ;;
+    start-admin)      cmd_start_admin ;;
     start-backend)    cmd_start_backend ;;
     start-fusion)     cmd_start_fusion ;;
     start-all)        cmd_start_all ;;
 
     # Stop
     stop-frontend)    cmd_stop_frontend ;;
+    stop-admin)       cmd_stop_admin ;;
     stop-backend)     cmd_stop_backend ;;
     stop-fusion)      cmd_stop_fusion ;;
     stop-all)         cmd_stop_all ;;
 
     # Restart
     restart-frontend) cmd_restart_frontend ;;
+    restart-admin)    cmd_restart_admin ;;
     restart-backend)  cmd_restart_backend ;;
     restart-fusion)   cmd_restart_fusion ;;
     restart-all)      cmd_restart_all ;;

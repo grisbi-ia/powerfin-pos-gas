@@ -31,6 +31,7 @@ Nunca subas:
 ```bash
 # Subir solo lo que cambió
 ./scripts/deploy-to-server.sh frontend
+./scripts/deploy-to-server.sh admin
 ./scripts/deploy-to-server.sh backend
 ./scripts/deploy-to-server.sh fusion      # compila + sube JAR
 
@@ -54,11 +55,13 @@ powerfin-gas status        # verificar health checks
 
 ```bash
 # Deploy
-powerfin-gas deploy-frontend    powerfin-gas deploy-backend
-powerfin-gas deploy-fusion      powerfin-gas deploy-all
+powerfin-gas deploy-frontend    powerfin-gas deploy-admin
+powerfin-gas deploy-backend     powerfin-gas deploy-fusion
+powerfin-gas deploy-all
 
 # Control de servicios
 powerfin-gas start-frontend     powerfin-gas stop-frontend      powerfin-gas restart-frontend
+powerfin-gas start-admin        powerfin-gas stop-admin         powerfin-gas restart-admin
 powerfin-gas start-backend      powerfin-gas stop-backend       powerfin-gas restart-backend
 powerfin-gas start-fusion       powerfin-gas stop-fusion         powerfin-gas restart-fusion
 powerfin-gas start-all          powerfin-gas stop-all            powerfin-gas restart-all
@@ -81,7 +84,7 @@ sudo mv /tmp/powerfin-gas /usr/local/bin/powerfin-gas
 sudo chmod +x /usr/local/bin/powerfin-gas
 
 # Crear carpeta de pre-deploy
-mkdir -p /home/app/powerfin-deploy/{frontend,backend,fusion}
+mkdir -p /home/app/powerfin-deploy/{frontend,admin,backend,fusion}
 ```
 
 ---
@@ -103,6 +106,7 @@ cd /opt/powerfin/pos && git checkout <tag-anterior>
 ```
 /home/app/powerfin-deploy/    ← pre-deploy (buffer antes de aplicar)
 ├── frontend/
+├── admin/
 ├── backend/
 └── fusion/
 
@@ -113,8 +117,12 @@ cd /opt/powerfin/pos && git checkout <tag-anterior>
 │   └── app/                   ← código Python
 ├── fusion-bridge/
 │   └── quarkus-app/           ← JAR compilado
-└── pos/
+├── pos/
+│   ├── node_modules/          ← NO TOCAR
+│   ├── .env                   ← NO TOCAR
+│   └── src/                   ← código SvelteKit (POS)
+└── admin/
     ├── node_modules/          ← NO TOCAR
     ├── .env                   ← NO TOCAR
-    └── src/                   ← código SvelteKit
+    └── src/                   ← código SvelteKit (Admin)
 ```

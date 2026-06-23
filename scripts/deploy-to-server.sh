@@ -6,9 +6,10 @@
 #
 # USO:
 #   ./scripts/deploy-to-server.sh frontend   → sube pos/src/
+#   ./scripts/deploy-to-server.sh admin      → sube admin/src/
 #   ./scripts/deploy-to-server.sh backend    → sube pos_backend/app/
 #   ./scripts/deploy-to-server.sh fusion     → compila y sube JAR
-#   ./scripts/deploy-to-server.sh all        → los 3
+#   ./scripts/deploy-to-server.sh all        → los 4
 #
 # Luego en el servidor:
 #   powerfin-gas pending       → ver qué llegó
@@ -41,7 +42,7 @@ warn(){ echo -e "${YELLOW}⚠️  $1${NC}"; }
 
 # ── Asegurar que existen las carpetas en el servidor ────────────────
 ensure_dirs() {
-    ssh "$SERVER" "mkdir -p $PRE_DEPLOY/frontend $PRE_DEPLOY/backend $PRE_DEPLOY/fusion"
+    ssh "$SERVER" "mkdir -p $PRE_DEPLOY/frontend $PRE_DEPLOY/admin $PRE_DEPLOY/backend $PRE_DEPLOY/fusion"
 }
 
 # ── Frontend ────────────────────────────────────────────────────────
@@ -93,10 +94,39 @@ deploy_fusion() {
     ok "FusionBridge subido al pre-deploy"
 }
 
+# ── Admin ────────────────────────────────────────────────────
+deploy_admin() {
+    info "Subiendo admin a $SERVER:$PRE_DEPLOY/admin/"
+
+    ensure_dirs
+    rsync -av \
+        --exclude='node_modules/' \
+        --exclude='.svelte-kit/' \
+        --exclude='build/' \
+        --exclude='.env' \
+        --exclude='.git/' \
+        admin/src/ "$SERVER:$PRE_DEPLOY/admin/"
+    # También subir package.json y config files para el build
+    rsync -av \
+        admin/package.json \
+        admin/package-lock.json \
+        admin/svelte.config.js \
+        admin/vite.config.ts \
+        admin/tsconfig.json \
+        admin/postcss.config.js \
+        admin/tailwind.config.js \
+        "$SERVER:$PRE_DEPLOY/admin/"
+
+    ok "Admin subido al pre-deploy"
+}
+
 # ── Main ────────────────────────────────────────────────────────────
 case "${1:-}" in
     frontend)
         deploy_frontend
+        ;;
+    admin)
+        deploy_admin
         ;;
     backend)
         deploy_backend
@@ -106,6 +136,7 @@ case "${1:-}" in
         ;;
     all)
         deploy_frontend
+        deploy_admin
         deploy_backend
         deploy_fusion
         echo ""
@@ -115,12 +146,13 @@ case "${1:-}" in
         echo "  powerfin-gas status        ← verificar"
         ;;
     *)
-        echo "Uso: $0 [frontend|backend|fusion|all]"
+        echo "Uso: $0 [frontend|admin|backend|fusion|all]"
         echo ""
         echo "  1. $0 frontend    → sube pos/src/"
-        echo "  2. $0 backend     → sube pos_backend/app/"
-        echo "  3. $0 fusion      → compila y sube JAR"
-        echo "  4. $0 all         → los 3 juntos"
+        echo "  2. $0 admin       → sube admin/src/ + config"
+        echo "  3. $0 backend     → sube pos_backend/app/"
+        echo "  4. $0 fusion      → compila y sube JAR"
+        echo "  5. $0 all         → los 4 juntos"
         echo ""
         echo "  Luego en el servidor:"
         echo "    powerfin-gas pending"
