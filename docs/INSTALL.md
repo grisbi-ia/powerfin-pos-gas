@@ -233,6 +233,42 @@ systemctl start pos-frontend
 
 ---
 
+## 6b. Powerfin Admin (SvelteKit — desarrollo local)
+
+El Admin corre en modo desarrollo (`npm run dev`) en el puerto 5174.
+
+```bash
+cd /opt/powerfin/pos/admin
+npm install
+
+cat > /etc/systemd/system/admin-frontend.service << 'EOF'
+[Unit]
+Description=Powerfin Admin Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=app
+WorkingDirectory=/opt/powerfin/pos/admin
+ExecStart=/usr/bin/npm run dev -- --host 0.0.0.0 --port 5174
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=admin-frontend
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable admin-frontend
+systemctl start admin-frontend
+```
+
+---
+
 ## 7. Archivos de configuración
 
 Antes de arrancar los servicios, completar los siguientes archivos.
@@ -314,6 +350,9 @@ ufw allow 22
 
 # POS Frontend (:5173) — solo LAN
 ufw allow from 192.168.1.0/24 to any port 5173
+
+# Admin Frontend (:5174) — solo LAN
+ufw allow from 192.168.1.0/24 to any port 5174
 
 # POS Backend (:8080) — solo LAN
 ufw allow from 192.168.1.0/24 to any port 8080
@@ -442,11 +481,13 @@ pytest
 curl -s http://localhost:8080/health
 curl -s http://localhost:8090/health
 curl -s http://localhost:5173
+curl -s http://localhost:5174
 
 # Servicios
 systemctl status pos-backend
 systemctl status fusion-bridge
 systemctl status pos-frontend
+systemctl status admin-frontend
 systemctl status postgresql
 
 # Logs
@@ -460,10 +501,10 @@ journalctl -u fusion-bridge -f
 
 ```bash
 # Reiniciar todo
-systemctl restart pos-backend fusion-bridge pos-frontend
+systemctl restart pos-backend fusion-bridge pos-frontend admin-frontend
 
 # Logs en vivo
-journalctl -u pos-backend -u fusion-bridge -f
+journalctl -u pos-backend -u fusion-bridge -u pos-frontend -u admin-frontend -f
 
 # Conectividad con dispensador Wayne
 echo -n "00012|5|2||ECHO||||^" | nc -v 192.168.1.20 3011
@@ -499,6 +540,13 @@ rsync -av pos/src/ app@192.168.1.25:/opt/powerfin/pos/pos/src/
 ssh app@192.168.1.25 sudo systemctl restart pos-frontend
 ```
 
+**Admin Frontend** (SvelteKit, modo dev):
+
+```bash
+./scripts/deploy-to-server.sh admin
+ssh app@192.168.1.25 "cd /opt/powerfin/pos/admin && npm install && powerfin-gas deploy-admin"
+```
+
 ---
 
 ## 12. Estructura de directorios
@@ -511,13 +559,17 @@ ssh app@192.168.1.25 sudo systemctl restart pos-frontend
 │   └── app/
 ├── fusion-bridge/            # Java Quarkus
 │   └── quarkus-app/
-└── pos/                      # SvelteKit Frontend
-    └── src/
+├── pos/                      # SvelteKit Frontend (POS)
+│   └── src/
+├── admin/                    # SvelteKit Frontend (Admin)
+│   ├── node_modules/
+│   └── src/
 
 /etc/systemd/system/
 ├── pos-backend.service
 ├── fusion-bridge.service
-└── pos-frontend.service
+├── pos-frontend.service
+└── admin-frontend.service
 ```
 
 ---
@@ -556,7 +608,7 @@ chmod 644 /etc/nginx/ssl/pos-cert.pem
 
 ### Configurar Nginx como proxy inverso
 
-Nginx recibe HTTPS en :443 y enruta al POS (:5173), backend (:8080)
+Nginx recibe HTTPS en :443 y enruta al POS (:5173), Admin (:5174), backend (:8080)
 
 y FusionBridge (:8090). Todo pasa por un solo puerto.
 
@@ -597,6 +649,7 @@ Con Nginx, todo el tráfico entra por :443. Cerrar los puertos directos:
 
 ```bash
 ufw delete allow from 192.168.1.0/24 to any port 5173
+ufw delete allow from 192.168.1.0/24 to any port 5174
 ufw delete allow from 192.168.1.0/24 to any port 8080
 ufw delete allow from 192.168.1.0/24 to any port 8090
 ufw allow from 192.168.1.0/24 to any port 443
@@ -676,8 +729,18 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # POS Backend API
-    location /api/pos/ {
+    # Admin Frontend — proxy al dev server
+    location /admin {
+        proxy_pass http://127.0.0.1:5174;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # POS Backend API (POS + Admin)
+    location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -728,6 +791,7 @@ dejar 443:
 
 ```bash
 ufw delete allow from 192.168.1.0/24 to any port 5173
+ufw delete allow from 192.168.1.0/24 to any port 5174
 ufw delete allow from 192.168.1.0/24 to any port 8080
 ufw delete allow from 192.168.1.0/24 to any port 8090
 ufw allow from 192.168.1.0/24 to any port 443
