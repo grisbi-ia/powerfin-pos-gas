@@ -1060,6 +1060,7 @@ class UpdatePaymentMethodRequest(BaseModel):
 
 class DashboardSummary(BaseModel):
     total_sales: float = 0
+    total_gallons: float = 0
     dispatch_count: int = 0
     avg_ticket: float = 0
     cash_collected: float = 0
@@ -1070,8 +1071,9 @@ class DashboardSummary(BaseModel):
 
 
 class SalesByDayItem(BaseModel):
-    date: date
+    date: date | str  # date for daily/monthly, str like "2026-06-26T14:00" for hourly
     total: float
+    total_gallons: float = 0
     count: int
 
 
@@ -1103,6 +1105,51 @@ class TopProductItem(BaseModel):
     product_code: str
     total_amount: float
     total_liters: float = 0
+    count: int
+
+
+class EvolutionItem(BaseModel):
+    """One bucket in a time-series chart (hour / day / month)."""
+    period_label: str  # "2026-06-26T14:00" or "2026-06-01" or "2026-01"
+    sales: float = 0
+    gallons: float = 0
+    count: int = 0
+
+
+class CompareResponse(BaseModel):
+    """Current vs previous period KPI comparison."""
+    current: DashboardSummary
+    previous: DashboardSummary
+    growth_sales_pct: float | None = None  # null if previous was 0
+    growth_gallons_pct: float | None = None
+
+
+class EvolutionCompareResponse(BaseModel):
+    """Three-period evolution data for comparison charts."""
+    period: str  # "daily", "monthly", "annual"
+    current_label: str
+    previous_label: str
+    next_label: str
+    previous: list[EvolutionItem]
+    current: list[EvolutionItem]
+    next: list[EvolutionItem]
+
+
+class TopPeriodItem(BaseModel):
+    """Best sub-periods within a larger period (best days in month, best months in year)."""
+    period_label: str  # "26 Jun" or "Junio"
+    sales: float
+    gallons: float
+    count: int
+
+
+class GallonsByPeriodItem(BaseModel):
+    """Gallons volume in a time bucket, broken down by product."""
+    period_label: str  # "2026-06-26T08:00" or "2026-06-15" or "2026-06"
+    product_id: int
+    product_name: str
+    product_code: str
+    gallons: float
     count: int
 
 

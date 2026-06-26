@@ -1,284 +1,448 @@
 <script lang="ts">
   import { api } from '$lib/api/api';
-  import { formatCurrency, formatDateTime } from '$lib/utils/format';
-  import { DollarSign, ShoppingCart, Receipt, Users, TrendingUp, TrendingDown, Minus } from 'lucide-svelte';
+  import { formatCurrency } from '$lib/utils/format';
+  import { DollarSign, ShoppingCart, Receipt, TrendingUp, TrendingDown, Droplets } from 'lucide-svelte';
   import KpiCard from '$components/KpiCard.svelte';
+  import ModeSelector from '$components/dashboard/ModeSelector.svelte';
+  import ChipScroller from '$components/dashboard/ChipScroller.svelte';
+  import DonutChart from '$components/dashboard/DonutChart.svelte';
+  import ComparisonChart from '$components/dashboard/ComparisonChart.svelte';
+  import TopPeriodsChart from '$components/dashboard/TopPeriodsChart.svelte';
+  import ProductLinesChart from '$components/dashboard/ProductLinesChart.svelte';
+  import type { Period, ChipItem } from '$components/dashboard/types';
 
-  let viewMode = $state<'month' | 'today'>('today');
+  // ── State ────────────────────────────────────────────────────────
+
+  let period = $state<Period>('daily');
+  let selectedDate = $state('');
   let loading = $state(true);
   let error = $state('');
+  let mounted = $state(false);
+  let transitionKey = $state(0);
+  let firstYear = $state(2024);  // fallback, will fetch from system_config
 
-  // Month data
+  // API data
   let summary: any = null;
-  let salesByDayCanvas = $state<HTMLCanvasElement>();
-  let salesByProductCanvas = $state<HTMLCanvasElement>();
-  let salesByPaymentCanvas = $state<HTMLCanvasElement>();
+  let evolutionCompare: any = null;
+  let byProduct: any[] = [];
+  let byPayment: any[] = [];
+  let byGallons: any[] = [];
+  let compareData: any = null;
+  let topPeriods: any[] = [];
+  let gallonsByPeriod: any[] = [];
 
-  // Today data
-  let todaySummary: any = null;
-  let yesterdaySummary: any = null;
-  let salesByHourCanvas = $state<HTMLCanvasElement>();
-  let todayPaymentCanvas = $state<HTMLCanvasElement>();
-  let lastDispatches: any[] = [];
+  // Today-only data
   let todayShifts: any[] = [];
+  let lastDispatches: any[] = [];
 
-  const colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#14b8a6','#f97316','#ec4899'];
+  const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const monthNamesFull = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-  const percentageLabelPlugin = {
-    id: 'percentageLabel',
-    afterDatasetsDraw(chart: any) {
-      const { ctx, data: chartData } = chart;
-      const dataset = chartData.datasets[0];
-      const total = dataset.data.reduce((a: number, b: number) => a + b, 0);
-      if (total === 0) return;
-      const meta = chart.getDatasetMeta(0);
-      ctx.save();
-      ctx.font = 'bold 11px Inter, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      meta.data.forEach((arc: any, i: number) => {
-        const pct = Math.round((dataset.data[i] / total) * 100);
-        if (pct < 5) return;
-        const { x, y } = arc.tooltipPosition();
-        ctx.fillStyle = '#fff';
-        ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = 2;
-        ctx.fillText(`${pct}%`, x, y);
-        ctx.shadowBlur = 0;
-      });
-      ctx.restore();
+  const isToday = $derived(period === 'daily' && selectedDate === toLocalDate(new Date()));
+
+  // ── Date helpers ─────────────────────────────────────────────────
+
+  function toLocalDate(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function formatApiDate(p: Period, dateStr: string): string {
+    if (p === 'monthly') { const [y, m] = dateStr.split('-'); return `${y}-${m}-01`; }
+    if (p === 'annual') return `${dateStr}-01-01`;
+    return dateStr;
+  }
+
+  function formatDateLabel(p: Period, dateStr: string): string {
+    if (p === 'daily') {
+      const d = new Date(dateStr + 'T12:00:00');
+      return d.toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     }
-  };
-
-  function legendWithPct(chart: any) {
-    const data = chart.data;
-    const total = data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
-    return data.labels.map((label: string, i: number) => ({
-      text: `${label} (${Math.round(data.datasets[0].data[i] / total * 100)}%)`,
-      fillStyle: data.datasets[0].backgroundColor[i],
-      strokeStyle: data.datasets[0].backgroundColor[i],
-      index: i, hidden: !chart.getDataVisibility(i), pointStyle: 'circle',
-    }));
+    if (p === 'monthly') { const [y, m] = dateStr.split('-'); return `${monthNamesFull[parseInt(m)]} ${y}`; }
+    return dateStr;
   }
 
-  function trendIcon(current: number, previous: number) {
-    if (!previous || previous === 0) return { icon: Minus, color: 'text-gray-400', pct: '—' };
-    const pct = Math.round((current - previous) / previous * 100);
-    if (pct > 0) return { icon: TrendingUp, color: 'text-green-500', pct: `+${pct}%` };
-    if (pct < 0) return { icon: TrendingDown, color: 'text-red-500', pct: `${pct}%` };
-    return { icon: Minus, color: 'text-gray-400', pct: '0%' };
-  }
+  // ── Chip builder ─────────────────────────────────────────────────
 
-  $effect(() => { (async () => {
-    if (viewMode === 'month') await loadMonth();
-    else await loadToday();
-  })();
-});
-
-  async function loadMonth() {
-    loading = true; error = '';
-    try {
-      const [sum, byDay, byDayProduct, byProduct, byPayment] = await Promise.all([
-        api.get<any>('/dashboard/summary'),
-        api.get<any[]>('/dashboard/sales-by-day'),
-        api.get<any[]>('/dashboard/sales-by-day-product'),
-        api.get<any[]>('/dashboard/sales-by-product'),
-        api.get<any[]>('/dashboard/sales-by-payment'),
-      ]);
-      summary = sum; loading = false;
-
-      const { Chart, registerables } = await import('chart.js');
-      Chart.register(...registerables);
-
-      if (byDay.length && salesByDayCanvas) {
-        const dates = [...new Set(byDayProduct.map((d: any) => d.date))].sort();
-        const products = [...new Set(byDayProduct.map((d: any) => d.product_name))];
-        const productColors = ['#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#ec4899'];
-        const datasets: any[] = [
-          { label: 'Total', data: dates.map(date => { const f = byDay.find((d: any) => d.date === date); return f ? f.total : 0; }), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: false, tension: 0.3, pointRadius: 3, borderWidth: 2.5 },
-        ];
-        products.forEach((product, i) => {
-          datasets.push({ label: product, data: dates.map(date => { const f = byDayProduct.find((d: any) => d.date === date && d.product_name === product); return f ? f.total : 0; }), borderColor: productColors[i % productColors.length], fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2, borderDash: [4, 2] });
-        });
-        new Chart(salesByDayCanvas!, { type: 'line', data: { labels: dates, datasets }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } } }, scales: { y: { ticks: { callback: (v: any) => '$' + v } } } } });
-      }
-      if (byProduct.length && salesByProductCanvas) {
-        new Chart(salesByProductCanvas!, { type: 'doughnut', data: { labels: byProduct.map((d: any) => d.product_name), datasets: [{ data: byProduct.map((d: any) => d.total_amount), backgroundColor: colors.slice(0, byProduct.length) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15, generateLabels: legendWithPct } } } }, plugins: [percentageLabelPlugin] });
-      }
-      if (byPayment.length && salesByPaymentCanvas) {
-        new Chart(salesByPaymentCanvas!, { type: 'pie', data: { labels: byPayment.map((d: any) => d.method_name), datasets: [{ data: byPayment.map((d: any) => d.total), backgroundColor: colors.slice(0, byPayment.length) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15, generateLabels: legendWithPct } } } }, plugins: [percentageLabelPlugin] });
-      }
-    } catch (err: any) { error = err.message; loading = false; }
-  }
-
-  async function loadToday() {
-    loading = true; error = '';
-    const toLocalDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  function buildChips(p: Period, anchor: string): ChipItem[] {
+    if (!anchor) return [];
     const today = toLocalDate(new Date());
     const yesterday = toLocalDate(new Date(Date.now() - 86400000));
+
+    if (p === 'daily') {
+      const [y, m] = anchor.split('-').map(Number);
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const now = new Date();
+      const todayNum = now.getDate();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+
+      return Array.from({ length: daysInMonth }, (_, i) => {
+        const day = i + 1;
+        const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const isTodayFlag = y === currentYear && m === currentMonth && day === todayNum;
+        let sublabel: string | undefined;
+        if (isTodayFlag) sublabel = 'Hoy';
+        else if (dateStr === yesterday) sublabel = 'Ayer';
+        return { value: dateStr, label: String(day), sublabel, isToday: isTodayFlag, isPast: dateStr <= today };
+      });
+    }
+
+    if (p === 'monthly') {
+      const y = parseInt(anchor.split('-')[0]);
+      const now = new Date();
+      const cm = now.getMonth() + 1;
+      const cy = now.getFullYear();
+      return Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        const dateStr = `${y}-${String(m).padStart(2,'0')}`;
+        return { value: dateStr, label: monthNames[m], isToday: y === cy && m === cm, isPast: dateStr <= `${cy}-${String(cm).padStart(2,'0')}` };
+      });
+    }
+
+    // annual
+    const cy = new Date().getFullYear();
+    return Array.from({ length: cy - firstYear + 1 }, (_, i) => {
+      const y = firstYear + i;
+      return { value: String(y), label: String(y), isToday: y === cy, isPast: true };
+    });
+  }
+
+  let chips = $derived(buildChips(period, selectedDate));
+
+  // ── Init ─────────────────────────────────────────────────────────
+
+  $effect(() => {
+    if (!mounted) {
+      selectedDate = toLocalDate(new Date());
+      // Fetch first year from system_config
+      api.get<any[]>('/system-config').then(configs => {
+        const fy = configs.find((c: any) => c.key === 'dashboard.first_year');
+        if (fy) firstYear = parseInt(fy.value) || 2024;
+      }).catch(() => {});
+      mounted = true;
+    }
+  });
+
+  $effect(() => { if (selectedDate) loadData(); });
+
+  function setPeriod(p: Period) {
+    period = p;
+    transitionKey++;
+    const today = toLocalDate(new Date());
+    if (p === 'daily') selectedDate = today;
+    else if (p === 'monthly') selectedDate = today.substring(0, 7);
+    else selectedDate = String(new Date().getFullYear());
+  }
+
+  function selectChip(value: string) { selectedDate = value; }
+
+  // ── Pivot gallonsByPeriod into a monthly table ──────────────────
+
+  function pivotMonthly(data: any[]) {
+    // Group by date, extract gallons per product_id (1=DIESEL, 2=SUPER, 3=ECO_PAIS)
+    const byDay = new Map<string, { diesel: number; super_: number; eco: number }>();
+    for (const d of data) {
+      const day = d.period_label; // "2026-06-15"
+      if (!byDay.has(day)) byDay.set(day, { diesel: 0, super_: 0, eco: 0 });
+      const entry = byDay.get(day)!;
+      if (d.product_id === 1) entry.diesel += d.gallons;
+      else if (d.product_id === 2) entry.super_ += d.gallons;
+      else if (d.product_id === 3) entry.eco += d.gallons;
+    }
+
+    const monthNamesShort = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const sorted = [...byDay.keys()].sort();
+
+    const rows = sorted.map(day => {
+      const e = byDay.get(day)!;
+      const parts = day.split('-');
+      const label = parts.length === 3 ? `${parseInt(parts[2])} ${monthNamesShort[parseInt(parts[1])]}` : day;
+      return { label, diesel: e.diesel, super: e.super_, eco: e.eco, total: e.diesel + e.super_ + e.eco };
+    });
+
+    const totals = {
+      diesel: rows.reduce((s, r) => s + r.diesel, 0),
+      super: rows.reduce((s, r) => s + r.super, 0),
+      eco: rows.reduce((s, r) => s + r.eco, 0),
+      total: rows.reduce((s, r) => s + r.total, 0),
+    };
+
+    return { rows, totals };
+  }
+
+  // ── Data loading ─────────────────────────────────────────────────
+
+  async function loadData() {
+    loading = true; error = '';
+    const apiDate = formatApiDate(period, selectedDate);
     try {
-      const [tSum, ySum, byHour, byPayment, dispatches, shifts] = await Promise.all([
-        api.get<any>(`/dashboard/summary?date_from=${today}&date_to=${today}`),
-        api.get<any>(`/dashboard/summary?date_from=${yesterday}&date_to=${yesterday}`).catch(() => null),
-        api.get<any[]>(`/dashboard/sales-by-hour?date=${today}`),
-        api.get<any[]>(`/dashboard/sales-by-payment?date_from=${today}&date_to=${today}`),
-        api.get<any>(`/reports/sales?date_from=${today}&date_to=${today}&page_size=10`),
-        api.get<any>(`/reports/shifts?date_from=${today}&date_to=${today}&closed_date_from=${today}&closed_date_to=${today}&page_size=50`),
-      ]);
-      todaySummary = tSum; yesterdaySummary = ySum; lastDispatches = dispatches.items || [];
-      todayShifts = shifts.items || []; loading = false;
-
-      const { Chart, registerables } = await import('chart.js');
-      Chart.register(...registerables);
-
-      if (salesByHourCanvas) {
-        const hours = Array.from({ length: 17 }, (_, i) => i + 6);
-        new Chart(salesByHourCanvas, {
-          type: 'bar', data: { labels: hours.map(h => `${h}:00`), datasets: [{ label: 'Ventas', data: hours.map(h => { const f = byHour.find((d: any) => d.hour === h); return f ? f.total : 0; }), backgroundColor: '#3b82f6', borderRadius: 4 }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v: any) => '$' + v } } } }
-        });
+      const fetches: Promise<any>[] = [
+        api.get<any>(`/dashboard/summary?period=${period}&date=${apiDate}`),
+        api.get<any>(`/dashboard/evolution/compare?period=${period}&date=${apiDate}`),
+        api.get<any[]>(`/dashboard/sales-by-product?period=${period}&date=${apiDate}`),
+        api.get<any[]>(`/dashboard/sales-by-payment?period=${period}&date=${apiDate}`),
+        api.get<any[]>(`/dashboard/gallons-by-product?period=${period}&date=${apiDate}`),
+        api.get<any>(`/dashboard/compare?period=${period}&date=${apiDate}`).catch(() => null),
+      ];
+      // top-periods only for monthly/annual
+      if (period !== 'daily') {
+        fetches.push(api.get<any[]>(`/dashboard/top-periods?period=${period}&date=${apiDate}&limit=${period === 'annual' ? 3 : 5}`).catch(() => []));
+      } else {
+        fetches.push(Promise.resolve([]));
       }
-      if (byPayment.length && todayPaymentCanvas) {
-        new Chart(todayPaymentCanvas, { type: 'pie', data: { labels: byPayment.map((d: any) => d.method_name), datasets: [{ data: byPayment.map((d: any) => d.total), backgroundColor: colors.slice(0, byPayment.length) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15, generateLabels: legendWithPct } } } }, plugins: [percentageLabelPlugin] });
+      // gallons by period + product (multi-line chart)
+      fetches.push(api.get<any[]>(`/dashboard/gallons-by-period?period=${period}&date=${apiDate}`).catch(() => []));
+
+      const [sum, evoComp, prod, pay, gal, comp, topP, gbp] = await Promise.all(fetches);
+      summary = sum; evolutionCompare = evoComp; byProduct = prod; byPayment = pay;
+      byGallons = gal; compareData = comp; topPeriods = topP; gallonsByPeriod = gbp;
+
+      // Today extra data
+      if (isToday) {
+        const todayStr = toLocalDate(new Date());
+        try {
+          const [dispatches, shifts] = await Promise.all([
+            api.get<any>(`/reports/sales?date_from=${todayStr}&date_to=${todayStr}&page_size=10`),
+            api.get<any>(`/reports/shifts?date_from=${todayStr}&date_to=${todayStr}&closed_date_from=${todayStr}&closed_date_to=${todayStr}&page_size=50`),
+          ]);
+          lastDispatches = dispatches.items || [];
+          todayShifts = shifts.items || [];
+        } catch { lastDispatches = []; todayShifts = []; }
+      } else {
+        lastDispatches = []; todayShifts = [];
       }
-    } catch (err: any) { error = err.message; loading = false; }
+
+      loading = false;
+    } catch (err: any) {
+      error = err.message || 'Error loading dashboard';
+      loading = false;
+    }
   }
 </script>
 
 <div>
-  <div class="flex items-center justify-between mb-6">
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
     <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-    <div class="flex bg-gray-100 rounded-lg p-1">
-      <button class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {viewMode==='today'?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}" onclick={()=>viewMode='today'}>Hoy</button>
-      <button class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors {viewMode==='month'?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}" onclick={()=>viewMode='month'}>Mes</button>
-    </div>
+    <ModeSelector mode={period} onchange={setPeriod} />
   </div>
 
+  <!-- Chips -->
+  <div class="mb-4">
+    <ChipScroller items={chips} selectedValue={selectedDate} onselect={selectChip} />
+  </div>
+
+  <h2 class="text-sm text-gray-500 mb-6 capitalize">{formatDateLabel(period, selectedDate)}</h2>
+
   {#if loading}
-    <div class="flex justify-center py-12"><div class="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div></div>
+    <div class="flex justify-center py-12">
+      <div class="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
   {:else if error}
     <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>
-
-  {:else if viewMode === 'month' && summary}
-    <!-- MONTH VIEW -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <KpiCard title="Ventas Totales" value={formatCurrency(summary.total_sales)} icon={DollarSign} color="blue"/>
-      <KpiCard title="Despachos" value={String(summary.dispatch_count)} icon={ShoppingCart} color="green"/>
-      <KpiCard title="Ticket Promedio" value={formatCurrency(summary.avg_ticket)} icon={Receipt} color="purple"/>
-      <KpiCard title="Turnos Activos" value={String(summary.active_shifts)} icon={Users} color="orange"/>
-    </div>
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
-      <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Día</h3>
-      <div class="relative h-72 md:h-80"><canvas bind:this={salesByDayCanvas}></canvas></div>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6"><h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto</h3><div class="relative h-64 md:h-72"><canvas bind:this={salesByProductCanvas}></canvas></div></div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6"><h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Método de Pago</h3><div class="relative h-64 md:h-72"><canvas bind:this={salesByPaymentCanvas}></canvas></div></div>
+  {:else if summary}
+    <!-- Content with fade transition on period change -->
+    {#key transitionKey}
+    <div class="dashboard-content">
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <KpiCard title="Ventas {period === 'daily' ? 'Hoy' : 'Totales'}" value={formatCurrency(summary.total_sales)} icon={DollarSign} color="blue" />
+      <KpiCard title="Galones" value={`${summary.total_gallons.toLocaleString('es-EC')} gl`} icon={Droplets} color="green" />
+      <KpiCard title="Despachos" value={String(summary.dispatch_count)} icon={ShoppingCart} color="purple" />
+      <KpiCard title="Ticket Prom." value={formatCurrency(summary.avg_ticket)} icon={Receipt} color="orange" />
     </div>
 
-  {:else if viewMode === 'today' && todaySummary}
-    {@const t = trendIcon(todaySummary.total_sales, yesterdaySummary?.total_sales || 0)}
-    {@const d = trendIcon(todaySummary.dispatch_count, yesterdaySummary?.dispatch_count || 0)}
-    <!-- TODAY VIEW -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600 flex-shrink-0"><DollarSign class="w-5 h-5"/></div>
-          <div>
-            <p class="text-xs text-gray-500 uppercase">Ventas Hoy</p>
-            <p class="text-xl font-bold text-gray-900">{formatCurrency(todaySummary.total_sales)}</p>
-            <span class="text-xs {t.color}">{t.pct} vs ayer</span>
-          </div>
-        </div>
+    <!-- Growth badges -->
+    {#if compareData && (compareData.growth_sales_pct != null || compareData.growth_gallons_pct != null)}
+      <div class="flex flex-wrap gap-3 mb-6 text-sm">
+        {#if compareData.growth_sales_pct != null}
+          <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full {compareData.growth_sales_pct >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}">
+            {#if compareData.growth_sales_pct >= 0}<TrendingUp class="w-4 h-4" />{:else}<TrendingDown class="w-4 h-4" />{/if}
+            Ventas: {compareData.growth_sales_pct >= 0 ? '+' : ''}{compareData.growth_sales_pct}% vs período anterior
+          </span>
+        {/if}
+        {#if compareData.growth_gallons_pct != null}
+          <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full {compareData.growth_gallons_pct >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}">
+            {#if compareData.growth_gallons_pct >= 0}<TrendingUp class="w-4 h-4" />{:else}<TrendingDown class="w-4 h-4" />{/if}
+            Galones: {compareData.growth_gallons_pct >= 0 ? '+' : ''}{compareData.growth_gallons_pct}% vs período anterior
+          </span>
+        {/if}
       </div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-green-50 text-green-600 flex-shrink-0"><ShoppingCart class="w-5 h-5"/></div>
-          <div>
-            <p class="text-xs text-gray-500 uppercase">Despachos</p>
-            <p class="text-xl font-bold text-gray-900">{todaySummary.dispatch_count}</p>
-            <span class="text-xs {d.color}">{d.pct} vs ayer</span>
-          </div>
-        </div>
-      </div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-50 text-purple-600 flex-shrink-0"><Receipt class="w-5 h-5"/></div>
-          <div>
-            <p class="text-xs text-gray-500 uppercase">Ticket Promedio</p>
-            <p class="text-xl font-bold text-gray-900">{formatCurrency(todaySummary.avg_ticket)}</p>
-          </div>
-        </div>
-      </div>
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-orange-50 text-orange-600 flex-shrink-0"><Users class="w-5 h-5"/></div>
-          <div>
-            <p class="text-xs text-gray-500 uppercase">Turnos Activos</p>
-            <p class="text-xl font-bold text-gray-900">{todaySummary.active_shifts}</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    {/if}
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Comparison charts (sales $ + gallons, previous/current/next) -->
+    {#if evolutionCompare}
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">
+          {period === 'daily' ? 'Ventas $ por Hora' : period === 'annual' ? 'Ventas $ por Mes' : 'Ventas $ por Día'}
+        </h3>
+        <ComparisonChart
+          metric="sales"
+          {period}
+          previous={evolutionCompare.previous}
+          current={evolutionCompare.current}
+          next={evolutionCompare.next}
+          previousLabel={evolutionCompare.previous_label}
+          currentLabel={evolutionCompare.current_label}
+          nextLabel={evolutionCompare.next_label}
+        />
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">
+          {period === 'daily' ? 'Galones por Hora' : period === 'annual' ? 'Galones por Mes' : 'Galones por Día'}
+        </h3>
+        <ComparisonChart
+          metric="gallons"
+          {period}
+          previous={evolutionCompare.previous}
+          current={evolutionCompare.current}
+          next={evolutionCompare.next}
+          previousLabel={evolutionCompare.previous_label}
+          currentLabel={evolutionCompare.current_label}
+          nextLabel={evolutionCompare.next_label}
+        />
+      </div>
+    {/if}
+
+    <!-- Gallons by product evolution (multi-line, no comparison) -->
+    {#if gallonsByPeriod.length > 0}
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">
+          Galones por Producto — {period === 'daily' ? 'por Hora' : period === 'annual' ? 'por Mes' : 'por Día'}
+        </h3>
+        <ProductLinesChart {period} data={gallonsByPeriod} />
+      </div>
+    {/if}
+
+    <!-- 3 donuts/pies -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Hora</h3>
-        <div class="relative h-64 md:h-72"><canvas bind:this={salesByHourCanvas}></canvas></div>
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto</h3>
+        <DonutChart labels={byProduct.map((d: any) => d.product_name)} data={byProduct.map((d: any) => d.total_amount)} />
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Galones por Producto</h3>
+        <DonutChart labels={byGallons.map((d: any) => d.product_name)} data={byGallons.map((d: any) => d.total_liters)} />
       </div>
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
         <h3 class="text-sm font-semibold text-gray-700 mb-4">Método de Pago</h3>
-        <div class="relative h-64 md:h-72"><canvas bind:this={todayPaymentCanvas}></canvas></div>
+        <DonutChart type="pie" labels={byPayment.map((d: any) => d.method_name)} data={byPayment.map((d: any) => d.total)} />
       </div>
     </div>
 
-    <!-- Today shifts -->
-    {#if todayShifts.length > 0}
+    <!-- Monthly gallons table (per day × product) -->
+    {#if period === 'monthly' && gallonsByPeriod.length > 0}
+      {@const pivot = pivotMonthly(gallonsByPeriod)}
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
-        <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Turnos de Hoy</h3>
+        <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Galones por Día y Producto</h3>
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Turno</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Apertura</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cierre</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Sobrante</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Faltante</th></tr></thead>
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Fecha</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Diesel</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Súper</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Eco País</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Total</th>
+              </tr>
+            </thead>
             <tbody class="divide-y divide-gray-100">
-              {#each todayShifts as s}
+              {#each pivot.rows as row}
                 <tr class="hover:bg-gray-50">
-                  <td class="px-4 py-2 font-mono text-gray-900">#{s.shift_id}</td>
-                  <td class="px-4 py-2 text-gray-700">{s.user_name || '—'}</td>
-                  <td class="px-4 py-2 text-gray-600">{s.opened_at ? new Date(s.opened_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-                  <td class="px-4 py-2 text-gray-600">{s.closed_at ? new Date(s.closed_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
-                  <td class="px-4 py-2">{#if s.status === 'OPEN'}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Abierto</span>{:else}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Cerrado</span>{/if}</td>
-                  <td class="px-4 py-2 text-right font-mono text-green-600">{s.surplus > 0 ? formatCurrency(s.surplus) : '—'}</td>
-                  <td class="px-4 py-2 text-right font-mono text-red-600">{s.shortage > 0 ? formatCurrency(s.shortage) : '—'}</td>
+                  <td class="px-4 py-1.5 font-medium text-gray-900">{row.label}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.diesel > 0 ? row.diesel.toLocaleString('es-EC', {minimumFractionDigits:1}) : '—'}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.super > 0 ? row.super.toLocaleString('es-EC', {minimumFractionDigits:1}) : '—'}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.eco > 0 ? row.eco.toLocaleString('es-EC', {minimumFractionDigits:1}) : '—'}</td>
+                  <td class="px-4 py-1.5 text-right font-mono font-semibold text-gray-900">{row.total.toLocaleString('es-EC', {minimumFractionDigits:1})}</td>
                 </tr>
               {/each}
             </tbody>
+            <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+              <tr>
+                <td class="px-4 py-2 text-left text-xs font-bold text-gray-700 uppercase">Total</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{pivot.totals.diesel.toLocaleString('es-EC', {minimumFractionDigits:1})}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{pivot.totals.super.toLocaleString('es-EC', {minimumFractionDigits:1})}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{pivot.totals.eco.toLocaleString('es-EC', {minimumFractionDigits:1})}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{pivot.totals.total.toLocaleString('es-EC', {minimumFractionDigits:1})}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
     {/if}
 
-    <!-- Last dispatches -->
-    {#if lastDispatches.length > 0}
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Últimos Despachos</h3>
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Hora</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Grado</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Placa</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Pago</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Monto</th></tr></thead>
-            <tbody class="divide-y divide-gray-100">
-              {#each lastDispatches as d}
-                <tr class="hover:bg-gray-50">
-                  <td class="px-4 py-2 text-gray-600">{d.date ? new Date(d.date).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : ''}</td>
-                  <td class="px-4 py-2 font-medium text-gray-900">{d.grade || '—'}</td>
-                  <td class="px-4 py-2 text-gray-700">{d.customer_name || '—'}</td>
-                  <td class="px-4 py-2 font-mono text-gray-600">{d.plate || '—'}</td>
-                  <td class="px-4 py-2 text-gray-600">{d.payment_method || '—'}</td>
-                  <td class="px-4 py-2 text-right font-mono text-gray-900">{formatCurrency(d.amount || 0)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+    <!-- Top periods (monthly/annual only) -->
+    {#if period !== 'daily' && topPeriods.length > 0}
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">
+          {period === 'annual' ? 'Mejores Meses' : 'Mejores Días'}
+        </h3>
+        <TopPeriodsChart {period} data={topPeriods} limit={period === 'annual' ? 3 : 5} />
       </div>
     {/if}
+
+    <!-- Today-only sections -->
+    {#if isToday}
+      {#if todayShifts.length > 0}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Turnos de Hoy</h3>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Turno</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Apertura</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cierre</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Sobrante</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Faltante</th></tr></thead>
+              <tbody class="divide-y divide-gray-100">
+                {#each todayShifts as s}
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 font-mono text-gray-900">#{s.shift_id}</td>
+                    <td class="px-4 py-2 text-gray-700">{s.user_name || '—'}</td>
+                    <td class="px-4 py-2 text-gray-600">{s.opened_at ? new Date(s.opened_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                    <td class="px-4 py-2 text-gray-600">{s.closed_at ? new Date(s.closed_at).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                    <td class="px-4 py-2">{#if s.status === 'OPEN'}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Abierto</span>{:else}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Cerrado</span>{/if}</td>
+                    <td class="px-4 py-2 text-right font-mono text-green-600">{s.surplus > 0 ? formatCurrency(s.surplus) : '—'}</td>
+                    <td class="px-4 py-2 text-right font-mono text-red-600">{s.shortage > 0 ? formatCurrency(s.shortage) : '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {/if}
+
+      {#if lastDispatches.length > 0}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">Últimos Despachos</h3>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Hora</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Grado</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Placa</th><th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Pago</th><th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Monto</th></tr></thead>
+              <tbody class="divide-y divide-gray-100">
+                {#each lastDispatches as d}
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-gray-600">{d.date ? new Date(d.date).toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit'}) : ''}</td>
+                    <td class="px-4 py-2 font-medium text-gray-900">{d.grade || '—'}</td>
+                    <td class="px-4 py-2 text-gray-700">{d.customer_name || '—'}</td>
+                    <td class="px-4 py-2 font-mono text-gray-600">{d.plate || '—'}</td>
+                    <td class="px-4 py-2 text-gray-600">{d.payment_method || '—'}</td>
+                    <td class="px-4 py-2 text-right font-mono text-gray-900">{formatCurrency(d.amount || 0)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {/if}
+    {/if}
+    </div>
+    {/key}
   {/if}
 </div>
+
+<style>
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .dashboard-content {
+    animation: fadeIn 0.25s ease-out;
+  }
+</style>

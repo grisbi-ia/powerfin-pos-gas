@@ -1,6 +1,6 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-23)
+## Estado actual (2026-06-26)
 
 ### ✅ Fases completadas
 
@@ -12,6 +12,97 @@
 | **14-16** | **`v0.27.0-v0.30.0`** | **Admin Frontend — Layout + Dashboard + Reportes** |
 | **17** | **`v0.31.0`** | **Deploy readiness — admin en producción, scripts, docs** |
 | **17** | **`v0.32.0`** | **Cloudflare Tunnel — admin expuesto + Reportes/Dashboard mejoras** |
+| **18** | **`v0.33.0`** | **Dashboard Diario — 3 modos (diario/mensual/anual) + comparación multi-período** |
+
+---
+
+## Logros de la sesión (2026-06-26) — v0.33.0
+
+### Dashboard Diario — 3 modos con comparación ✅
+
+**Refactor completo del dashboard admin con 3 modos de visualización.**
+
+Arquitectura:
+- 1 página, 3 tabs: **DIARIO** / **MENSUAL** / **ANUAL**
+- Chips horizontales con scroll para seleccionar día/mes/año
+- Auto-scroll al período actual + badges "Hoy"/"Ayer"
+- Flechas ← → para navegación rápida
+- Fade animation entre cambios de modo
+
+Gráficas de comparación (nuevo enfoque):
+- Ventas $ y Galones en gráficas **separadas** (no doble eje)
+- Cada gráfica muestra **3 períodos solapados**: anterior · actual · siguiente
+- Alineación por bucket real (hora/día/mes), no por posición de array
+- Período actual con línea sólida gruesa, anterior/siguiente discontinuos tenues
+
+Gráfica de producto:
+- Galones por producto (SUPER/DIESEL/ECO_PAIS) en multi-línea
+- Colores mapeados por `product_id` (estable ante renombres)
+
+Tabla mensual:
+- Galones por Día y Producto con fila de totales
+
+### Backend — 5 endpoints nuevos/modificados
+
+| Endpoint | Tipo | Descripción |
+|----------|------|-------------|
+| `/summary` | Mod | +`total_gallons`, +`period`/`date` params |
+| `/sales-by-day` | Mod | GROUP BY dinámico (hora/día/mes), +`total_gallons` |
+| `/evolution` | Mod | Refactor con helper `_compute_evolution()` |
+| `/evolution/compare` | **Nuevo** | 3 datasets alineados (previous/current/next) |
+| `/gallons-by-period` | **Nuevo** | Galones en serie temporal × producto |
+| `/compare` | **Nuevo** | KPI actual vs anterior + % crecimiento |
+| `/top-periods` | **Nuevo** | Mejores sub-períodos (días/meses) |
+| `/gallons-by-product` | **Nuevo** | Donut galones ordenado por volumen |
+
+Schemas nuevos: `EvolutionItem`, `EvolutionCompareResponse`, `CompareResponse`,
+`TopPeriodItem`, `GallonsByPeriodItem`.
+
+### Frontend — 7 componentes nuevos
+
+| Componente | Descripción |
+|-----------|-------------|
+| `ModeSelector.svelte` | 3 tabs: 📅 Diario / 📆 Mensual / 📈 Anual |
+| `ChipScroller.svelte` | Chips horizontales + ← → navegación |
+| `ComparisonChart.svelte` | Líneas solapadas (anterior/actual/siguiente) |
+| `ProductLinesChart.svelte` | Multi-línea por producto (galones) |
+| `DonutChart.svelte` | Donut/pie genérico reutilizable |
+| `TopPeriodsChart.svelte` | Barras horizontales (mejores días/meses) |
+| `types.ts` | Tipos compartidos (`Period`, `ChipItem`) |
+
+Página `+page.svelte`: refactor completo (~310 líneas, -220 líneas de chart inline).
+
+### Bug fixes
+
+- Comparación: datasets se alineaban por índice de array → ahora por bucket real (hora 0-23)
+- Colores de producto: mapeo por `product_id` en vez de `product_code` (sobrevive renombres)
+- `ECO_PAIS` vs `ECO`: el código real en BD es `ECO_PAIS`
+- Responsive: ModeSelector en línea separada en móvil
+
+### Archivos modificados
+
+```
+Backend (3):
+  pos_backend/app/api/admin/dashboard.py          ← +430/-80 líneas
+  pos_backend/app/schemas/__init__.py             ← +49 líneas (5 schemas nuevos)
+  pos_backend/tests/test_api_admin_dashboard.py   ← +227 líneas (16 tests)
+
+Frontend Admin (8):
+  admin/src/routes/(admin)/dashboard/+page.svelte ← refactor completo
+  admin/src/lib/components/dashboard/ (7 archivos nuevos)
+
+Docs (1):
+  docs/admin/DASHBOARD_DIARIO.md                  ← NUEVO (plan de implementación)
+```
+
+### Tests
+
+```
+Backend:     387/387 ✅  (371 originales + 16 nuevos)
+Admin:        svelte-check 0 errors ✅
+Admin:        npm run build OK ✅
+POS ventas:   sin impacto ✅
+```
 
 ---
 
@@ -429,7 +520,7 @@ Modificados:
 ☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar
 ```
 
-### 🔵 Phase 17 — Cloudflare + Deploy + Go-live (completado)
+### 🔵 Phase 17 — Cloudflare + Deploy + Go-live (casi completo)
 
 ```
 ✅ Deploy scripts con admin (deploy-to-server.sh + powerfin-gas)
@@ -442,6 +533,21 @@ Modificados:
 ☐ Rate limiting login (pendiente — Cloudflare WAF o backend slowapi)
 ☐ Prueba E2E completa (admin → POS)
 ✅ Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
+```
+
+### 🟢 Phase 18 — Dashboard Diario (completado v0.33.0)
+
+```
+✅ 3 modos: DIARIO / MENSUAL / ANUAL
+✅ Chips horizontales con scroll + ← → navegación
+✅ Gráficas separadas ($ y galones) con 3 períodos solapados
+✅ Multi-línea de galones por producto
+✅ Tabla mensual: Galones por Día y Producto
+✅ Alineación de datasets por bucket real
+✅ Colores por product_id (estable)
+✅ Backend: 387/387 tests
+✅ Admin: svelte-check 0 errors + build OK
+✅ Deploy a producción
 ```
 
 ### 🆕 Próximas tareas

@@ -220,3 +220,230 @@ class TestTopProducts:
         )
         assert r.status_code == 200
         assert len(r.json()) == 1
+
+
+# ── Evolution ────────────────────────────────────────────────────
+
+
+class TestEvolution:
+    async def test_evolution_monthly(self, client, db):
+        """Monthly evolution returns daily buckets."""
+        await _seed_dispatch_data(db)
+
+        r = await client.get(
+            "/api/admin/dashboard/evolution?period=monthly", headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        today_bucket = data[-1]
+        assert today_bucket["sales"] == 125.00
+        assert today_bucket["gallons"] == 35.5  # 15.5+10.0+10.0
+        assert today_bucket["count"] == 3
+        assert "period_label" in today_bucket
+
+    async def test_evolution_daily(self, client, db):
+        """Daily evolution returns hourly buckets."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/evolution?period=daily&date={date.today().isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        # At least 1 hour bucket with data
+        buckets_with_data = [b for b in data if b["count"] > 0]
+        assert len(buckets_with_data) >= 1
+        assert buckets_with_data[0]["sales"] == 125.00
+
+    async def test_evolution_annual(self, client, db):
+        """Annual evolution returns monthly buckets."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/evolution?period=annual&date={date.today().isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) <= 12  # max 12 months
+        # At least current month has data
+        buckets_with_data = [b for b in data if b["count"] > 0]
+        assert len(buckets_with_data) >= 1
+
+    async def test_evolution_dispatcher_forbidden(self, client):
+        r = await client.get(
+            "/api/admin/dashboard/evolution?period=daily", headers=_dispatcher_headers()
+        )
+        assert r.status_code == 403
+
+
+# ── Compare ───────────────────────────────────────────────────────
+
+
+class TestCompare:
+    async def test_compare_daily(self, client, db):
+        """Compare today vs yesterday."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/compare?period=daily&date={date.today().isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert "current" in data
+        assert "previous" in data
+        assert "growth_sales_pct" in data
+        assert "growth_gallons_pct" in data
+        # Current has data (125.00)
+        assert data["current"]["total_sales"] == 125.00
+        assert data["current"]["total_gallons"] == 35.5  # 15.5+10.0+10.0
+        # Previous (yesterday) has no data → growth is null
+        assert data["previous"]["total_sales"] == 0
+        assert data["growth_sales_pct"] is None
+
+    async def test_compare_monthly(self, client, db):
+        """Compare this month vs last month."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        today = date.today()
+        r = await client.get(
+            f"/api/admin/dashboard/compare?period=monthly&date={today.replace(day=1).isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["current"]["total_sales"] == 125.00
+        assert data["previous"]["total_sales"] == 0
+
+    async def test_compare_annual(self, client, db):
+        """Compare this year vs last year."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/compare?period=annual&date={date.today().replace(month=1, day=1).isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["current"]["total_sales"] == 125.00
+
+    async def test_compare_dispatcher_forbidden(self, client):
+        r = await client.get(
+            "/api/admin/dashboard/compare?period=daily", headers=_dispatcher_headers()
+        )
+        assert r.status_code == 403
+
+
+# ── Top Periods ────────────────────────────────────────────────────
+
+
+class TestTopPeriods:
+    async def test_top_periods_monthly(self, client, db):
+        """Top days in the month."""
+        await _seed_dispatch_data(db)
+
+        r = await client.get(
+            "/api/admin/dashboard/top-periods?period=monthly", headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        assert data[0]["sales"] == 125.00
+        assert data[0]["gallons"] == 35.5  # 15.5+10.0+10.0
+        assert "period_label" in data[0]
+
+    async def test_top_periods_annual(self, client, db):
+        """Top months in the year."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/top-periods?period=annual&date={date.today().isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        # Top month has data
+        assert data[0]["sales"] == 125.00
+
+    async def test_top_periods_daily_empty(self, client, db):
+        """Daily has no sub-periods → empty."""
+        await _seed_dispatch_data(db)
+
+        r = await client.get(
+            "/api/admin/dashboard/top-periods?period=daily", headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_top_periods_limit(self, client, db):
+        await _seed_dispatch_data(db)
+
+        r = await client.get(
+            "/api/admin/dashboard/top-periods?period=monthly&limit=1",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        assert len(r.json()) == 1
+
+    async def test_top_periods_dispatcher_forbidden(self, client):
+        r = await client.get(
+            "/api/admin/dashboard/top-periods?period=monthly", headers=_dispatcher_headers()
+        )
+        assert r.status_code == 403
+
+
+# ── Gallons by Product ────────────────────────────────────────────
+
+
+class TestGallonsByProduct:
+    async def test_gallons_by_product(self, client, db):
+        """Gallons donut sorted by volume."""
+        await _seed_dispatch_data(db)
+
+        r = await client.get(
+            "/api/admin/dashboard/gallons-by-product?period=monthly",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        # Sorted by total_liters DESC: DIESEL (25.5) first, then SUPER (10.0)
+        assert data[0]["product_code"] == "DIESEL"
+        assert data[0]["total_liters"] == 25.5
+        assert data[1]["product_code"] == "SUPER"
+        assert data[1]["total_liters"] == 10.0
+
+    async def test_gallons_by_product_daily(self, client, db):
+        """Gallons donut for a single day."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/gallons-by-product?period=daily&date={date.today().isoformat()}",
+            headers=_admin_headers()
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+
+    async def test_gallons_by_product_dispatcher_forbidden(self, client):
+        r = await client.get(
+            "/api/admin/dashboard/gallons-by-product?period=monthly",
+            headers=_dispatcher_headers()
+        )
+        assert r.status_code == 403
