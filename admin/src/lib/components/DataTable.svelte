@@ -35,13 +35,13 @@
     const s = String(value ?? '');
     if (!s || !type || type === 'text') return s;
     try {
-      const d = new Date(s);
-      if (isNaN(d.getTime())) return s;
-      if (type === 'date') {
-        return d.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      }
-      if (type === 'datetime') {
-        return d.toLocaleString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      if (type === 'date' || type === 'datetime') {
+        const d = new Date(s);
+        if (isNaN(d.getTime())) return s;
+        const opts: Intl.DateTimeFormatOptions = type === 'date'
+          ? { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Guayaquil' }
+          : { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Guayaquil' };
+        return new Intl.DateTimeFormat('es-EC', opts).format(d);
       }
     } catch { return s; }
     if (type === 'currency') {

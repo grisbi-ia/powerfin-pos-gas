@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin.deps import get_admin_user, require_permission
+from app.config import ECUADOR_TZ
 from app.database import get_db
 from app.models.company import SystemConfig
 from app.models.dispatch import Dispatch, DispatchDetail, DispatchPayment
@@ -47,17 +48,17 @@ router = APIRouter(
 
 
 def _fmt_date(dt) -> str:
-    """Format datetime to readable Ecuador string: 13/07/2026 13:40"""
+    """Format datetime to readable Ecuador string: 13/07/2026 17:33"""
     if dt is None:
         return ""
-    return dt.strftime("%d/%m/%Y %H:%M")
+    return dt.astimezone(ECUADOR_TZ).strftime("%d/%m/%Y %H:%M")
 
 
 def _fmt_date_short(dt) -> str:
     """Format date to short string: 13/07/2026"""
     if dt is None:
         return ""
-    return dt.strftime("%d/%m/%Y")
+    return dt.astimezone(ECUADOR_TZ).strftime("%d/%m/%Y")
 
 
 async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map) -> dict:
