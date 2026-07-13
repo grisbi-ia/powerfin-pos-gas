@@ -8,6 +8,7 @@
     key: string;
     label: string;
     sortable?: boolean;
+    type?: 'text' | 'date' | 'datetime' | 'currency';
   }
 
   let { items = [] as T[], columns = [] as Column[], loading = false, error = '',
@@ -29,6 +30,27 @@
         }>();
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function formatValue(value: unknown, type?: string): string {
+    const s = String(value ?? '');
+    if (!s || !type || type === 'text') return s;
+    try {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s;
+      if (type === 'date') {
+        return d.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      }
+      if (type === 'datetime') {
+        return d.toLocaleString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+    } catch { return s; }
+    if (type === 'currency') {
+      const n = Number(value);
+      if (isNaN(n)) return s;
+      return '$ ' + n.toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return s;
+  }
 
   function handleSearch() {
     if (searchTimeout) clearTimeout(searchTimeout);
@@ -89,7 +111,7 @@
             <tr class="hover:bg-gray-50 transition-colors">
               {#each columns as col}
                 <td class="px-4 py-3 text-sm text-gray-700">
-                  {String(item[col.key] ?? '')}
+                  {formatValue(item[col.key], col.type)}
                 </td>
               {/each}
               <td class="px-4 py-3 text-right">
@@ -111,7 +133,7 @@
               {#each columns.slice(0, 3) as col}
                 <div class="flex items-center gap-1.5 text-xs">
                   <span class="font-medium text-gray-500">{col.label}:</span>
-                  <span class="text-gray-700 truncate">{String(item[col.key] ?? '')}</span>
+                  <span class="text-gray-700 truncate">{formatValue(item[col.key], col.type)}</span>
                 </div>
               {/each}
             </div>
