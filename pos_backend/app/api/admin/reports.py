@@ -370,6 +370,30 @@ async def shifts_report(
                    DispatchPayment.payment_method_id == 1)
         )).scalar() or 0
 
+        # ── Efectivo Actual = Apertura + Ventas Efectivo + Ingresos − Egresos − Depósitos − Transf − Safe Drops
+        income = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type.in_(["INCOME", "TRANSFER_IN"]))
+        )).scalar() or 0
+        expense = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "EXPENSE")
+        )).scalar() or 0
+        deposits = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "DEPOSIT")
+        )).scalar() or 0
+        transfers_out = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "TRANSFER_OUT")
+        )).scalar() or 0
+        safe_drops = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "SAFE_DROP")
+        )).scalar() or 0
+
+        efectivo_actual = round(float(shift.opening_cash or 0) + float(collected_cash) + float(income) - float(expense) - float(deposits) - float(transfers_out) - float(safe_drops), 2)
+
         items.append(ReportShiftItem(
             shift_id=shift.shift_id,
             user_name=user_name,
@@ -379,6 +403,7 @@ async def shifts_report(
             opening_cash=float(shift.opening_cash or 0),
             collected=round(float(collected), 2),
             collected_cash=round(float(collected_cash), 2),
+            efectivo_actual=efectivo_actual,
             surplus=round(float(shift.surplus or 0), 2),
             shortage=round(float(shift.shortage or 0), 2),
             dispatch_count=dispatch_count,
@@ -612,7 +637,7 @@ async def export_shifts(
     rows_raw = result.all()
 
     columns = ["Turno", "Usuario", "Apertura", "Cierre", "Estado",
-               "Caja Inicial", "Cobrado Total", "Efectivo", "Sobrante", "Faltante", "Despachos"]
+               "Caja Inicial", "Cobrado Total", "Efectivo Ventas", "Efectivo Actual", "Sobrante", "Faltante", "Despachos"]
     rows = []
     for shift, user_name in rows_raw:
         dispatch_count = (await db.execute(
@@ -629,6 +654,28 @@ async def export_shifts(
             .where(Dispatch.shift_id == shift.shift_id, Dispatch.status == "COLLECTED",
                    DispatchPayment.payment_method_id == 1)
         )).scalar() or 0
+        # Efectivo Actual
+        income_exp = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type.in_(["INCOME", "TRANSFER_IN"]))
+        )).scalar() or 0
+        expense_exp = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "EXPENSE")
+        )).scalar() or 0
+        deposits_exp = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "DEPOSIT")
+        )).scalar() or 0
+        transfers_out_exp = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "TRANSFER_OUT")
+        )).scalar() or 0
+        safe_drops_exp = (await db.execute(
+            select(func.coalesce(func.sum(CashMovement.amount), 0))
+            .where(CashMovement.shift_id == shift.shift_id, CashMovement.type == "SAFE_DROP")
+        )).scalar() or 0
+        actual_exp = round(float(shift.opening_cash or 0) + float(collected_cash) + float(income_exp) - float(expense_exp) - float(deposits_exp) - float(transfers_out_exp) - float(safe_drops_exp), 2)
         rows.append([
             str(shift.shift_id), user_name,
             shift.opened_at.isoformat() if shift.opened_at else "",
@@ -637,6 +684,7 @@ async def export_shifts(
             f"${float(shift.opening_cash or 0):,.2f}",
             f"${float(collected):,.2f}",
             f"${float(collected_cash):,.2f}",
+            f"${actual_exp:,.2f}",
             f"${float(shift.surplus or 0):,.2f}",
             f"${float(shift.shortage or 0):,.2f}",
             str(dispatch_count),

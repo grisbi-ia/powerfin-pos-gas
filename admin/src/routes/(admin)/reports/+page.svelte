@@ -265,7 +265,7 @@
 
   const cols:Record<string,{key:string;label:string;sortable?:boolean}[]> = {
     sales: [{key:'date',label:'Fecha'},{key:'dispenser_name',label:'Surtidor'},{key:'hose_side',label:'Lado'},{key:'grade',label:'Grado'},{key:'customer_name',label:'Cliente'},{key:'plate',label:'Placa'},{key:'payment_method',label:'Pago'},{key:'amount',label:'Monto'},{key:'volume',label:'Volumen'},{key:'sri_status',label:'SRI'},{key:'authorized_by',label:'Usuario'},{key:'status',label:'Estado'}],
-    shifts: [{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'opened_at',label:'Apertura'},{key:'closed_at',label:'Cierre'},{key:'status',label:'Estado'},{key:'opening_cash',label:'Caja Inicial'},{key:'collected',label:'Cobrado Total'},{key:'collected_cash',label:'Efectivo'},{key:'surplus',label:'Sobrante'},{key:'shortage',label:'Faltante'}],
+    shifts: [{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'opened_at',label:'Apertura'},{key:'closed_at',label:'Cierre'},{key:'status',label:'Estado'},{key:'opening_cash',label:'Caja Inicial'},{key:'collected',label:'Cobrado Total'},{key:'collected_cash',label:'Efectivo Ventas'},{key:'efectivo_actual',label:'Efectivo Actual'},{key:'surplus',label:'Sobrante'},{key:'shortage',label:'Faltante'}],
     cash: [{key:'date',label:'Fecha'},{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'type',label:'Tipo'},{key:'amount',label:'Monto'},{key:'observation',label:'Observación'}],
   };
 </script>
