@@ -31,7 +31,7 @@
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function formatValue(value: unknown, type?: string): string {
+  function formatValue(value: unknown, type: string): string {
     const s = String(value ?? '');
     if (!s || !type || type === 'text') return s;
     try {
