@@ -108,7 +108,7 @@
 	$: selectedPaymentMethod = paymentMethods.find(m => m.payment_method_id === paymentMethodId);
 	$: needsReference = selectedPaymentMethod?.requires_reference ?? false;
 	$: canConfirmPayment = isPublicSector ? true : (paymentMethodId !== 0 && (!needsReference || referenceCode.trim() !== ''));
-	$: publicCreditMethodId = paymentMethods.find(m => m.code === 'CREDITO')?.payment_method_id ?? 0;
+	$: publicCreditMethodId = paymentMethods.find(m => m.code && m.code.startsWith('CREDIT'))?.payment_method_id ?? paymentMethods.find(m => m.name && m.name.toUpperCase().includes('CREDITO'))?.payment_method_id ?? 0;
 
 	// Credit limit for selected product (used in presetValue step)
 	$: creditLimitForProduct = isPublicSector && selectedHose
