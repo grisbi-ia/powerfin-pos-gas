@@ -87,6 +87,7 @@
 	let publicContractCode = '';
 	let publicContractType = '';  // NO_INDEFINIDO or INDEFINIDO
 	let publicContractAvailable: Record<string, number> = {};
+	let publicContractNames: Record<string, string> = {};
 	let publicCreditMethodId = 0;
 	let pendingCredit = false;
 
@@ -207,9 +208,11 @@
 				// Build product → available map
 				const avail: Record<string, number> = {};
 				const prodMap: Record<string, number> = {};
+				const names: Record<string, string> = {};
 				if (c.products) {
 					for (const p of c.products) {
 						prodMap[p.product_code] = Number(p.amount) || 0;
+						names[p.product_code] = p.product_name || p.product_code;
 					}
 				}
 				const available = Math.max(0, Number(c.available) || 0);
@@ -220,6 +223,7 @@
 						: available;
 				}
 				publicContractAvailable = avail;
+				publicContractNames = names;
 				return;  // Found match, stop
 			}
 		} catch { /* non-blocking — if credit check fails, treat as normal sale */ }
@@ -352,6 +356,7 @@
 		publicContractCode = '';
 		publicContractType = '';
 		publicContractAvailable = {};
+		publicContractNames = {};
 	}
 
 	function handlePresetTypeBack() { step = 'product'; }
@@ -769,12 +774,12 @@
 					{#if pendingCredit}
 					<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
 						<div class="flex items-center gap-2 text-amber-700 font-semibold text-sm mb-2">
-							Credit disponible: {publicContractCode}
+							Contrato Disponible: {publicContractCode}
 						</div>
 						<div class="text-xs text-amber-600 mb-2">
 							Cupo:
 							{#each Object.entries(publicContractAvailable) as [code, amt]}
-								<span class="ml-2">{code}: ${amt.toFixed(2)}</span>
+								<span class="ml-2">{publicContractNames[code] || code}: ${amt.toFixed(2)}</span>
 							{/each}
 						</div>
 						<div class="text-xs text-amber-700 mb-3">Usar credito del contrato?</div>
@@ -791,7 +796,7 @@
 						</div>
 						<div class="text-xs text-green-600 mt-1">
 							{#each Object.entries(publicContractAvailable) as [code, amt]}
-								<span class="ml-2">{code}: ${amt.toFixed(2)}</span>
+								<span class="ml-2">{publicContractNames[code] || code}: ${amt.toFixed(2)}</span>
 							{/each}
 						</div>
 					</div>
