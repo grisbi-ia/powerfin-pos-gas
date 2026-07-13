@@ -495,7 +495,7 @@ async def export_sales(
     dispatches = await _query_all_sales_export(db, date_from, date_to, status, search, payment_method)
     dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map = await _preload_maps(db, dispatches)
 
-    columns = ["Order ID", "Fecha", "Surtidor", "Grado", "Cliente", u"Cédula/RUC", "Placa", "Pago", "Monto", "Estado", "SRI"]
+    columns = ["Order ID", "Fecha", "Surtidor", "Grado", "Cliente", u"Cédula/RUC", "Placa", "Pago", "Monto", "Galones", "Estado", "SRI"]
     rows = []
     for d in dispatches:
         row = await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map)
@@ -503,7 +503,9 @@ async def export_sales(
             row["order_id"], row["date"] or "", row["dispenser_name"] or "",
             row["grade"] or "", row["customer_name"] or "", row["id_number"] or "",
             row["plate"] or "", row["payment_method"] or "",
-            f"${row['amount']:,.2f}", row["status"], row["sri_status"] or "",
+            f"${row['amount']:,.2f}",
+            f"{row['volume']:.2f}" if row["volume"] else "",
+            row["status"], row["sri_status"] or "",
         ])
 
     if format == "pdf":
