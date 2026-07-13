@@ -46,6 +46,20 @@ router = APIRouter(
 # ── Helpers ────────────────────────────────────────────────────────
 
 
+def _fmt_date(dt) -> str:
+    """Format datetime to readable Ecuador string: 13/07/2026 13:40"""
+    if dt is None:
+        return ""
+    return dt.strftime("%d/%m/%Y %H:%M")
+
+
+def _fmt_date_short(dt) -> str:
+    """Format date to short string: 13/07/2026"""
+    if dt is None:
+        return ""
+    return dt.strftime("%d/%m/%Y")
+
+
 async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map) -> dict:
     """Convert a Dispatch row to ReportSalesItem dict."""
     d = row[0] if isinstance(row, tuple) else row
@@ -532,7 +546,7 @@ async def export_sales(
     for d in dispatches:
         row = await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map)
         rows.append([
-            row["order_id"], row["date"] or "", row["dispenser_name"] or "",
+            row["order_id"], _fmt_date(d.created_at), row["dispenser_name"] or "",
             row["grade"] or "", row["customer_name"] or "", row["id_number"] or "",
             row["plate"] or "", row["payment_method"] or "",
             f"${row['amount']:,.2f}",
@@ -592,7 +606,7 @@ async def export_dispatches(
     for d in dispatches:
         row = await _build_dispatch_row(d, dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map)
         rows.append([
-            row["order_id"], row["date"] or "", str(row["shift_id"]),
+            row["order_id"], _fmt_date(d.created_at), str(row["shift_id"]),
             row["dispenser_name"] or "", row["hose_side"] or "", row["grade"] or "",
             row["customer_name"] or "", row["plate"] or "", row["payment_method"] or "",
             f"${row['amount']:,.2f}", f"{row['volume']:.2f}" if row["volume"] else "",
@@ -678,8 +692,8 @@ async def export_shifts(
         actual_exp = round(float(shift.opening_cash or 0) + float(collected_cash) + float(income_exp) - float(expense_exp) - float(deposits_exp) - float(transfers_out_exp) - float(safe_drops_exp), 2)
         rows.append([
             str(shift.shift_id), user_name,
-            shift.opened_at.isoformat() if shift.opened_at else "",
-            shift.closed_at.isoformat() if shift.closed_at else "",
+            _fmt_date(shift.opened_at),
+            _fmt_date(shift.closed_at),
             shift.status,
             f"${float(shift.opening_cash or 0):,.2f}",
             f"${float(collected):,.2f}",
@@ -737,7 +751,7 @@ async def export_cash_summary(
         rows.append([
             str(mv.shift_id), user_name, mv.type,
             f"${float(mv.amount or 0):,.2f}", mv.observation or "",
-            mv.created_at.isoformat() if mv.created_at else "",
+            _fmt_date(mv.created_at),
             f"${float(mv.running_balance or 0):,.2f}",
         ])
 
@@ -928,7 +942,7 @@ async def shift_transactions_export(
             "subsidy_amount": float(detail.subsidy_amount) if detail and detail.subsidy_amount else 0,
             "status": d.status,
             "sri_status": d.sri_status,
-            "created_at": d.created_at.isoformat() if d.created_at else "",
+            "created_at": _fmt_date(d.created_at),
         })
 
     # Fetch cash movements
@@ -948,7 +962,7 @@ async def shift_transactions_export(
             "observation": cm.observation,
             "running_balance": float(cm.running_balance or 0),
             "related_user_name": cm.related_user_name,
-            "created_at": cm.created_at.isoformat() if cm.created_at else "",
+            "created_at": _fmt_date(cm.created_at),
         })
 
     xlsx_bytes = generate_shift_transactions_excel(
