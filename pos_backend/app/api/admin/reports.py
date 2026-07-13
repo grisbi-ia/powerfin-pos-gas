@@ -612,7 +612,7 @@ async def export_shifts(
     rows_raw = result.all()
 
     columns = ["Turno", "Usuario", "Apertura", "Cierre", "Estado",
-               "Caja Inicial", "Cobrado", "Sobrante", "Faltante", "Despachos"]
+               "Caja Inicial", "Cobrado Total", "Efectivo", "Sobrante", "Faltante", "Despachos"]
     rows = []
     for shift, user_name in rows_raw:
         dispatch_count = (await db.execute(
@@ -623,6 +623,12 @@ async def export_shifts(
             .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
             .where(Dispatch.shift_id == shift.shift_id, Dispatch.status == "COLLECTED")
         )).scalar() or 0
+        collected_cash = (await db.execute(
+            select(func.coalesce(func.sum(DispatchPayment.amount), 0))
+            .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+            .where(Dispatch.shift_id == shift.shift_id, Dispatch.status == "COLLECTED",
+                   DispatchPayment.payment_method_id == 1)
+        )).scalar() or 0
         rows.append([
             str(shift.shift_id), user_name,
             shift.opened_at.isoformat() if shift.opened_at else "",
@@ -630,6 +636,7 @@ async def export_shifts(
             shift.status,
             f"${float(shift.opening_cash or 0):,.2f}",
             f"${float(collected):,.2f}",
+            f"${float(collected_cash):,.2f}",
             f"${float(shift.surplus or 0):,.2f}",
             f"${float(shift.shortage or 0):,.2f}",
             str(dispatch_count),
