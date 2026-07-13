@@ -89,7 +89,7 @@
 				focus:border-primary focus:outline-none
 				disabled:bg-gray-100 disabled:cursor-not-allowed"
 			{disabled}
-			maxlength="10"
+			maxlength="15"
 		/>
 
 		<button

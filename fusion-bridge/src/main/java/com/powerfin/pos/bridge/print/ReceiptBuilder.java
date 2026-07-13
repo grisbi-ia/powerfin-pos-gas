@@ -96,6 +96,7 @@ public class ReceiptBuilder {
         public boolean isReprint;
         public String shiftId;
         public String cashierName;
+        public String contractCode;
 
         @SuppressWarnings("unchecked")
         public static FuelReceiptData fromMap(Map<String, Object> request) {
@@ -154,6 +155,7 @@ public class ReceiptBuilder {
                 d.isReprint = Boolean.TRUE.equals(fuel.get("isReprint"));
                 d.shiftId = strParam(fuel, "shiftId");
                 d.cashierName = strParam(fuel, "cashierName");
+                d.contractCode = strParam(fuel, "contractCode");
             }
 
             return d;

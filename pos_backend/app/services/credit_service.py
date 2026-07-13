@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credit import CreditContract, CreditContractProduct, CreditContractVehicle
-from app.models.dispatch import Dispatch
+from app.models.dispatch import Dispatch, DispatchDetail
 
 
 class CreditValidationError(Exception):
@@ -35,6 +35,8 @@ async def find_active_contract_for_vehicle(
                 CreditContractVehicle.date_to >= today,
             ),
         )
+        .order_by(CreditContract.contract_type.desc())  # NO_INDEFINIDO first
+        .limit(1)
     )
     return result.scalar_one_or_none()
 
@@ -59,22 +61,67 @@ async def calcular_cupo_disponible(
     """
     Calculate available credit for a contract.
 
-    INDEFINIDO:  cupo - sum(dispatches with credit_status='PENDING_INVOICE')
-    NO_INDEFINIDO: cupo - sum(ALL dispatches, regardless of invoice status)
+    Only COLLECTED dispatches count (authorized/not-yet-completed don't block cupo).
+
+    INDEFINIDO:  cupo - sum(despachos COLLECTED + PENDING_PAYMENT)
+    NO_INDEFINIDO: cupo - sum(ALL despachos COLLECTED)
     """
     base_query = select(func.coalesce(func.sum(Dispatch.total), 0)).where(
         Dispatch.credit_contract_id == contract.contract_id,
-        Dispatch.status != "CANCELLED",
+        Dispatch.status == "COLLECTED",
     )
 
     if contract.contract_type == "INDEFINIDO":
         base_query = base_query.where(
-            Dispatch.credit_status == "PENDING_INVOICE"
+            Dispatch.credit_status == "PENDING_PAYMENT"
         )
 
     result = await db.execute(base_query)
     consumed = result.scalar_one() or Decimal("0")
-    return contract.cupo - consumed
+    disponible = contract.cupo - consumed
+    return max(disponible, Decimal("0"))
+
+
+async def calcular_cupo_disponible_por_producto(
+    db: AsyncSession, contract_id: int, product_id: int
+) -> Decimal:
+    """
+    Calculate available credit for a specific product within a contract.
+
+    Returns the allocated amount minus consumed dispatches for that product.
+    Uses the same logic as calcular_cupo_disponible but scoped to one product.
+    """
+    allocated = await get_contract_product_amount(db, contract_id, product_id)
+    if allocated is None:
+        return Decimal("0")
+
+    contract_result = await db.execute(
+        select(CreditContract).where(CreditContract.contract_id == contract_id)
+    )
+    contract = contract_result.scalar_one_or_none()
+
+    base_query = select(func.coalesce(func.sum(Dispatch.total), 0)).where(
+        Dispatch.credit_contract_id == contract_id,
+        Dispatch.status == "COLLECTED",
+    )
+
+    # Scope to product via join on dispatch_details
+    base_query = base_query.join(
+        DispatchDetail,
+        DispatchDetail.dispatch_id == Dispatch.dispatch_id
+    ).where(
+        DispatchDetail.product_id == product_id
+    )
+
+    if contract and contract.contract_type == "INDEFINIDO":
+        base_query = base_query.where(
+            Dispatch.credit_status == "PENDING_PAYMENT"
+        )
+
+    result = await db.execute(base_query)
+    consumed = result.scalar_one() or Decimal("0")
+    disponible = allocated - consumed
+    return max(disponible, Decimal("0"))
 
 
 async def validate_credit_dispatch(
@@ -82,10 +129,18 @@ async def validate_credit_dispatch(
     vehicle_id: int,
     product_id: int,
     amount: Decimal,
-) -> CreditContract:
+) -> tuple[CreditContract, Decimal]:
     """
-    Full validation for a credit dispatch. Returns the contract if valid.
-    Raises CreditValidationError with a user-friendly message on failure.
+    Full validation for a credit dispatch.
+    Returns (contract, effective_amount) where effective_amount ≤ amount.
+
+    If the requested amount exceeds available credit, it is auto-capped
+    to the available balance (both product-level and contract-level).
+
+    Raises CreditValidationError only if:
+    - No active contract for the vehicle
+    - Product is not allocated in the contract
+    - Available balance is $0.00 (fully consumed)
     """
     # 1. Vehicle must have an active contract
     contract = await find_active_contract_for_vehicle(db, vehicle_id)
@@ -101,12 +156,32 @@ async def validate_credit_dispatch(
             "El producto no está asignado al contrato de crédito."
         )
 
-    # 3. Check available credit
-    available = await calcular_cupo_disponible(db, contract)
-    if amount > available:
+    # 3. Validate product-level available balance
+    product_available = await calcular_cupo_disponible_por_producto(
+        db, contract.contract_id, product_id
+    )
+    if product_available <= Decimal("0"):
         raise CreditValidationError(
-            f"Cupo de crédito insuficiente. "
-            f"Disponible: ${available:,.2f}, Solicitado: ${amount:,.2f}"
+            f"Cupo agotado para este producto. "
+            f"No queda saldo disponible."
+        )
+    if amount > product_available:
+        raise CreditValidationError(
+            f"Cupo insuficiente para este producto. "
+            f"Disponible: ${product_available:,.2f}, Solicitado: ${amount:,.2f}"
         )
 
-    return contract
+    # 4. Validate total contract balance
+    total_available = await calcular_cupo_disponible(db, contract)
+    if total_available <= Decimal("0"):
+        raise CreditValidationError(
+            f"Cupo total del contrato agotado. "
+            f"No queda saldo disponible."
+        )
+    if amount > total_available:
+        raise CreditValidationError(
+            f"Cupo total del contrato insuficiente. "
+            f"Disponible: ${total_available:,.2f}, Solicitado: ${amount:,.2f}"
+        )
+
+    return contract, amount

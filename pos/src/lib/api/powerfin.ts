@@ -395,3 +395,14 @@ export async function createTransfer(
 	if (!res.ok) throw new Error('Error realizando transferencia');
 	return res.json();
 }
+
+// ── Credit Contracts ────────────────────────────────────────
+
+export async function getCreditContracts(token: string): Promise<any[]> {
+	if (USE_MOCKS_POWERFIN) return [];
+	const res = await fetch(powerfinUrl('/api/pos/credit-contracts'), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) return [];
+	return res.json();
+}

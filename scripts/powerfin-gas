@@ -53,6 +53,9 @@ cmd_deploy_frontend() {
 
     ok "Frontend desplegado"
 
+    # Fix permissions — prevent EACCES from previous root builds
+    sudo chown -R app:app "$DEST/pos/.svelte-kit" "$DEST/pos/build" 2>/dev/null || true
+
     info "Compilando frontend..."
     (cd "$DEST/pos" && npm run build) || die "Falló la compilación del frontend"
     ok "Frontend compilado"
@@ -75,6 +78,16 @@ cmd_deploy_backend() {
         --exclude='.git/' \
         --exclude='*.log' \
         "$PRE_DEPLOY/backend/" "$DEST/backend/app/"
+
+    # Also deploy alembic migrations (if present)
+    if [ -d "$PRE_DEPLOY/backend/alembic" ]; then
+        rsync -av --exclude='__pycache__/' --exclude='*.pyc' \
+            "$PRE_DEPLOY/backend/alembic/" "$DEST/backend/alembic/"
+        info "Migraciones Alembic copiadas"
+    fi
+    if [ -f "$PRE_DEPLOY/backend/alembic.ini" ]; then
+        cp "$PRE_DEPLOY/backend/alembic.ini" "$DEST/backend/alembic.ini"
+    fi
 
     ok "Backend desplegado"
     restart_service "pos-backend"
@@ -101,6 +114,9 @@ cmd_deploy_admin() {
     done
 
     ok "Admin desplegado"
+
+    # Fix permissions — prevent EACCES from previous root builds
+    sudo chown -R app:app "$DEST/admin/.svelte-kit" "$DEST/admin/build" 2>/dev/null || true
 
     info "Compilando admin..."
     (cd "$DEST/admin" && npm run build) || die "Falló la compilación del admin"
@@ -299,6 +315,27 @@ cmd_backup_db() {
     fi
 }
 
+# ── DB Migrations ───────────────────────────────────────────────────
+cmd_migrate_db() {
+    local backend_dir="$DEST/backend"
+    if [ ! -d "$backend_dir" ]; then
+        die "Backend no encontrado en $backend_dir"
+    fi
+
+    info "Ejecutando migraciones Alembic..."
+    cd "$backend_dir"
+
+    if [ ! -f "venv/bin/activate" ]; then
+        die "Virtual env no encontrado en $backend_dir/venv"
+    fi
+
+    source venv/bin/activate
+    alembic upgrade head || die "Error en migración"
+    deactivate
+
+    ok "Migraciones aplicadas"
+}
+
 # ── Help ─────────────────────────────────────────────────────────────
 cmd_help() {
     echo ""
@@ -325,6 +362,7 @@ cmd_help() {
     echo "  pending            Listar archivos en pre-deploy"
     echo "  clean [comp|all]   Limpiar pre-deploy después de deploy exitoso"
     echo "  backup-db          Backup de base de datos (pg_dump)"
+    echo "  migrate-db         Ejecutar migraciones Alembic pendientes"
     echo ""
     echo "── Flujo típico ──"
     echo "  1. Desde desarrollo: scripts/deploy-to-server.sh frontend|admin|backend|fusion|all"
@@ -375,6 +413,9 @@ case "${1:-help}" in
 
     # Backup
     backup-db)        cmd_backup_db ;;
+
+    # Migrations
+    migrate-db)       cmd_migrate_db ;;
 
     # Help
     help|--help|-h)   cmd_help ;;

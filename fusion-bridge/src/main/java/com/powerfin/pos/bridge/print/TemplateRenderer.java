@@ -136,6 +136,11 @@ public class TemplateRenderer {
                         data.priceWithoutSubsidy != null && !data.priceWithoutSubsidy.isEmpty(), out, data);
                 continue;
             }
+            if (line.contains("{#credit}")) {
+                i = skipConditional(lines, i, "{#credit}", "{/credit}",
+                        data.contractCode != null && !data.contractCode.isEmpty(), out, data);
+                continue;
+            }
             if (line.contains("{#reprint}")) {
                 i = skipConditional(lines, i, "{#reprint}", "{/reprint}", data.isReprint, out, data);
                 continue;
@@ -279,7 +284,8 @@ public class TemplateRenderer {
             .replace("{{tax_amount}}", nvl(data.taxAmount, ""))
             .replace("{{unit}}", nvl(data.unit, "GAL"))
             .replace("{{shift_id}}", nvl(data.shiftId, ""))
-            .replace("{{cashier_name}}", nvl(data.cashierName, ""));
+            .replace("{{cashier_name}}", nvl(data.cashierName, ""))
+            .replace("{{contract_code}}", nvl(data.contractCode, ""));
     }
 
     private static String nvl(String s, String def) {
@@ -631,7 +637,18 @@ SUBTOTAL: $ {{subtotal}}
 [CENTER][BOLD]TOTAL:  ${{amount}}[/BOLD][/CENTER]
 ===
 FORMA DE PAGO: {{payment_method}}
+{#credit}---
+CONTRATO: {{contract_code}}
 ---
+RECIBI CONFORME: _________________________
+
+
+FIRMA: ___________________________________
+
+
+CEDULA: __________________________________
+---
+{/credit}---
 {#subsidy_amount}VALOR TOTAL SIN SUBSIDIO: $ {{amount}}
 AHORRO POR SUBSIDIO: $ {{subsidy_amount}}
 ---

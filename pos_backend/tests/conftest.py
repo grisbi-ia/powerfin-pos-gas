@@ -1,5 +1,10 @@
 """Pytest configuration — shared fixtures for unit and integration tests."""
 
+import os
+
+# Prevent background cleanup loop from starting during tests
+os.environ["TESTING"] = "1"
+
 import asyncio
 from datetime import date
 from decimal import Decimal
@@ -184,8 +189,20 @@ async def _seed_data(db: AsyncSession):
     db.add(contract)
     await db.flush()
 
-    db.add(CreditContractVehicle(contract_vehicle_id=1, contract_id=1, vehicle_id=2, date_from=date(2026, 1, 1)))
+    db.add(CreditContractVehicle(contract_vehicle_id=1, contract_id=1, vehicle_id=1, date_from=date(2026, 1, 1)))
     db.add(CreditContractProduct(contract_product_id=1, contract_id=1, product_id=1, amount=Decimal("3000.00")))
+
+    # Public sector contract (NO_INDEFINIDO)
+    pub = CreditContract(
+        contract_id=2, contract_code="CT-PUB-001", person_id=2,
+        contract_date=date.today(), cupo=Decimal("5500.00"),
+        contract_type="NO_INDEFINIDO", sercop_type="ADJUDICACION",
+    )
+    db.add(pub)
+    await db.flush()
+    db.add(CreditContractVehicle(contract_vehicle_id=2, contract_id=2, vehicle_id=2, date_from=date.today()))
+    db.add(CreditContractProduct(contract_product_id=2, contract_id=2, product_id=1, amount=Decimal("2500.00")))
+    db.add(CreditContractProduct(contract_product_id=3, contract_id=2, product_id=2, amount=Decimal("3000.00")))
 
     await db.commit()
 
@@ -194,6 +211,8 @@ async def _seed_data(db: AsyncSession):
     await db.execute(sa_text("SELECT setval('vehicles_vehicle_id_seq', (SELECT MAX(vehicle_id) FROM vehicles))"))
     await db.execute(sa_text("SELECT setval('emission_points_emission_point_id_seq', (SELECT MAX(emission_point_id) FROM emission_points))"))
     await db.execute(sa_text("SELECT setval('credit_contracts_contract_id_seq', (SELECT MAX(contract_id) FROM credit_contracts))"))
+    await db.execute(sa_text("SELECT setval('credit_contract_vehicles_contract_vehicle_id_seq', (SELECT MAX(contract_vehicle_id) FROM credit_contract_vehicles))"))
+    await db.execute(sa_text("SELECT setval('credit_contract_products_contract_product_id_seq', (SELECT MAX(contract_product_id) FROM credit_contract_products))"))
     await db.execute(sa_text("SELECT setval('roles_role_id_seq', (SELECT MAX(role_id) FROM roles))"))
     await db.execute(sa_text("SELECT setval('product_categories_category_id_seq', (SELECT MAX(category_id) FROM product_categories))"))
     await db.execute(sa_text("SELECT setval('tax_types_tax_type_id_seq', (SELECT MAX(tax_type_id) FROM tax_types))"))

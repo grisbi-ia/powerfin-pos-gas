@@ -31,7 +31,7 @@ class Vehicle(Base):
     __tablename__ = "vehicles"
 
     vehicle_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    plate: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
+    plate: Mapped[str] = mapped_column(String(15), unique=True, nullable=False)
     person_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("persons.person_id"), nullable=False
     )

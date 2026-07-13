@@ -1214,3 +1214,34 @@ class ReportCashSummaryItem(BaseModel):
     observation: str | None = None
     date: str | None = None
     running_balance: float = 0
+
+
+# ── Bulk Invoice / Liquidación Sector Público ──────────────
+
+class BulkInvoiceRequest(BaseModel):
+    contract_id: int
+    emission_point_id: int
+
+
+class BulkInvoiceResponse(BaseModel):
+    invoice_id: str | None = None
+    access_key: str | None = None
+    sri_status: str | None = None
+    dispatch_count: int = 0
+    total_amount: float = 0.0
+    invoiced_dispatch_ids: list[int] = []
+    errors: list[str] = []
+
+
+class PendingBulkDispatchItem(BaseModel):
+    dispatch_id: int
+    order_id: str
+    dispatch_date: str | None = None
+    plate: str | None = None
+    product_code: str = ""
+    product_name: str = ""
+    quantity: float = 0
+    unit_price: float = 0
+    subtotal: float = 0
+    tax_amount: float = 0
+    total: float = 0

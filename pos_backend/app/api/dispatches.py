@@ -12,6 +12,7 @@ from app.api.deps import get_current_user
 from app.config import ECUADOR_TZ
 from app.database import get_db
 from app.models import (
+    CreditContract,
     Dispatch,
     DispatchDetail,
     DispatchPayment,
@@ -27,6 +28,8 @@ from app.models import (
 from app.models.user import User
 from app.schemas import (
     BillingRequest,
+    BulkInvoiceRequest,
+    BulkInvoiceResponse,
     CollectDispatchRequest,
     CollectDispatchResponse,
     CompleteByPumpRequest,
@@ -34,6 +37,7 @@ from app.schemas import (
     CreateDispatchRequest,
     CreateDispatchResponse,
     InvoiceRequest,
+    PendingBulkDispatchItem,
 )
 from app.services.credit_service import validate_credit_dispatch
 from app.services.sequential_service import consume_sequential
@@ -130,24 +134,30 @@ async def create_dispatch(
                     credit_contract_id = contract.contract_id
 
         if credit_contract_id:
-            # Validate credit availability
-            from app.models.credit import CreditContract
-            contract = (await db.execute(
-                select(CreditContract).where(CreditContract.contract_id == credit_contract_id)
-            )).scalar_one_or_none()
-            if contract:
-                # Find first product's ID from items
-                product_id = body.items[0].product_id if body.items else None
-                if product_id:
-                    await validate_credit_dispatch(
-                        db, 0, product_id, body.unit_price
-                    )
-                credit_status = "PENDING_INVOICE"
+            # Validate credit availability (returns contract + effective amount, auto-capped)
+            product_id = body.items[0].product_id if body.items else None
+            if product_id:
+                from app.models.credit import CreditContract
+                # Resolve vehicle_id from plate for credit validation
+                credit_vehicle_id = 0
+                if body.plate:
+                    v_res = (await db.execute(
+                        select(Vehicle).where(Vehicle.plate == body.plate.upper().replace(" ", ""))
+                    )).scalar_one_or_none()
+                    if v_res:
+                        credit_vehicle_id = v_res.vehicle_id
+
+                contract, _ = await validate_credit_dispatch(
+                    db, credit_vehicle_id, product_id,
+                    Decimal(str(body.unit_price)) if body.unit_price else Decimal("0")
+                )
+                credit_contract_id = contract.contract_id
+                credit_status = "PENDING_BULK_INVOICE" if contract.contract_type == "NO_INDEFINIDO" else "PENDING_PAYMENT"
 
     # Consume sequential for SALE/CREDIT — each dispenser has its own emission point
     sequential_number = None
     ep = None
-    if dispatch_type.affects_cash or dispatch_type.dispatch_type_id == 2:
+    if dispatch_type.affects_cash or (dispatch_type.dispatch_type_id == 2 and credit_status != "PENDING_BULK_INVOICE"):
         dispenser_result = await db.execute(
             select(Dispenser).where(Dispenser.dispenser_id == body.dispenser_id)
         )
@@ -263,7 +273,7 @@ async def create_dispatch(
     await db.flush()
 
     # Generate SRI access key (49 digits) for electronic invoicing
-    if ep and sequential_number:
+    if ep and sequential_number and credit_status != "PENDING_BULK_INVOICE":
         try:
             # Parse sequential number: "001-004-000000017" → 17
             parts = sequential_number.split("-")
@@ -447,7 +457,7 @@ async def complete_dispatch(
             select(CreditContract).where(CreditContract.contract_id == dispatch.credit_contract_id)
         )).scalar_one_or_none()
         if contract:
-            dispatch.credit_status = "PENDING_INVOICE"
+            dispatch.credit_status = "PENDING_BULK_INVOICE" if contract.contract_type == "NO_INDEFINIDO" else "PENDING_PAYMENT"
 
     await db.commit()
     return {"status": "ok"}
@@ -550,7 +560,7 @@ async def complete_dispatch_by_pump(
             select(CreditContract).where(CreditContract.contract_id == dispatch.credit_contract_id)
         )).scalar_one_or_none()
         if contract:
-            dispatch.credit_status = "PENDING_INVOICE"
+            dispatch.credit_status = "PENDING_BULK_INVOICE" if contract.contract_type == "NO_INDEFINIDO" else "PENDING_PAYMENT"
 
     await db.commit()
     return {"status": "completed", "order_id": dispatch.order_id}
@@ -595,7 +605,7 @@ async def collect_dispatch(
     effective_amount = float(body.collected_amount)
     if body.payments:
         effective_amount = sum(float(p.amount) for p in body.payments)
-    if effective_amount <= 0:
+    if effective_amount <= 0 and not dispatch.credit_contract_id:
         raise HTTPException(
             status_code=400,
             detail=f"El monto a cobrar es \${dispatch_total:.2f}. "
@@ -638,13 +648,15 @@ async def collect_dispatch(
     receipt_data = await _build_receipt_data(db, dispatch, pay_method_name)
 
     # Fire-and-forget: send invoice to SRI via Key49 (non-blocking)
+    # Skip for public sector — these are invoiced in bulk later
     # Pass only dispatch_id — background task creates its own DB session
-    try:
-        import asyncio
-        dispatch_id = dispatch.dispatch_id
-        asyncio.create_task(_key49_background(dispatch_id))
-    except Exception:
-        pass  # Key49 failure never blocks the sale
+    if dispatch.credit_status != "PENDING_BULK_INVOICE":
+        try:
+            import asyncio
+            dispatch_id = dispatch.dispatch_id
+            asyncio.create_task(_key49_background(dispatch_id))
+        except Exception:
+            pass  # Key49 failure never blocks the sale
 
     return CollectDispatchResponse(
         order_id=order_id,
@@ -738,6 +750,16 @@ async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch, pay_method_n
     subtotal = round(total / 1.15, 2)
     tax = round(total - subtotal, 2)
 
+    # Credit contract code (for ticket printing)
+    contract_code = ""
+    if dispatch.credit_contract_id:
+        cc_result = await db.execute(
+            select(CreditContract.contract_code).where(
+                CreditContract.contract_id == dispatch.credit_contract_id
+            )
+        )
+        contract_code = cc_result.scalar_one_or_none() or ""
+
     return {
         "printerIp": dispenser.printer_ip if dispenser and dispenser.printer_ip else "",
         "printerPort": dispenser.printer_port if dispenser else 9100,
@@ -778,8 +800,172 @@ async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch, pay_method_n
             "emissionType": company.emission_type or 0,
             "shiftId": str(dispatch.shift_id) if dispatch.shift_id else "",
             "cashierName": cashier_name,
+            "creditStatus": dispatch.credit_status or "",
+            "creditContractId": dispatch.credit_contract_id or 0,
+            "contractCode": contract_code,
+            "isBulkInvoice": dispatch.credit_status == "PENDING_BULK_INVOICE",
         },
     }
+
+
+# ── Bulk Invoice / Liquidación Sector Público ─────────────────
+
+@router.get("/pending-bulk")
+async def get_pending_bulk_dispatches(
+    contract_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all PENDING_BULK_INVOICE dispatches for a contract (admin review)."""
+    if current_user.role and current_user.role.code not in ("ADMIN", "SUPERVISOR"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    dispatches = (await db.execute(
+        select(Dispatch).where(
+            Dispatch.credit_contract_id == contract_id,
+            Dispatch.credit_status == "PENDING_BULK_INVOICE",
+            Dispatch.status == "COLLECTED",
+        ).order_by(Dispatch.created_at.desc())
+    )).scalars().all()
+
+    result = []
+    for d in dispatches:
+        detail = (await db.execute(
+            select(DispatchDetail).where(DispatchDetail.dispatch_id == d.dispatch_id)
+        )).scalars().first()
+        plate = None
+        if d.vehicle_id:
+            v = (await db.execute(
+                select(Vehicle).where(Vehicle.vehicle_id == d.vehicle_id)
+            )).scalar_one_or_none()
+            if v:
+                plate = v.plate
+
+        from app.models.product import Product
+        product = None
+        if detail:
+            product = (await db.execute(
+                select(Product).where(Product.product_id == detail.product_id)
+            )).scalar_one_or_none()
+
+        result.append({
+            "dispatch_id": d.dispatch_id,
+            "order_id": d.order_id,
+            "dispatch_date": d.created_at.isoformat() if d.created_at else None,
+            "plate": plate,
+            "product_code": product.code if product else "",
+            "product_name": product.name if product else "",
+            "quantity": float(detail.quantity) if detail else 0,
+            "unit_price": float(detail.unit_price) if detail else 0,
+            "subtotal": float(d.subtotal or 0),
+            "tax_amount": float(d.tax_amount or 0),
+            "total": float(d.total or 0),
+        })
+
+    return result
+
+
+@router.post("/bulk-invoice", response_model=BulkInvoiceResponse)
+async def bulk_invoice_contract(
+    body: BulkInvoiceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a single global SRI invoice for all PENDING_BULK_INVOICE
+    dispatches of a contract. Used for public sector liquidation.
+    """
+    if current_user.role and current_user.role.code not in ("ADMIN", "SUPERVISOR"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    # 1. Validate contract exists and is NO_INDEFINIDO
+    from app.models.credit import CreditContract
+    contract = (await db.execute(
+        select(CreditContract).where(CreditContract.contract_id == body.contract_id)
+    )).scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contrato no encontrado")
+    if contract.contract_type != "NO_INDEFINIDO":
+        raise HTTPException(
+            status_code=400,
+            detail="Solo contratos NO_INDEFINIDO (sector público) requieren liquidación"
+        )
+
+    # 2. Find all PENDING_BULK_INVOICE dispatches
+    dispatches = (await db.execute(
+        select(Dispatch).where(
+            Dispatch.credit_contract_id == body.contract_id,
+            Dispatch.credit_status == "PENDING_BULK_INVOICE",
+            Dispatch.status == "COLLECTED",
+        )
+    )).scalars().all()
+
+    if not dispatches:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay despachos pendientes de facturar para este contrato"
+        )
+
+    # 3. Consume ONE sequential number
+    ep = (await db.execute(
+        select(EmissionPoint).where(
+            EmissionPoint.emission_point_id == body.emission_point_id,
+            EmissionPoint.is_active == True,
+        )
+    )).scalar_one_or_none()
+    if not ep:
+        raise HTTPException(status_code=400, detail="Punto de emisión no encontrado")
+
+    try:
+        sequential_number = await consume_sequential(db, ep.emission_point_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al consumir secuencial: {e}")
+
+    # 4. Build access key
+    from app.models.company import CompanyInfo
+    company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
+    if not company or not company.ruc:
+        raise HTTPException(status_code=400, detail="Empresa no configurada")
+
+    local_date = datetime.now(ECUADOR_TZ).date()
+    parts = sequential_number.split("-")
+    seq_int = int(parts[-1]) if len(parts) >= 3 else int(sequential_number)
+    access_key = generate_access_key(
+        emission_date=local_date,
+        doc_type=ep.doc_type or "FACTURA",
+        ruc=company.ruc,
+        sri_environment=company.sri_environment,
+        establishment=ep.establishment,
+        emission_point=ep.emission_point,
+        sequential=seq_int,
+        emission_type=company.emission_type or 1,
+    )
+
+    # 5. Send global invoice to Key49
+    dispatch_ids = [d.dispatch_id for d in dispatches]
+    from app.services.key49_service import emitir_factura_global
+    result = await emitir_factura_global(
+        db, body.contract_id, dispatch_ids,
+        access_key, sequential_number, ep, company
+    )
+
+    # 6. Mark all as INVOICED (only if Key49 accepted)
+    if result.get("key49_invoice_id"):
+        for d in dispatches:
+            d.credit_status = "INVOICED"
+        await db.commit()
+
+    total_amount = sum(float(d.total or 0) for d in dispatches)
+
+    return BulkInvoiceResponse(
+        invoice_id=result.get("key49_invoice_id"),
+        access_key=access_key,
+        sri_status=result.get("sri_status"),
+        dispatch_count=len(dispatches),
+        total_amount=total_amount,
+        invoiced_dispatch_ids=dispatch_ids if result.get("key49_invoice_id") else [],
+        errors=result.get("errors", []),
+    )
 
 
 @router.post("/{order_id}/cancel")
@@ -1062,3 +1248,38 @@ async def retry_pending_invoices_endpoint(
     from app.services.key49_service import retry_pending_invoices
     result = await retry_pending_invoices(db)
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Orphan dispatch cleanup (ATO timeout recovery)
+# ═══════════════════════════════════════════════════════════════════
+
+
+@router.get("/orphans")
+async def get_orphan_dispatches(
+    _user: User = Depends(get_current_user),
+):
+    """Return orphan dispatches (AUTHORIZED + $0.00) pending cleanup."""
+    from app.services.dispatch_cleanup import get_orphan_count, ORPHAN_AGE_SECONDS
+    count = await get_orphan_count()
+    return {
+        "orphan_count": count,
+        "orphan_age_threshold_seconds": ORPHAN_AGE_SECONDS,
+        "description": "AUTHORIZED dispatches with $0.00 older than threshold. "
+                       "These are likely Wayne ATO timeouts.",
+    }
+
+
+@router.post("/cleanup-orphans")
+async def cleanup_orphan_dispatches(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Manually trigger orphan dispatch cleanup. Idempotent — safe to call anytime."""
+    from app.services.dispatch_cleanup import _cancel_orphan_dispatches
+    cancelled = await _cancel_orphan_dispatches()
+    return {
+        "cancelled": cancelled,
+        "message": f"{cancelled} orphan dispatch(es) cancelled" if cancelled
+                   else "No orphan dispatches to clean up",
+    }

@@ -1,635 +1,102 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-06-26)
-
-### ✅ Fases completadas
-
-| Fase | Tag | Descripción |
-|------|-----|-------------|
-| 1-11 | v0.1.0-v0.19.9 | POS + FusionBridge + Hardware + Edge Cases |
-| **12** | **`v0.25.0`** | **Admin Backend CRUD + Auth — 11 módulos, 51 endpoints, 238 tests admin** |
-| **13** | **`v0.26.0`** | **Admin Dashboard + Reports + Export Engine — 14 endpoints, PDF/Excel, 371 tests** |
-| **14-16** | **`v0.27.0-v0.30.0`** | **Admin Frontend — Layout + Dashboard + Reportes** |
-| **17** | **`v0.31.0`** | **Deploy readiness — admin en producción, scripts, docs** |
-| **17** | **`v0.32.0`** | **Cloudflare Tunnel — admin expuesto + Reportes/Dashboard mejoras** |
-| **18** | **`v0.33.0`** | **Dashboard Diario — 3 modos (diario/mensual/anual) + comparación multi-período** |
-
----
-
-## Logros de la sesión (2026-06-26) — v0.33.0
-
-### Dashboard Diario — 3 modos con comparación ✅
-
-**Refactor completo del dashboard admin con 3 modos de visualización.**
-
-Arquitectura:
-- 1 página, 3 tabs: **DIARIO** / **MENSUAL** / **ANUAL**
-- Chips horizontales con scroll para seleccionar día/mes/año
-- Auto-scroll al período actual + badges "Hoy"/"Ayer"
-- Flechas ← → para navegación rápida
-- Fade animation entre cambios de modo
-
-Gráficas de comparación (nuevo enfoque):
-- Ventas $ y Galones en gráficas **separadas** (no doble eje)
-- Cada gráfica muestra **3 períodos solapados**: anterior · actual · siguiente
-- Alineación por bucket real (hora/día/mes), no por posición de array
-- Período actual con línea sólida gruesa, anterior/siguiente discontinuos tenues
-
-Gráfica de producto:
-- Galones por producto (SUPER/DIESEL/ECO_PAIS) en multi-línea
-- Colores mapeados por `product_id` (estable ante renombres)
-
-Tabla mensual:
-- Galones por Día y Producto con fila de totales
-
-### Backend — 5 endpoints nuevos/modificados
-
-| Endpoint | Tipo | Descripción |
-|----------|------|-------------|
-| `/summary` | Mod | +`total_gallons`, +`period`/`date` params |
-| `/sales-by-day` | Mod | GROUP BY dinámico (hora/día/mes), +`total_gallons` |
-| `/evolution` | Mod | Refactor con helper `_compute_evolution()` |
-| `/evolution/compare` | **Nuevo** | 3 datasets alineados (previous/current/next) |
-| `/gallons-by-period` | **Nuevo** | Galones en serie temporal × producto |
-| `/compare` | **Nuevo** | KPI actual vs anterior + % crecimiento |
-| `/top-periods` | **Nuevo** | Mejores sub-períodos (días/meses) |
-| `/gallons-by-product` | **Nuevo** | Donut galones ordenado por volumen |
-
-Schemas nuevos: `EvolutionItem`, `EvolutionCompareResponse`, `CompareResponse`,
-`TopPeriodItem`, `GallonsByPeriodItem`.
-
-### Frontend — 7 componentes nuevos
-
-| Componente | Descripción |
-|-----------|-------------|
-| `ModeSelector.svelte` | 3 tabs: 📅 Diario / 📆 Mensual / 📈 Anual |
-| `ChipScroller.svelte` | Chips horizontales + ← → navegación |
-| `ComparisonChart.svelte` | Líneas solapadas (anterior/actual/siguiente) |
-| `ProductLinesChart.svelte` | Multi-línea por producto (galones) |
-| `DonutChart.svelte` | Donut/pie genérico reutilizable |
-| `TopPeriodsChart.svelte` | Barras horizontales (mejores días/meses) |
-| `types.ts` | Tipos compartidos (`Period`, `ChipItem`) |
-
-Página `+page.svelte`: refactor completo (~310 líneas, -220 líneas de chart inline).
-
-### Bug fixes
-
-- Comparación: datasets se alineaban por índice de array → ahora por bucket real (hora 0-23)
-- Colores de producto: mapeo por `product_id` en vez de `product_code` (sobrevive renombres)
-- `ECO_PAIS` vs `ECO`: el código real en BD es `ECO_PAIS`
-- Responsive: ModeSelector en línea separada en móvil
-
-### Archivos modificados
-
-```
-Backend (3):
-  pos_backend/app/api/admin/dashboard.py          ← +430/-80 líneas
-  pos_backend/app/schemas/__init__.py             ← +49 líneas (5 schemas nuevos)
-  pos_backend/tests/test_api_admin_dashboard.py   ← +227 líneas (16 tests)
-
-Frontend Admin (8):
-  admin/src/routes/(admin)/dashboard/+page.svelte ← refactor completo
-  admin/src/lib/components/dashboard/ (7 archivos nuevos)
-
-Docs (1):
-  docs/admin/DASHBOARD_DIARIO.md                  ← NUEVO (plan de implementación)
-```
-
-### Tests
-
-```
-Backend:     387/387 ✅  (371 originales + 16 nuevos)
-Admin:        svelte-check 0 errors ✅
-Admin:        npm run build OK ✅
-POS ventas:   sin impacto ✅
-```
-
----
-
-## Logros de la sesión (2026-06-23) — v0.32.0
-
-### Cloudflare Tunnel + Admin mejoras ✅
-
-**Admin expuesto en https://neoguayas-paute.apx5.com**
-
-Cloudflare:
-- [x] cloudflared instalado y configurado como systemd service
-- [x] Túnel `admin-neoguayas` creado (UUID: 56028a77...)
-- [x] DNS CNAME → `neoguayas-paute.apx5.com` → tunnel
-- [x] Vite `allowedHosts` configurado para el dominio
-- [x] Admin accesible desde internet (HTTP 200 confirmado)
-- [x] Documentación: `docs/admin/CLOUDFLARE_TUNNEL.md`
-
-Admin — Surtidores (vivo):
-- [x] `GET /api/admin/dispensers/status` — consulta FusionBridge en tiempo real
-- [x] Página `/admin/dispensers/status` con tarjetas por surtidor
-- [x] Botón Refrescar manual, indicadores de estado (IDLE/FUELLING/ERROR)
-- [x] Menú lateral: ícono Activity
-- [x] Configuración `fusion_bridge_url` en system_config (IPv4 fix)
-
-Admin — Reportes:
-- [x] Fix paginación: bug de ciclo `$effect` que reseteaba página a 1
-- [x] 2 nuevas gráficas en Ventas: Producto (donut) + Método Pago (pie)
-- [x] Fecha por defecto = hoy (ya no carga todo el historial)
-- [x] Validación rango máximo 31 días con toast
-- [x] DashBoard Hoy: íconos en tarjetas KPI
-
-Backend — Shift actions (admin):
-- [x] `GET /api/admin/reports/shifts/{id}/receipt` → PDF recibo cierre turno
-- [x] `GET /api/admin/reports/shifts/{id}/transactions/export` → Excel 2 hojas
-- [x] `generate_shift_receipt_pdf()`: formato ticket térmico 80mm
-- [x] `generate_shift_transactions_excel()`: Despachos + Movimientos Caja
-
-Docs:
-- [x] `docs/SOP_REENVIO_SRI_KEY49.md`: diagnóstico y reenvío facturas SRI
-- [x] `docs/admin/CLOUDFLARE_TUNNEL.md`: guía completa de despliegue Cloudflare
-
----
-
-## Logros de la sesión (2026-06-23) — v0.31.0
-
-### Admin deploy readiness + bugfixes ✅
-
-**Admin funcionando en producción (neoguayas2, :5174).**
-
-- [x] deploy-to-server.sh: target `admin` (rsync admin/src/ + config files)
-- [x] powerfin-gas: deploy-admin, start/stop/restart-admin, status + health :5174
-- [x] INSTALL.md: admin-frontend.service, Nginx /admin location, firewall :5174
-- [x] Alembic migrations tracked in git (4 archivos un-ignored)
-- [x] requirements.txt: +reportlab, +openpyxl, +Pillow
-- [x] package.json: @sveltejs/vite-plugin-svelte ^5.0.0 (vite 6 compat)
-- [x] Dashboard: fixed UTC timezone bug — toISOString() → localDate()
-- [x] Deploy path fix: admin/src sin trailing slash en rsync
-- [x] Backend crash fix: pip install reportlab en producción
-
-### Problemas resueltos en producción
-
-| Problema | Causa | Fix |
-|----------|-------|-----|
-| Backend caído (exit code 1) | reportlab no instalado en venv | pip install reportlab openpyxl Pillow |
-| npm install fallaba | vite-plugin-svelte ^4.0.0 incompatible con vite 6 | Bump a ^5.0.0 |
-| deploy-admin: src/ no encontrado | rsync con trailing slash aplanaba directorio | admin/src → admin/src (sin /) |
-| Dashboard "Hoy" vacío (fecha mañana) | toISOString() usa UTC | toLocalDate() con getFullYear/getMonth/getDate |
-| admin-frontend.service not found | Primer deploy, servicio no creado | Creado manualmente + documentado en INSTALL.md |
-| powerfin-gas sin admin en status | Edit silencioso falló (typo old_str) | Corregido + recommit |
-
-### Archivos modificados
-
-```
-Scripts (3):
-  scripts/deploy-to-server.sh    ← +admin target
-  scripts/powerfin-gas            ← +deploy-admin, start/stop/restart-admin, status
-  pos_backend/requirements.txt    ← +reportlab, openpyxl, Pillow
-
-Config (1):
-  admin/package.json              ← @sveltejs/vite-plugin-svelte ^4 → ^5
-
-Frontend (1):
-  admin/src/routes/(admin)/dashboard/+page.svelte  ← UTC timezone fix
-
-Git (1):
-  pos_backend/.gitignore          ← removido alembic/versions/*.py
-
-Migrations (4 — ahora trackeadas):
-  pos_backend/alembic/versions/7c643d01b45d_add_preset_type_to_dispatches.py
-  pos_backend/alembic/versions/5a02d184d729_add_is_active_to_grades.py
-  pos_backend/alembic/versions/c7ccad66cca6_add_is_active_to_price_lists_and_items.py
-  pos_backend/alembic/versions/2e2a37a14335_add_is_active_to_hoses.py
-
-Docs (3):
-  docs/DEPLOY_QUICK.md            ← +admin en flujo y comandos
-  docs/INSTALL.md                 ← +admin-frontend.service, Nginx, firewall
-  docs/admin/ADMIN_ROADMAP.md     ← v0.31.0 + Fase 17 avances
-```
-
----
-
-## Logros de la sesión (2026-06-22) — v0.30.0
-
-### Phase 12 — Admin Backend CRUD + Auth ✅ COMPLETADO
-
-**338 tests pasando, 0 regresiones, flujo de venta 100% intacto.**
-
-Módulos implementados hoy (8 nuevos, 187 tests):
-
-| # | Módulo | Endpoints | Tests |
-|---|--------|-----------|-------|
-| 12.3 | Roles CRUD | 4 | 28 |
-| 12.4 | Products CRUD | 5 | 36 |
-| 12.5 | Grades CRUD | 5 | 28 |
-| 12.6 | Price Lists + Items | 9 | 37 |
-| 12.7 | Dispensers + Hoses | 8 | 32 |
-| 12.8 | Emission Points | 4 | 19 |
-| 12.9 | Company Info | 2 | 6 |
-| 12.10 | System Config | 2 | 4 |
-| 12.11 | Payment Methods | 4 | 12 |
-
-**Total Phase 12: 11 módulos, 51 endpoints, 238 tests admin.**
-
-### Decisiones de diseño
-
-- **model_dump(exclude_unset=True)** para updates parciales — permite limpiar campos con null explícito
-- **Sequences en conftest**: +10 setval faltantes (products, roles, grades, price_lists, payment_methods, dispensers, hoses, dispatch_types, categories, taxes)
-- **Migraciones 3-pasos**: nullable → backfill → NOT NULL con server_default (grades, price_lists, price_list_items, hoses)
-- **Code immutable** en roles, products, grades — no se puede cambiar vía PUT
-- **Sin DELETE** en roles y emission_points — FK references o recurso crítico
-- **Items reactivación**: crear item con mismo producto reactiva el inactivo (price_list_items)
-- **System config upsert**: PUT crea la key si no existe ({key:path} para keys con slashes)
-- **Aislamiento total**: /api/admin/* usa get_admin_user (ADMIN/SUPERVISOR), DISPATCHER recibe 403. Cero impacto en /api/pos/*.
-
-### Archivos creados/modificados
-
-```
-Routers admin (8 nuevos):
-  app/api/admin/roles.py
-  app/api/admin/products.py
-  app/api/admin/grades.py
-  app/api/admin/price_lists.py
-  app/api/admin/dispensers.py
-  app/api/admin/emission_points.py
-  app/api/admin/company.py
-  app/api/admin/system_config.py
-  app/api/admin/payment_methods.py
-
-Modelos (+ is_active):
-  app/models/product.py       ← Grade.is_active
-  app/models/pricing.py       ← PriceList.is_active, PriceListItem.is_active
-  app/models/dispenser.py     ← Hose.is_active
-
-Migraciones (3 nuevas):
-  alembic/versions/5a02d184d729_add_is_active_to_grades.py
-  alembic/versions/c7ccad66cca6_add_is_active_to_price_lists_and_items.py
-  alembic/versions/2e2a37a14335_add_is_active_to_hoses.py
-
-Schemas (+35 nuevos):
-  app/schemas/__init__.py
-
-Tests (8 archivos nuevos, 187 tests):
-  tests/test_api_admin_roles.py           (28 tests)
-  tests/test_api_admin_products.py         (36 tests)
-  tests/test_api_admin_grades.py           (28 tests)
-  tests/test_api_admin_price_lists.py      (37 tests)
-  tests/test_api_admin_dispensers.py       (32 tests)
-  tests/test_api_admin_emission_points.py  (19 tests)
-  tests/test_api_admin_company_config.py   (10 tests)
-  tests/test_api_admin_payment_methods.py  (12 tests)
-
-Infra:
-  app/api/router.py           ← +9 admin routers
-  tests/conftest.py           ← +10 setval sequences
-  docs/admin/ADMIN_ROADMAP.md ← Phase 12 completado
-```
-
----
-
-## Logros de la sesión (2026-06-20) — v0.19.6
-
-### 78. Handshake de pago Wayne post-cobro ✅
-
-**Problema**: El display del Wayne se quedaba pegado mostrando "COBRAR $XX.00"
-después de cada venta cobrada. El POS ejecutaba `collect_dispatch` en el backend
-correctamente (HTTP/1.1 fix de v0.19.4 funcionando), pero nunca ejecutaba el
-handshake de 3 pasos con el Wayne: `LOCK → CLEAR_SALE → UNLOCK`.
-
-Las funciones `paymentLock()`, `paymentClear()`, `paymentUnlock()` existían en
-`bridge.ts` desde siempre pero nadie las llamaba desde el flujo de cobro.
-
-**Solución**:
-- `pendingOrders.ts`: Nuevo campo `fusionSaleId?` en `PendingOrder`. `completeOrder()`
-  lo acepta y persiste en localStorage.
-- `+page.svelte`: El handler SSE de `NEW_TRANSACTION` ya tenía `saleId` disponible —
-  ahora se lo pasa a `completeOrder()`.
-- `SaleWizard.svelte`: Después de `collectDispatch` + impresión exitosa, ejecuta
-  `paymentLock → paymentClear → paymentUnlock` como fire-and-forget (no bloquea,
-  try/catch silencioso). Si FusionBridge está caído, el display queda pegado
-  igual que antes (sin regresión).
-
-**Adicional**:
-- `payment_method_id` se usa como label en `TY` del Wayne (IDs, no nombres).
-- Documentado SOP completo en `docs/SOP_DESPACHOS_CERO.md` con 2 escenarios,
-  diagnóstico, arreglo manual, y comandos de recovery.
-
-### 79. SOP — Despachos con valores CERO o display pegado ✅
-
-**Problema**: Dos escenarios distintos requieren diagnóstico y recovery manual.
-
-**Documentación creada**: `docs/SOP_DESPACHOS_CERO.md`
-- Escenario A: `COMPLETED` con `total=0.00` (HTTP/2 body loss, arreglado en v0.19.4).
-- Escenario B: `AUTHORIZED` con `total=0.00` (Wayne ATO=180s timeout sin despachar,
-  nunca emite NEW_TRANSACTION).
-- Display Wayne pegado: cómo obtener `saleId` de logs y limpiar con 3 curls.
-- Comandos de diagnóstico SQL y journalctl.
-
-### Archivos modificados
-
-```
-POS Frontend (3):
-  stores/pendingOrders.ts        ← +fusionSaleId en PendingOrder + completeOrder()
-  routes/(pos)/+page.svelte      ← pasa saleId del SSE al store
-  components/SaleWizard.svelte   ← handshake lock→clear→unlock post-cobro
-
-Docs (1):
-  docs/SOP_DESPACHOS_CERO.md     ← nuevo: diagnóstico y recovery (2 escenarios)
-```
-
-Deploy (1):
-  scripts/powerfin-gas           ← +npm run build en deploy-frontend
-```
-
-### Tests
-
-```
-Powerfin POS — 41 tests    npm test                  # 41 passed, 0 regressions
-svelte-check — 0 errors    npm run check             # 0 errors, 16 pre-existing warnings
-```
-
----
-
-## Logros de la sesión (2026-06-20, continuación) — v0.19.8
-
-### 80. ✕ Cancelar para despachos huérfanos (IDLE + FUELLING) ✅
-
-**Problema**: Cuando un cliente levanta la pistola y la cuelga sin despachar
-combustible, el Wayne vuelve a IDLE sin emitir NEW_TRANSACTION. El dispatch
-queda AUTHORIZED con total=$0.00. El botón ✕ Cancelar solo aparecía en estados
-AUTHORIZED/CALLING/STARTING — al llegar a IDLE desaparecía y el DispenserCard
-mostraba falsamente "COBRAR $XX" (confundiendo FUELLING+IDLE del phone-off
-recovery de v0.19.1 con un despacho real completado).
-
-El despachador quedaba atrapado: no podía cancelar (botón invisible), no podía
-cobrar (backend bloquea collect si status≠COMPLETED).
-
-**Solución — 2 capas**:
-- **Frontend** (`DispenserCard.svelte`): `canCancel` ahora incluye
-  `hose.status===IDLE && order.status===FUELLING`. El botón ✕ Cancelar aparece
-  junto al "COBRAR $XX". El despachador tiene 2 opciones: Cancelar o intentar
-  Cobrar (que fallará con mensaje claro).
-- **Backend** (`dispatches.py:cancel_dispatch`): Doble barrera de seguridad.
-  Bloquea cancelación si `status===COLLECTED` o `COMPLETED+total>0`. Esto
-  impide que alguien despache combustible, cuelgue rápido, y cancele antes
-  de que llegue NEW_TRANSACTION. El backend es la autoridad final.
-
-**Flujo visual**:
-```
-Hose IDLE
-├── order=COMPLETED → COBRAR $XX.00 (normal, cancel NO visible)
-└── order=FUELLING  → COBRAR $XX.00 + ✕ Cancelar (v0.19.7)
-                      Si total>0 en BD → backend rechaza cancel
-```
-
-### 81. Deploy: auto-build + auto-clean ✅
-
-**Problema**: `powerfin-gas deploy-frontend` copiaba fuentes y reiniciaba sin
-compilar. El build quedaba desactualizado. Adicional, los archivos en pre-deploy
-se acumulaban sin limpiar.
-
-**Solución**:
-- `cmd_deploy_frontend()`: `npm run build` después de rsync, antes de restart.
-  Si el build falla (`|| die`), no se reinicia y el pre-deploy se preserva.
-- Los 3 deploys (frontend/backend/fusion) ahora llaman `cmd_clean` al final.
-  Limpia automáticamente después de un deploy exitoso.
-
-### Archivos modificados (v0.19.8)
-
-```
-Frontend (1):
-  components/DispenserCard.svelte    ← canCancel extendido + documentación
-
-Backend (1):
-  api/dispatches.py                  ← cancel_dispatch con doble barrera
-                                       (COLLECTED + COMPLETED+total>0)
-
-Deploy (1):
-  scripts/powerfin-gas               ← +npm run build + auto-clean en 3 deploys
-```
-
-### Tests
-
-```
-Powerfin POS — 41 tests    npm test                  # ✓ 41/41
-Backend     — 93 tests    pytest                    # ✓ 93/93
-svelte-check — 0 errors    npm run check             # ✓
-```
-
----
-
-## Logros de la sesión (2026-06-17) — v0.19.4
-
-### 75. Migración Alembic completa ✅
-
-**Problema**: Instalación limpia no podía ejecutar `alembic upgrade head` porque
-la segunda migración solo tenía `alter_column` (comentarios) sin los `add_column`
-necesarios. 15 columnas faltaban entre el schema inicial y el modelo ORM actual.
-
-**Solución**:
-- `b261e8ceb69f`: reescrita con `add_column` para 15+ columnas en 6 tablas
-  (`company_info`, `dispatch_details`, `dispatches`, `products`, `vehicles`,
-  `payment_methods`, `dispensers`, `shifts`)
-- `seed_data.py`: removido `fusion_pump_id` de `Dispenser()` (ahora en `hoses`)
-- `INSTALL.md` sección 9 actualizada: flujo `alembic upgrade head` → `seed_data.py`
-
-### 76. Despachos en $0.00 — defensa en 4 capas ✅
-
-**Problema**: Despachos se creaban con `total=$0.00`, se cobraban en $0.00 y se
-enviaban al SRI con monto cero. Tres bugs contribuían:
-
-1. **Carrera AM=0**: FusionBridge llamaba `complete_dispatch` con `amount="0"`
-   (Wayne no enviaba AM en el primer evento). Cuando el POS reintentaba con el
-   monto real, el backend respondía "ya está COMPLETED" y lo ignoraba.
-2. **collect sin exigir COMPLETED**: `collect_dispatch` solo verificaba
-   `status != COLLECTED`. Un despacho AUTHORIZED con total=0 se podía cobrar.
-3. **CANCELLED iban al SRI**: `cancel_dispatch` no limpiaba `sri_status`.
-   `retry_pending_invoices` no excluía CANCELLED.
-
-**Solución — 4 defensas**:
-
-| Capa | Archivo | Qué hace |
-|------|---------|----------|
-| 1 | `dispatches.py:complete_dispatch` | Si COMPLETED con total=0 + nuevo amount>0 → corrige totals |
-| 2 | `dispatches.py:complete-by-pump` | Busca AUTHORIZED + COMPLETED(total=0); ignora si ya tiene totals |
-| 3 | `dispatches.py:collect_dispatch` | Exige `status==COMPLETED` + `total>0` + `effective_amount>0` |
-| 4 | `dispatches.py:cancel_dispatch` | Limpia `sri_status=NULL` al cancelar |
-
-**Adicional**:
-- `key49_service.py`: `emitir_factura` y `retry_pending_invoices` excluyen CANCELLED
-- Auto-cancel (>5 min) **eliminado** — redundante con ATO=180s del Wayne. Causaba
-  cancelación de tanques llenos que tardan más de 5 min en despachar.
-- Frontend: `powerfin.ts` extrae `detail` del error; `SaleWizard.svelte` muestra
-  mensaje real del backend en vez de "Error al registrar cobro".
-
-### 77. Precios: aclaración price_list_items vs products.base_price ✅
-
-**Problema**: Usuario cambió `products.base_price` a $3.251 pero el sistema seguía
-cobrando $3.103. El precio de venta SIEMPRE viene de `price_list_items.unit_price`
-para la lista STANDARD. `products.base_price` solo es referencia/fallback.
-
-**Solución**: Documentado el flujo de precios. El usuario actualizó ambas tablas.
-
----
-
-## Logros de la sesión (2026-06-22, continuación) — v0.26.0
-
-### Phase 13 — Admin Dashboard + Reportes + Export Engine ✅ COMPLETADO
-
-**371 tests pasando, 0 regresiones, flujo de venta 100% intacto.**
-
-Dashboard (6 endpoints + 11 tests):
-- summary: KPI cards (total sales, dispatch count, avg ticket, cash/non-cash)
-- sales-by-day, sales-by-product, sales-by-payment (chart data)
-- top-customers, top-products (with limit)
-
-Reports (4 GET + 4 POST + 22 tests):
-- sales: paginated with filters (date, status, payment, search)
-- dispatches: detailed with all fields (volume, unit_price, tax, SRI, credit)
-- shifts: history with collected/surplus/shortage/dispatch_count
-- cash-summary: consolidated (INCOME, EXPENSE, DEPOSIT, TRANSFERS, SAFE_DROPS)
-
-Export Engine (reportlab 5.0.0 + openpyxl 3.1.5 + pillow 12.2.0):
-- generate_pdf(): landscape A4, styled header, alternating rows
-- generate_excel(): frozen header, auto-fit columns, borders
-- StreamingResponse with correct content-type (PDF/XLSX)
-- format=pdf|xlsx query param on all 4 export endpoints
-
-### Archivos creados/modificados
-
-```
-Nuevos:
-  app/api/admin/dashboard.py          (+6 endpoints, 11 tests)
-  app/api/admin/reports.py            (+4 GET + 4 POST, 22 tests)
-  app/services/export_service.py       (PDF + Excel generators)
-  tests/test_api_admin_dashboard.py
-  tests/test_api_admin_reports.py
-
-Modificados:
-  app/schemas/__init__.py  (+12 schemas: Dashboard + Reports)
-  app/api/router.py        (+2 includes)
-  docs/admin/ADMIN_ROADMAP.md
-```
-
----
-
-## Pendiente para próxima sesión
-
-### 🟡 Backlog
-
-```
-☐ 1. Pago mixto (efectivo + tarjeta)
-☐ 2. identity_service.py — mover URL y token a system_config
-☐ 3. Roles/permisos — enforcement real en POS endpoints
-☐ 4. Flujo de crédito en el POS — selector en SaleWizard
-☐ 5. Despachos ya enviados al SRI con $0.00 — conciliar
-```
-
-### 🔵 Phase 17 — Cloudflare + Deploy + Go-live (casi completo)
-
-```
-✅ Deploy scripts con admin (deploy-to-server.sh + powerfin-gas)
-✅ Nginx /admin location documentado (INSTALL.md)
-✅ Admin funcionando en producción (neoguayas2, :5174)
-✅ Alembic migrations tracked in git
-✅ cloudflared instalado + configurado
-✅ Cloudflare Tunnel + DNS (neoguayas-paute.apx5.com)
-✅ Admin accesible desde internet
-☐ Rate limiting login (pendiente — Cloudflare WAF o backend slowapi)
-☐ Prueba E2E completa (admin → POS)
-✅ Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
-```
-
-### 🟢 Phase 18 — Dashboard Diario (completado v0.33.0)
-
-```
-✅ 3 modos: DIARIO / MENSUAL / ANUAL
-✅ Chips horizontales con scroll + ← → navegación
-✅ Gráficas separadas ($ y galones) con 3 períodos solapados
-✅ Multi-línea de galones por producto
-✅ Tabla mensual: Galones por Día y Producto
-✅ Alineación de datasets por bucket real
-✅ Colores por product_id (estable)
-✅ Backend: 387/387 tests
-✅ Admin: svelte-check 0 errors + build OK
-✅ Deploy a producción
-```
+## Estado actual (2026-07-13) — v0.34.0
+
+### ✅ Logros de la sesión
+
+#### Despachos a crédito — sector público + contratos ✅
+- `PENDING_BULK_INVOICE` credit_status para contratos NO_INDEFINIDO
+- Factura global / liquidación para sector público
+- Migraciones: plate 15 chars, PENDING_BULK_INVOICE constraint
+- Admin: módulo contracts (listado + liquidación)
+
+#### Cleanup automático de despachos huérfanos ✅
+- Servicio `dispatch_cleanup.py`: cada 60s cancela AUTHORIZED + $0.00 con >900s
+- `ORPHAN_AGE_SECONDS = 900` (15 min) — seguro para camiones grandes
+- Endpoints: `GET /orphans`, `POST /cleanup-orphans`
+- 5 tests dedicados, 0 regresiones en test suite completa
+
+#### Ticket de crédito con firma ✅
+- `contractCode` en receipt data (backend → FusionBridge)
+- Bloque condicional `{#credit}` en template ESC/POS
+- Línea de firma: RECIBI CONFORME / FIRMA / CEDULA
+
+#### Bugfixes en producción
+- `powerfin-gas`: fix permisos `chown` antes de cada build
+- `deploy-to-server.sh`: IP actualizada a Cloudflare Tunnel
+
+#### Intervenciones manuales en BD (producción)
+- #6447: COMPLETED $10.00 → CANCELLED (turno cerrado, nunca cobrado)
+- #6512: AUTHORIZED $0.00 → CANCELLED (pistola levantada sin autorizar)
+- #6517: AUTHORIZED $0.00 → restaurado COMPLETED $102.28 (cancelado por error durante carga)
+- #6573: AUTHORIZED $0.00 → restaurado COMPLETED $57.00 (cancelado por cleanup service)
 
 ### 🆕 Próximas tareas
 
 ```
-☐ 7. Precios programados — cambio automático a las 00:00 horas
-   · Tabla: scheduled_price_changes (price_list_item_id, new_price, effective_date, applied)
-   · Backend: scheduler/hook que al iniciar el día aplique cambios pendientes
+☐ 1. Admin — sección "Despachos con problemas"
+   · Listar despachos en estados anómalos (AUTHORIZED $0.00, COMPLETED sin cobrar)
+   · Botones de acción: Cancelar huérfano, Restaurar, Forzar completado
+   · Solo ADMIN/SUPERVISOR — evitar intervención SQL manual
+
+☐ 2. Admin — modificar precios de Lista de Precios
+   · Pantalla price-lists/[id]: editar unit_price inline en la tabla de items
+
+☐ 3. Precios programados — cambio automático a las 00:00 horas
+   · Tabla: scheduled_price_changes
+   · Backend: scheduler que aplique cambios pendientes al iniciar el día
    · Admin: CRUD para programar cambios de precio futuros
 
-☐ 8. Admin — modificar precios de Lista de Precios
-   · Pantalla price-lists/[id]: editar unit_price inline en la tabla de items
-   · Actualmente solo permite agregar/eliminar items, no editar el precio
+☐ 4. Pago mixto (efectivo + tarjeta)
+☐ 5. identity_service.py — mover URL y token a system_config
+☐ 6. Roles/permisos — enforcement real en POS endpoints
+☐ 7. Flujo de crédito en el POS — selector en SaleWizard
+☐ 8. Nginx rate limiting login
+☐ 9. Prueba E2E completa (admin → POS)
 ```
 
 ---
 
-## Configuración actual del sitio
+## Configuración del sitio
 
 | Dato | Valor |
 |------|-------|
 | Estación | NEOGAS |
-| Surtidores | 4: SURT-01 (SUPER+ECO), SURT-02 (ECO), SURT-03 (DIESEL1), SURT-04 (DIESEL2) |
-| Puntos emisión | 001-001 a 001-004 (uno por dispensador) |
-| Listas precio | STANDARD, VIP, EMPLOYEE, FAMILY |
-| ATO | 180s |
-| Moneda | DÓLARES ($) |
-| Firmware | Rel-5.19.1 |
-| Formas de pago | EFECTIVO, TARJETA, QR, CREDITO, DEUNA, JEPFAST, SIPY, YALOBOX |
-| Cliente requerido | Sí (cédula o RUC obligatorio — sin Consumidor Final) |
+| Surtidores | 4: 1 SUPER-ECO, 2 ECO, 3 DIESEL, 4 DIESEL |
+| Puntos emisión | 001-001 a 001-004 |
+| Formas de pago | EFECTIVO, TARJETA, CREDITO DIRECTO, YALOBOX |
+| ATO Wayne | 180s (próximo cambio a 300s) |
+| Cleanup huérfanos | 900s (15 min) |
+| Cliente requerido | Sí (cédula o RUC obligatorio) |
+| Firmware Wayne | Rel-5.19.1 |
 
 ## Base de datos
 
 | Dato | Valor |
 |------|-------|
-| Host | localhost:5433 |
+| Host | 192.168.1.25:5432 |
 | Database | powerfin_gas |
-| Test DB | powerfin_gas_test |
-| User | postgres |
-| Password | 1234abcd |
+| User (lectura) | agent_llm / AgentLLM123 |
+| User (admin) | postgres / Post20Gres17 |
 
 ## Deploy a producción
 
 ```bash
-cd /home/pvalarezo/grisbiapps/powerfin_pos_gas
+# Desde desarrollo
+./scripts/deploy-to-server.sh backend|frontend|admin|fusion|all
 
-# Backend
-rsync -av \
-  pos_backend/app/api/dispatches.py \
-  pos_backend/app/services/key49_service.py \
-  pos_backend/seed_data.py \
-  pos_backend/alembic/versions/b261e8ceb69f_accumulated_schema_changes_phases_9_10.py \
-  app@192.168.1.25:/opt/powerfin/pos/backend/
-
-# Frontend
-rsync -av \
-  pos/src/lib/api/powerfin.ts \
-  pos/src/lib/components/SaleWizard.svelte \
-  app@192.168.1.25:/opt/powerfin/pos/pos/src/
-
-# Reiniciar
-ssh app@192.168.1.25 "sudo systemctl restart pos-backend pos-frontend"
+# En el servidor
+ssh app@100.97.47.123
+powerfin-gas pending
+powerfin-gas deploy-all
+powerfin-gas status
 ```
 
----
+## Lecciones aprendidas
 
-## NOTAS
-
-- El dispensador físico requiere **palanca manual** además de levantar la pistola.
-- **NO usar `LID` ni `LM` en PRESET** — firmware Rel-5.19.1 crea locks permanentes.
-- **No existe Consumidor Final** — toda venta requiere cliente con cédula o RUC.
-- **ATO en 180 segundos** — los presets expiran después de 3 minutos sin levantar pistola.
-- **`shift_id` cambia al cobrar**: AUTHORIZED/COMPLETED → shift autorizador; COLLECTED → shift cobrador.
-- **Cuadre de caja**: `WHERE shift_id = mi_turno AND status = 'COLLECTED'`.
-- **Auto-guardado**: buscar CED/RUC en API externo → se guarda en BD local automáticamente.
-- **Facturación preferencial**: `vehicles.billing_person_id` — NULL = usar titular.
-- **Celular apagado**: FusionBridge completa el dispatch directamente (no depende del POS).
-- **Consola Wayne en oficina** → el POS es la ÚNICA forma de detener un despacho.
-- **Precios**: el precio de venta SIEMPRE viene de `price_list_items.unit_price`.
-  `products.base_price` es referencia/subsidio. Cambiar ambos para consistencia.
-- **Despacho a crédito**: se decide al autorizar, no al cobrar. Requiere contrato activo
-  con vehículo asignado y cupo disponible.
-- **SRI codes**: vienen de `payment_methods.sri_code`, no hardcodeados.
-- **Instalación limpia**: `alembic upgrade head` + `python seed_data.py`.
-  Ver `docs/INSTALL.md` sección 9.
+- **NUNCA cancelar AUTHORIZED $0.00 sin verificar si el surtidor está cargando.** 
+  Despachos FULL/VOLUME grandes pueden tomar 5-12 minutos con $0.00 hasta que el
+  Wayne manda el completado.
+- **El cleanup service ahora espera 15 minutos** — suficiente para el camión más grande.
+- **El deploy del frontend/admin no afecta el flujo de despacho** — backend y FusionBridge
+  son independientes.

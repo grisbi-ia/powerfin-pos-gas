@@ -1,7 +1,7 @@
 """Seed data for development — populates all reference tables."""
 
 import asyncio
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import select, text
 
@@ -267,6 +267,39 @@ async def seed():
         db.add_all(ccp)
 
         await db.commit()
+
+        # ── Public Sector Contract (example) ──
+        # Check if already exists
+        existing = (await db.execute(
+            select(CreditContract).where(CreditContract.contract_code == "CT-PUB-001")
+        )).scalar_one_or_none()
+        if not existing:
+            pub_contract = CreditContract(
+                contract_code="CT-PUB-001",
+                person_id=2,
+                contract_date=date.today(),
+                cupo=5500.00,
+                contract_type="NO_INDEFINIDO",
+                sercop_type="ADJUDICACION",
+                notes="Contrato de combustible sector público — MUNICIPIO DE PAUTE",
+            )
+            db.add(pub_contract)
+            await db.flush()
+
+            pub_ccv = [
+                CreditContractVehicle(contract_id=pub_contract.contract_id, vehicle_id=2, date_from=date.today(), date_to=date.today() + timedelta(days=365)),
+                CreditContractVehicle(contract_id=pub_contract.contract_id, vehicle_id=3, date_from=date.today(), date_to=date.today() + timedelta(days=365)),
+            ]
+            db.add_all(pub_ccv)
+
+            pub_ccp = [
+                CreditContractProduct(contract_id=pub_contract.contract_id, product_id=1, amount=2500.00),
+                CreditContractProduct(contract_id=pub_contract.contract_id, product_id=2, amount=3000.00),
+            ]
+            db.add_all(pub_ccp)
+
+            await db.commit()
+            print(f"   Public Contract: CT-PUB-001 (NO_INDEFINIDO, $5,500 cupo, ADJUDICACION)")
 
     print("✅ Seed data inserted successfully!")
     print(f"   Users: admin/1234, carlos/1234, maria/1234, pedro/1234")

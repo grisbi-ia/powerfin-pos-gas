@@ -1,6 +1,6 @@
 """FastAPI application factory."""
 
-import json
+import asyncio
 import re
 import json
 import logging
@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import router as api_router
 from app.config import settings
+from app.services.dispatch_cleanup import run_cleanup_loop
 
 # ═══════════════════════════════════════════════════════════
 # Fix: Pydantic v2 serializes Decimal → str like "123.45".
@@ -91,7 +92,20 @@ class DecimalFixMiddleware:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown logic."""
+    # ── Background: orphan dispatch cleanup ──────────────────
+    # Disabled during testing (pytest sets TESTING=1).
+    import os
+    cleanup_task = None
+    if not os.environ.get("TESTING"):
+        cleanup_task = asyncio.create_task(run_cleanup_loop())
     yield
+    # ── Shutdown ───────────────────────────────────────────
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(

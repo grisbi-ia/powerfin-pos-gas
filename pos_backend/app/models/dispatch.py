@@ -32,7 +32,7 @@ class Dispatch(Base):
             name="ck_dispatches_status",
         ),
         CheckConstraint(
-            "credit_status IS NULL OR credit_status IN ('PENDING_INVOICE', 'INVOICED')",
+            "credit_status IS NULL OR credit_status IN ('PENDING_PAYMENT', 'PENDING_BULK_INVOICE', 'INVOICED')",
             name="ck_dispatches_credit_status",
         ),
     )

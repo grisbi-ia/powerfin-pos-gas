@@ -168,3 +168,103 @@ class TestDispatchAPI:
         data = r.json()
         assert data["status"] == "COLLECTED"
         assert float(data["change_amount"]) == 10.0
+
+
+class TestPublicSectorDispatch:
+    """Public sector credit dispatch tests — NO_INDEFINIDO contracts."""
+
+    async def _open_shift(self, client, auth_headers):
+        await client.post("/api/pos/shifts/open", headers=auth_headers, json={
+            "opening_cash": 0, "user_name": "Carlos Sarmiento"
+        })
+
+    async def test_create_dispatch_public_sector_credit_status(self, client, auth_headers):
+        """NO_INDEFINIDO contract → credit_status = PENDING_BULK_INVOICE."""
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
+            "dispenser_id": 1, "hose_id": 1, "side": "A",
+            "preset_type": "MONEY", "preset_value": "20.00",
+            "unit_price": 3.103, "payment_method_id": 1,
+            "plate": "XYZ5678",
+            "dispatch_type_code": "CREDIT",
+            "items": [
+                {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
+            ]
+        })
+        assert r.status_code == 201
+        data = r.json()
+        assert data["status"] == "PENDING"
+        assert data["order_id"].startswith("OV-")
+
+    async def test_create_dispatch_indefinido_unchanged(self, client, auth_headers):
+        """INDEFINIDO contract → credit_status = PENDING_PAYMENT (unchanged)."""
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
+            "dispenser_id": 1, "hose_id": 1, "side": "A",
+            "preset_type": "MONEY", "preset_value": "20.00",
+            "unit_price": 3.103, "payment_method_id": 1,
+            "plate": "XYZ5678",
+            "dispatch_type_code": "CREDIT",
+            "credit_contract_id": 1,  # CT-001 is INDEFINIDO
+            "items": [
+                {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
+            ]
+        })
+        assert r.status_code == 201
+
+    async def test_create_dispatch_sale_unchanged(self, client, auth_headers):
+        """Normal SALE dispatch → no credit fields, sequential consumed."""
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
+            "dispenser_id": 1, "hose_id": 1, "side": "A",
+            "preset_type": "MONEY", "preset_value": "20.00",
+            "unit_price": 3.103, "payment_method_id": 1,
+            "dispatch_type_code": "SALE",
+            "items": [
+                {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
+            ]
+        })
+        assert r.status_code == 201
+
+    async def test_pending_bulk_endpoint(self, client, auth_headers):
+        """GET pending-bulk returns empty list for contract with no dispatches."""
+        from app.services.auth_service import create_access_token
+        admin_token = create_access_token(1, "admin", expire_minutes=240)
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        r = await client.get(
+            "/api/pos/dispatches/pending-bulk?contract_id=2",
+            headers=admin_headers
+        )
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_pending_bulk_forbidden_for_dispatcher(self, client, auth_headers):
+        """DISPATCHER role → 403 on pending-bulk."""
+        r = await client.get(
+            "/api/pos/dispatches/pending-bulk?contract_id=2",
+            headers=auth_headers  # DISPATCHER
+        )
+        assert r.status_code == 403
+
+    async def test_bulk_invoice_no_dispatches(self, client, auth_headers):
+        """POST bulk-invoice with no pending dispatches → 400."""
+        from app.services.auth_service import create_access_token
+        admin_token = create_access_token(1, "admin", expire_minutes=240)
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        r = await client.post("/api/pos/dispatches/bulk-invoice", headers=admin_headers, json={
+            "contract_id": 2,
+            "emission_point_id": 1
+        })
+        assert r.status_code == 400
+        assert "pendientes" in r.json()["detail"]
+
+    async def test_bulk_invoice_wrong_contract_type(self, client, auth_headers):
+        """POST bulk-invoice on INDEFINIDO contract → 400."""
+        from app.services.auth_service import create_access_token
+        admin_token = create_access_token(1, "admin", expire_minutes=240)
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        r = await client.post("/api/pos/dispatches/bulk-invoice", headers=admin_headers, json={
+            "contract_id": 1,  # CT-001 is INDEFINIDO
+            "emission_point_id": 1
+        })
+        assert r.status_code == 400

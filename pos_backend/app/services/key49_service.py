@@ -238,7 +238,10 @@ async def emitir_factura(
         return False
 
     # Don't re-send if already in processing, or if dispatch was cancelled
+    # Never send individual invoices for public sector (PENDING_BULK_INVOICE)
     if dispatch.status == "CANCELLED":
+        return False
+    if dispatch.credit_status == "PENDING_BULK_INVOICE":
         return False
     if dispatch.sri_status and dispatch.sri_status not in ("PENDING",):
         return True
@@ -429,7 +432,8 @@ async def retry_pending_invoices(db: AsyncSession) -> dict:
     result = await db.execute(
         select(Dispatch).where(
             Dispatch.sri_status == "PENDING",
-            Dispatch.status != "CANCELLED"
+            Dispatch.status != "CANCELLED",
+            Dispatch.credit_status != "PENDING_BULK_INVOICE"
         )
     )
     pending = result.scalars().all()
@@ -457,3 +461,163 @@ async def retry_pending_invoices(db: AsyncSession) -> dict:
         await db.commit()
     
     return {"retried": retried, "expired": expired}
+
+
+async def emitir_factura_global(
+    db: AsyncSession,
+    contract_id: int,
+    dispatch_ids: list[int],
+    access_key: str,
+    sequential_number: str,
+    ep,
+    company,
+) -> dict:
+    """
+    Build and send a SINGLE global SRI invoice consolidating multiple
+    PENDING_BULK_INVOICE dispatches. Used for public sector liquidation.
+
+    Returns dict with key49_invoice_id, sri_status, errors.
+    """
+    from app.models.credit import CreditContract
+    from app.models.dispatch import DispatchDetail
+    from app.models.person import Person
+    from app.models.product import Product
+
+    dispatches = (await db.execute(
+        select(Dispatch)
+        .where(Dispatch.dispatch_id.in_(dispatch_ids))
+        .order_by(Dispatch.created_at)
+    )).scalars().all()
+
+    if not dispatches:
+        return {"errors": ["No dispatches found"]}
+
+    contract = (await db.execute(
+        select(CreditContract).where(CreditContract.contract_id == contract_id)
+    )).scalar_one_or_none()
+    if not contract:
+        return {"errors": ["Contract not found"]}
+
+    person = (await db.execute(
+        select(Person).where(Person.person_id == contract.person_id)
+    )).scalar_one_or_none()
+    if not person:
+        return {"errors": ["Person not found"]}
+
+    # Build items: one per dispatch
+    items = []
+    for d in dispatches:
+        detail = (await db.execute(
+            select(DispatchDetail).where(
+                DispatchDetail.dispatch_id == d.dispatch_id
+            )
+        )).scalars().first()
+        if not detail:
+            continue
+
+        product = (await db.execute(
+            select(Product).where(Product.product_id == detail.product_id)
+        )).scalar_one_or_none()
+
+        items.append({
+            "main_code": product.code if product else "FUEL",
+            "description": (
+                f"{product.name if product else 'Combustible'} — "
+                f"Despacho {d.order_id} del "
+                f"{d.created_at.strftime('%Y-%m-%d') if d.created_at else ''}"
+            ),
+            "unit_of_measure": product.unit if product and product.unit else "GAL",
+            "quantity": float(detail.quantity) if detail.quantity else 1,
+            "unit_price": round(float(detail.subtotal) / max(float(detail.quantity), 0.0001), 4),
+            "discount": 0.0,
+            "taxes": [{
+                "code": "2",
+                "rate_code": _sri_rate_code(float(detail.tax_rate)),
+                "rate": float(detail.tax_rate * 100) if detail.tax_rate else 15.0,
+            }],
+        })
+
+    if not items:
+        return {"errors": ["No items to invoice"]}
+
+    # Parse sequential
+    parts = sequential_number.split("-")
+    seq_number = parts[-1].zfill(9) if len(parts) >= 3 else sequential_number.zfill(9)
+
+    total_amount = sum(float(d.total or 0) for d in dispatches)
+
+    payload = {
+        "access_key": access_key,
+        "establishment": ep.establishment,
+        "issue_point": ep.emission_point,
+        "sequence_number": seq_number,
+        "issue_date": _ecuador_today(),
+        "recipient": {
+            "id_type": _sri_id_type(person.id_type or "RUC"),
+            "id": person.id_number,
+            "name": person.name or "ENTIDAD PÚBLICA",
+            "address": person.address or "",
+            "email": person.email or "",
+            "phone": person.phone or "",
+        },
+        "items": items,
+        "payments": [{
+            "payment_method": "20",
+            "total": total_amount,
+            "term": 0,
+            "time_unit": "days",
+        }],
+        "additional_info": {
+            "contract_code": contract.contract_code,
+            "contract_type": "SECTOR_PUBLICO",
+            "dispatch_count": str(len(dispatches)),
+            "dispatch_ids": ",".join(str(did) for did in dispatch_ids),
+        },
+    }
+
+    # Send to Key49
+    config = await _get_key49_config(db)
+    if not config["api_key"]:
+        return {"errors": ["Key49 API key not configured"]}
+
+    idempotency_key = f"bulk-{contract_id}-{datetime.now(ECUADOR_TZ).timestamp()}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{config['base_url']}/invoices",
+                headers={
+                    "Authorization": f"Bearer {config['api_key']}",
+                    "Content-Type": "application/json",
+                    "X-Idempotency-Key": idempotency_key,
+                },
+                json=payload,
+            )
+
+            if resp.status_code == 202:
+                data = resp.json()["data"]
+                return {
+                    "key49_invoice_id": data["id"],
+                    "sri_status": "CREATED",
+                    "errors": [],
+                }
+            elif resp.status_code == 400:
+                err = resp.json()
+                return {
+                    "sri_status": "FAILED",
+                    "errors": [
+                        d.get("message", "")
+                        for d in err.get("error", {}).get("details", [])
+                    ],
+                }
+            else:
+                return {
+                    "sri_status": "PENDING",
+                    "errors": [f"Key49 HTTP {resp.status_code}"],
+                }
+
+    except TERMINAL_OUT_OF_SERVICE:
+        return {
+            "sri_status": "PENDING",
+            "errors": ["Key49 no disponible — se reintentará"],
+        }

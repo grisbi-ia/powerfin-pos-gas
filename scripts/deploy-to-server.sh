@@ -76,6 +76,14 @@ deploy_backend() {
         --exclude='*.log' \
         pos_backend/app/ "$SERVER:$PRE_DEPLOY/backend/"
 
+    # Also sync alembic migrations (separate from app/)
+    rsync -av \
+        --exclude='__pycache__/' \
+        --exclude='*.pyc' \
+        pos_backend/alembic/ "$SERVER:$PRE_DEPLOY/backend/alembic/"
+    rsync -av pos_backend/alembic.ini "$SERVER:$PRE_DEPLOY/backend/"
+    rsync -av pos_backend/requirements.txt "$SERVER:$PRE_DEPLOY/backend/"
+
     ok "Backend subido al pre-deploy"
 }
 

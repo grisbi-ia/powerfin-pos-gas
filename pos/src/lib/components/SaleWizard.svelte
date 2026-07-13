@@ -81,6 +81,15 @@
 	let predefinedAvailable = false;
 	let predefinedLoading = false;
 
+	// ── Public Sector Credit ──
+	let isPublicSector = false;
+	let publicContractId = 0;
+	let publicContractCode = '';
+	let publicContractType = '';  // NO_INDEFINIDO or INDEFINIDO
+	let publicContractAvailable: Record<string, number> = {};
+	let publicCreditMethodId = 0;
+	let pendingCredit = false;
+
 	$: changeBillingValid = changeBillingIdType === 'CED' ? changeBillingIdNumber.length === 10 : changeBillingIdNumber.length === 13;
 
 	// Form fields
@@ -98,7 +107,13 @@
 	$: paymentMethods = $config?.payment_methods ?? [];
 	$: selectedPaymentMethod = paymentMethods.find(m => m.payment_method_id === paymentMethodId);
 	$: needsReference = selectedPaymentMethod?.requires_reference ?? false;
-	$: canConfirmPayment = paymentMethodId !== 0 && (!needsReference || referenceCode.trim() !== '');
+	$: canConfirmPayment = isPublicSector ? true : (paymentMethodId !== 0 && (!needsReference || referenceCode.trim() !== ''));
+	$: publicCreditMethodId = paymentMethods.find(m => m.code === 'CREDITO')?.payment_method_id ?? 0;
+
+	// Credit limit for selected product (used in presetValue step)
+	$: creditLimitForProduct = isPublicSector && selectedHose
+		? (publicContractAvailable[selectedHose.grade_id] ?? 0)
+		: 0;
 
 	$: finalAmount = collectOrder
 		? (collectOrder.finalAmount || collectOrder.presetAmount)
@@ -115,6 +130,13 @@
 	$: if (mode === 'collect') {
 		step = 'summary';
 		loadPrintPolicy();
+		// Restore public sector credit state from pending order
+		if (collectOrder?.isPublicSector) {
+			isPublicSector = true;
+			publicContractId = collectOrder.publicContractId ?? 0;
+			publicCreditMethodId = collectOrder.publicCreditMethodId ?? 0;
+			paymentMethodId = publicCreditMethodId;
+		}
 	}
 
 	async function loadPrintPolicy() {
@@ -150,7 +172,7 @@
 
 	async function handlePlateSearch() {
 		if (plate.length < 3) return;
-		loading = true; error = '';
+		loading = true; error = ''; isPublicSector = false;
 		try {
 			const result = await powerfin.lookupVehicle(token(), plate);
 			vehicleResult = result; plate = result.plate;
@@ -158,8 +180,49 @@
 			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'plate'; }
 			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
 			else { confirmedOwner = result.owner; step = 'billing'; }
+
+			// Check for public sector contract (non-blocking, fire-and-forget)
+			if (result.vehicle_found) checkPublicContract(plate);
 		} catch { error = 'Error al buscar placa'; }
 		finally { loading = false; }
+	}
+
+	async function checkPublicContract(licensePlate: string) {
+		// Fire-and-forget: detect if vehicle has active NO_INDEFINIDO contract
+		try {
+			const contracts = await powerfin.getCreditContracts(token());
+			for (const c of contracts) {
+				if (c.contract_type !== 'NO_INDEFINIDO' && c.contract_type !== 'INDEFINIDO') continue;
+			if (!c.is_active) continue;
+				const hasVehicle = c.vehicles?.some((v: any) =>
+					v.plate?.toUpperCase() === licensePlate.toUpperCase() && v.is_active
+				);
+				if (!hasVehicle) continue;
+
+				// Store as pending — customer must accept before using credit
+				pendingCredit = true;
+				publicContractId = c.contract_id;
+				publicContractCode = c.contract_code;
+				publicContractType = c.contract_type;
+				// Build product → available map
+				const avail: Record<string, number> = {};
+				const prodMap: Record<string, number> = {};
+				if (c.products) {
+					for (const p of c.products) {
+						prodMap[p.product_code] = Number(p.amount) || 0;
+					}
+				}
+				const available = Math.max(0, Number(c.available) || 0);
+				const totalAllocated = Object.values(prodMap).reduce((s, v) => s + v, 0);
+				for (const [code, allocated] of Object.entries(prodMap)) {
+					avail[code] = totalAllocated > 0
+						? Math.max(0, (available / totalAllocated) * allocated)
+						: available;
+				}
+				publicContractAvailable = avail;
+				return;  // Found match, stop
+			}
+		} catch { /* non-blocking — if credit check fails, treat as normal sale */ }
 	}
 
 	async function handlePredefinedClick() {
@@ -276,6 +339,21 @@
 
 	function handleProductBack() { step = 'billing'; }
 	function handleBillingBack() { step = 'plate'; }
+
+	function acceptCredit() {
+		isPublicSector = true;
+		pendingCredit = false;
+	}
+
+	function rejectCredit() {
+		isPublicSector = false;
+		pendingCredit = false;
+		publicContractId = 0;
+		publicContractCode = '';
+		publicContractType = '';
+		publicContractAvailable = {};
+	}
+
 	function handlePresetTypeBack() { step = 'product'; }
 	function handlePresetValueBack() { step = 'presetType'; }
 
@@ -324,6 +402,13 @@
 	async function handleAuthorize() {
 		const val = parseFloat(presetValue);
 		if (presetType !== 'FULL' && (!val || val <= 0)) { error = presetType === 'MONEY' ? 'Ingrese un monto válido' : 'Ingrese galones válidos'; return; }
+
+		// Credit limit validation (both INDEFINIDO and NO_INDEFINIDO)
+		if (isPublicSector && presetType === 'MONEY' && creditLimitForProduct > 0 && val > creditLimitForProduct) {
+			error = `Cupo insuficiente. Disponible: $${creditLimitForProduct.toFixed(2)}, Solicitado: $${val.toFixed(2)}`;
+			return;
+		}
+
 		loading = true; error = ''; step = 'authorizing';
 		let orderId: string | null = null;  // tracked for rollback on partial failure
 		try {
@@ -331,7 +416,7 @@
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
-			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method_id: 1, customer_id: owner?.customer_id, plate });
+			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method_id: isPublicSector ? publicCreditMethodId : 1, customer_id: owner?.customer_id, plate, ...(isPublicSector ? { dispatch_type_code: 'CREDIT', credit_contract_id: publicContractId } : {}) });
 			orderId = orderResult.order_id;
 			await bridge.authorizeDispatch({ order_id: orderId, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method_id: 1, customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 			const authorizedByUserId = $currentUser?.user_id;
@@ -343,7 +428,8 @@
 				presetAmount: presetType === 'MONEY' ? val : presetType === 'FULL' ? 0 : (val * unitPrice),
 				finalAmount: 0, finalVolume: '0.00', unitPrice, priceList: pl,
 				status: 'FUELLING', createdAt: new Date().toISOString(),
-				authorizedBy, authorizedByUserId
+				authorizedBy, authorizedByUserId,
+				...(isPublicSector ? { isPublicSector: true, publicContractId, publicCreditMethodId } : {})
 			});
 			step = 'done';
 			// Auto-redirect to dashboard after 1.5s so user sees live state transitions
@@ -678,6 +764,39 @@
 						<div class="text-sm text-purple-600 font-medium mt-1">Lista: {vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? 'STANDARD'}</div>
 						<button class="touch-btn mt-2 w-full bg-gray-100 text-gray-500 rounded-xl py-1.5 text-xs" on:click={startEditCustomer}>✏️ Editar datos</button>
 					</div>
+
+					<!-- Credit Contract Prompt -->
+					{#if pendingCredit}
+					<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
+						<div class="flex items-center gap-2 text-amber-700 font-semibold text-sm mb-2">
+							Credit disponible: {publicContractCode}
+						</div>
+						<div class="text-xs text-amber-600 mb-2">
+							Cupo:
+							{#each Object.entries(publicContractAvailable) as [code, amt]}
+								<span class="ml-2">{code}: ${amt.toFixed(2)}</span>
+							{/each}
+						</div>
+						<div class="text-xs text-amber-700 mb-3">Usar credito del contrato?</div>
+						<div class="grid grid-cols-2 gap-2">
+							<button class="touch-btn bg-primary text-white rounded-xl py-2.5 text-sm font-semibold" on:click={acceptCredit}>Si, usar credito</button>
+							<button class="touch-btn bg-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-medium" on:click={rejectCredit}>No, venta normal</button>
+						</div>
+					</div>
+					{/if}
+					{#if isPublicSector && !pendingCredit}
+					<div class="bg-green-50 border border-green-200 rounded-xl p-3 mb-3">
+						<div class="flex items-center gap-2 text-green-700 font-semibold text-sm">
+							Credito activo: {publicContractCode}
+						</div>
+						<div class="text-xs text-green-600 mt-1">
+							{#each Object.entries(publicContractAvailable) as [code, amt]}
+								<span class="ml-2">{code}: ${amt.toFixed(2)}</span>
+							{/each}
+						</div>
+					</div>
+					{/if}
+
 					{#if billingCustomer && billingPersonId && vehicleResult?.vehicle_id}
 						<label class="flex items-center gap-2 mb-3 p-2 bg-amber-50 rounded-xl cursor-pointer">
 							<input type="checkbox" bind:checked={saveBillingPreferential} class="w-4 h-4 text-primary rounded" />
@@ -825,6 +944,11 @@
 
 			{#if step === 'presetValue'}
 				<div class="card p-4 mb-4">
+					{#if isPublicSector && creditLimitForProduct > 0 && presetType === 'MONEY'}
+					<div class="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3">
+						<div class="text-sm text-blue-700">Cupo disponible: <span class="font-bold">${creditLimitForProduct.toFixed(2)}</span></div>
+					</div>
+					{/if}
 					{#if presetType === 'MONEY'}
 						<h3 class="text-sm font-semibold text-gray-700 mb-3">Monto a despachar</h3>
 						<input type="number" bind:value={presetValue} placeholder="0.00" step="0.01" min="1"
@@ -932,6 +1056,23 @@
 			{/if}
 
 			{#if step === 'payment' && !confirmed}
+				{#if isPublicSector}
+				<!-- Public Sector Credit: no cash, just confirm -->
+				<div class="card p-4 mb-4">
+					<h3 class="text-sm font-semibold text-gray-700 mb-3">🏛️ Despacho Sector Público</h3>
+					<div class="bg-amber-50 rounded-xl p-4 mb-3">
+						<div class="text-sm text-amber-700">Contrato: {publicContractCode}</div>
+						<div class="text-xs text-amber-600 mt-1">No se cobra en efectivo. Se descuenta del cupo.</div>
+					</div>
+					<div class="bg-gray-50 rounded-xl p-3 mb-3">
+						<div class="flex justify-between text-sm"><span class="text-gray-500">Total</span><span class="font-bold">${finalAmount.toFixed(2)}</span></div>
+						<div class="flex justify-between text-sm mt-1"><span class="text-gray-500">Volumen</span><span>{finalVolume} {unitAbbr}</span></div>
+					</div>
+					<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 font-bold text-lg" on:click={handleCollect} disabled={confirmingPayment || confirmed}>
+						{confirmingPayment ? '⏳ Confirmando...' : '✅ Confirmar despacho a crédito'}
+					</button>
+				</div>
+				{:else}
 				{@const received = parseFloat(receivedAmount) || 0}
 				{@const realChange = Math.max(0, received - finalAmount)}
 				<div class="card p-4 mb-4">
@@ -963,6 +1104,7 @@
 					<button class="touch-btn w-full bg-green-500 hover:bg-green-600 text-white rounded-xl py-4 text-lg font-bold disabled:opacity-50"
 						on:click={() => confirmingPayment = true} disabled={!canConfirmPayment || loading}>Confirmar — Cobrar ${finalAmount.toFixed(2)}</button>
 				</div>
+			{/if}
 			{/if}
 
 			{#if confirmingPayment}

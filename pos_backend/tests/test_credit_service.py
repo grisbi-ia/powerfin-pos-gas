@@ -30,11 +30,17 @@ class TestFindActiveContract:
     async def test_finds_contract_for_vehicle(self, db):
         contract = await find_active_contract_for_vehicle(db, 2)
         assert contract is not None
-        assert contract.contract_code == "CT-001"
+        assert contract.contract_code == "CT-PUB-001"  # NO_INDEFINIDO, vehicle_id=2
+
+    @pytest.mark.asyncio
+    async def test_finds_indefinido_contract(self, db):
+        contract = await find_active_contract_for_vehicle(db, 1)
+        assert contract is not None
+        assert contract.contract_code == "CT-001"  # INDEFINIDO, vehicle_id=1
 
     @pytest.mark.asyncio
     async def test_no_contract_for_vehicle(self, db):
-        contract = await find_active_contract_for_vehicle(db, 1)
+        contract = await find_active_contract_for_vehicle(db, 3)
         assert contract is None
 
     @pytest.mark.asyncio
@@ -78,8 +84,8 @@ class TestCupoDisponible:
         await _make_shift(db)
         db.add(Dispatch(
             order_id="OV-001", shift_id=1, dispenser_id=1,
-            dispatch_type_id=1, total=1000.00,
-            credit_contract_id=1, credit_status="PENDING_INVOICE",
+            dispatch_type_id=1, total=1000.00, status="COLLECTED",
+            credit_contract_id=1, credit_status="PENDING_PAYMENT",
         ))
         await db.flush()
         contract = (await db.execute(
@@ -93,7 +99,7 @@ class TestCupoDisponible:
         await _make_shift(db)
         db.add(Dispatch(
             order_id="OV-001", shift_id=1, dispenser_id=1,
-            dispatch_type_id=1, total=1000.00,
+            dispatch_type_id=1, total=1000.00, status="COLLECTED",
             credit_contract_id=1, credit_status="INVOICED",
         ))
         await db.flush()
@@ -113,7 +119,7 @@ class TestCupoDisponible:
         await db.flush()
         db.add(Dispatch(
             order_id="OV-001", shift_id=1, dispenser_id=1,
-            dispatch_type_id=1, total=1000.00,
+            dispatch_type_id=1, total=1000.00, status="COLLECTED",
             credit_contract_id=1, credit_status="INVOICED",
         ))
         await db.flush()
@@ -124,20 +130,34 @@ class TestCupoDisponible:
 class TestValidateCreditDispatch:
     @pytest.mark.asyncio
     async def test_valid_dispatch(self, db):
-        contract = await validate_credit_dispatch(db, 2, 1, Decimal("500.00"))
+        contract, effective = await validate_credit_dispatch(db, 1, 1, Decimal("500.00"))
         assert contract.contract_code == "CT-001"
+        assert effective == Decimal("500.00")  # within available, no cap
+
+    @pytest.mark.asyncio
+    async def test_amount_exceeds_product_available(self, db):
+        """$4,000 on product with $3,000 allocation → rejected."""
+        with pytest.raises(CreditValidationError, match="insuficiente"):
+            await validate_credit_dispatch(db, 1, 1, Decimal("4000.00"))
+
+    @pytest.mark.asyncio
+    async def test_amount_exceeds_total_available(self, db):
+        """$10,000 on $5,000 contract → rejected."""
+        with pytest.raises(CreditValidationError, match="insuficiente"):
+            await validate_credit_dispatch(db, 1, 1, Decimal("10000.00"))
 
     @pytest.mark.asyncio
     async def test_vehicle_not_in_contract(self, db):
         with pytest.raises(CreditValidationError, match="no tiene un contrato"):
-            await validate_credit_dispatch(db, 1, 1, Decimal("100.00"))
+            await validate_credit_dispatch(db, 3, 1, Decimal("100.00"))
 
     @pytest.mark.asyncio
     async def test_product_not_in_contract(self, db):
         with pytest.raises(CreditValidationError, match="no está asignado"):
-            await validate_credit_dispatch(db, 2, 2, Decimal("100.00"))
+            await validate_credit_dispatch(db, 1, 3, Decimal("100.00"))
 
     @pytest.mark.asyncio
-    async def test_amount_exceeds_available(self, db):
-        with pytest.raises(CreditValidationError, match="insuficiente"):
-            await validate_credit_dispatch(db, 2, 1, Decimal("10000.00"))
+    async def test_amount_zero_available_raises(self, db):
+        """Product NOT in contract (product_id=3, ACEITE) → error."""
+        with pytest.raises(CreditValidationError, match="no está asignado"):
+            await validate_credit_dispatch(db, 1, 3, Decimal("100.00"))

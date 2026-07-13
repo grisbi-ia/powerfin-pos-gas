@@ -24,6 +24,10 @@ export interface PendingOrder {
 	invoiceNumber?: string;
 	/** Wayne Fusion sale ID — needed for payment handshake (CLEAR_SALE). */
 	fusionSaleId?: string;
+	/** Public sector credit dispatch — no cash payment, billed in bulk later. */
+	isPublicSector?: boolean;
+	publicContractId?: number;
+	publicCreditMethodId?: number;
 }
 
 const STORAGE_KEY = 'pendingOrders';

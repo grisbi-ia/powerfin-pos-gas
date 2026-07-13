@@ -836,3 +836,5 @@ y puesta en producción.
 | Fase 15      | `v0.25.0`| Admin Frontend: Dashboard + gráficas Chart.js                         |
 | Fase 16      | `v0.26.0`| Admin Frontend: Reportes + exportación PDF/Excel                      |
 | Fase 17      | `v1.0.0` | Producción GASOLINERA — Admin + Cloudflare Tunnel                     |
+| Fase 18      | `v0.33.0` | Dashboard Diario — 3 modos (diario/mensual/anual)                     |
+| Fase 19      | `v0.34.0` | Crédito sector público + Cleanup huérfanos + Ticket firma             |

@@ -269,6 +269,8 @@ export interface CreateDispatchRequest {
 	payment_method_id: number;
 	customer_id?: string;
 	plate?: string;
+	dispatch_type_code?: string;
+	credit_contract_id?: number;
 }
 
 export interface CreateDispatchResponse {

@@ -190,6 +190,9 @@
 					time: new Date().toLocaleTimeString('es-EC'),
 					shiftId: String(order.shift_id ?? ''),
 					cashierName: order.cashier_name ?? '',
+					creditStatus: (order as any).credit_status ?? '',
+					creditContractId: (order as any).credit_contract_id ?? 0,
+					isBulkInvoice: (order as any).credit_status === 'PENDING_BULK_INVOICE',
 					isReprint: true,
 				}
 			});

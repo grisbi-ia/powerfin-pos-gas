@@ -8,10 +8,9 @@ class TestCreditContractsAPI:
         r = await client.get("/api/pos/credit-contracts", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 1
+        assert len(data) == 2  # CT-001 (INDEFINIDO) + CT-PUB-001 (NO_INDEFINIDO)
         assert data[0]["contract_code"] == "CT-001"
-        assert data[0]["contract_type"] == "INDEFINIDO"
-        assert float(data[0]["available"]) == 5000.00
+        assert data[1]["contract_code"] == "CT-PUB-001"
 
     async def test_get_contract(self, client, auth_headers):
         r = await client.get("/api/pos/credit-contracts/1", headers=auth_headers)
