@@ -61,7 +61,7 @@ def _fmt_date_short(dt) -> str:
     return dt.astimezone(ECUADOR_TZ).strftime("%d/%m/%Y")
 
 
-async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map) -> dict:
+async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map, contract_map=None) -> dict:
     """Convert a Dispatch row to ReportSalesItem dict."""
     d = row[0] if isinstance(row, tuple) else row
     detail = detail_map.get(d.dispatch_id)
@@ -81,6 +81,8 @@ async def _build_sales_row(row, dispenser_map, pay_map, person_map, vehicle_map,
         "sri_status": d.sri_status,
         "access_key": d.access_key,
         "authorized_by": user_map.get(d.authorized_by_user_id),
+        "shift_id": d.shift_id,
+        "contract_code": contract_map.get(d.credit_contract_id) if contract_map and d.credit_contract_id else "",
     }
 
 
@@ -166,7 +168,19 @@ async def _preload_maps(db, dispatches):
         for u in result.scalars():
             user_map[u.user_id] = u.name
 
-    return dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map
+    # Contract codes for credit dispatches
+    contract_map = {}
+    contract_ids = list({d.credit_contract_id for d in dispatches if d.credit_contract_id})
+    if contract_ids:
+        from app.models.credit import CreditContract
+        result = await db.execute(
+            select(CreditContract.contract_id, CreditContract.contract_code)
+            .where(CreditContract.contract_id.in_(contract_ids))
+        )
+        for cid, ccode in result:
+            contract_map[cid] = ccode
+
+    return dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map, contract_map
 
 
 # ── Sales Report ────────────────────────────────────────────────────
@@ -226,9 +240,9 @@ async def sales_report(
     )
     dispatches = result.scalars().all()
 
-    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map, contract_map = await _preload_maps(db, dispatches)
 
-    items = [await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map) for d in dispatches]
+    items = [await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map, contract_map) for d in dispatches]
 
     return PaginatedResponse(items=items, total=total, page=page, page_size=page_size, pages=pages)
 
@@ -292,7 +306,7 @@ async def dispatches_report(
     )
     dispatches = result.scalars().all()
 
-    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, _ = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, _, _ = await _preload_maps(db, dispatches)
 
     items = [
         await _build_dispatch_row(d, dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map)
@@ -540,18 +554,19 @@ async def export_sales(
     _admin: User = Depends(require_permission("reports", "read")),
 ):
     dispatches = await _query_all_sales_export(db, date_from, date_to, status, search, payment_method)
-    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, user_map, contract_map = await _preload_maps(db, dispatches)
 
-    columns = ["Order ID", "Fecha", "Surtidor", "Grado", "Cliente", u"Cédula/RUC", "Placa", "Pago", "Monto", "Galones", "Estado", "SRI"]
+    columns = ["Order ID", "Fecha", "Surtidor", "Grado", "Cliente", u"Cédula/RUC", "Placa", "Pago", "Monto", "Galones", "Turno", "Usuario", "Contrato", "Estado", "SRI"]
     rows = []
     for d in dispatches:
-        row = await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map)
+        row = await _build_sales_row(d, dispenser_map, pay_map, person_map, vehicle_map, hose_map, detail_map, user_map, contract_map)
         rows.append([
             row["order_id"], _fmt_date(d.created_at), row["dispenser_name"] or "",
             row["grade"] or "", row["customer_name"] or "", row["id_number"] or "",
             row["plate"] or "", row["payment_method"] or "",
             f"${row['amount']:,.2f}",
             f"{row['volume']:.2f}" if row["volume"] else "",
+            str(row["shift_id"]), row["authorized_by"] or "", row["contract_code"] or "",
             row["status"], row["sri_status"] or "",
         ])
 
@@ -598,7 +613,7 @@ async def export_dispatches(
         ))
     result = await db.execute(base.order_by(Dispatch.created_at.desc()))
     dispatches = result.scalars().all()
-    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, _ = await _preload_maps(db, dispatches)
+    dispenser_map, hose_map, pay_map, person_map, vehicle_map, detail_map, _, _ = await _preload_maps(db, dispatches)
 
     columns = ["Order ID", "Fecha", "Turno", "Surtidor", "Lado", "Grado", "Cliente",
                "Placa", "Pago", "Monto", "Volumen", "Precio Unit", "IVA",

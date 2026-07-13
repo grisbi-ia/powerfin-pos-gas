@@ -1169,6 +1169,9 @@ class ReportSalesItem(BaseModel):
     status: str
     sri_status: str | None = None
     access_key: str | None = None
+    authorized_by: str | None = None
+    shift_id: int | None = None
+    contract_code: str | None = None
 
 
 class ReportDispatchItem(BaseModel):
