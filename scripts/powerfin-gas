@@ -90,6 +90,10 @@ cmd_deploy_backend() {
     fi
 
     ok "Backend desplegado"
+
+    info "Ejecutando migraciones..."
+    cmd_migrate_db
+
     restart_service "pos-backend"
     cmd_clean backend
 }
