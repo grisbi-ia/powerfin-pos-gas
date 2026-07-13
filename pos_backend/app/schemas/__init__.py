@@ -1201,6 +1201,7 @@ class ReportShiftItem(BaseModel):
     status: str
     opening_cash: float = 0
     collected: float = 0
+    collected_cash: float = 0
     surplus: float = 0
     shortage: float = 0
     dispatch_count: int = 0

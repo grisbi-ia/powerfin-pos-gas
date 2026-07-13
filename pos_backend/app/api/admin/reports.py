@@ -363,6 +363,12 @@ async def shifts_report(
             .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
             .where(Dispatch.shift_id == shift.shift_id, Dispatch.status == "COLLECTED")
         )).scalar() or 0
+        collected_cash = (await db.execute(
+            select(func.coalesce(func.sum(DispatchPayment.amount), 0))
+            .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+            .where(Dispatch.shift_id == shift.shift_id, Dispatch.status == "COLLECTED",
+                   DispatchPayment.payment_method_id == 1)
+        )).scalar() or 0
 
         items.append(ReportShiftItem(
             shift_id=shift.shift_id,
@@ -372,6 +378,7 @@ async def shifts_report(
             status=shift.status,
             opening_cash=float(shift.opening_cash or 0),
             collected=round(float(collected), 2),
+            collected_cash=round(float(collected_cash), 2),
             surplus=round(float(shift.surplus or 0), 2),
             shortage=round(float(shift.shortage or 0), 2),
             dispatch_count=dispatch_count,
