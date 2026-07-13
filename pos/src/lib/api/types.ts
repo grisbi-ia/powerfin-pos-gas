@@ -257,6 +257,11 @@ export interface DispatchOrder {
 	final_volume?: string;
 	invoice_number?: string;
 	access_key?: string;
+	credit_contract_id?: number;
+	credit_status?: string;
+	contract_code?: string;
+	sri_status?: string;
+	key49_access_key?: string;
 }
 
 export interface CreateDispatchRequest {

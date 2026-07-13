@@ -302,6 +302,18 @@ async def get_shift_dispatches(
         for did, pname in pay_result:
             pay_method_map[did] = pname
 
+    # Build contract code lookup (for credit dispatches)
+    contract_ids = [d.credit_contract_id for d in dispatches if d.credit_contract_id]
+    contract_map = {}
+    if contract_ids:
+        from app.models.credit import CreditContract
+        cc_result = await db.execute(
+            select(CreditContract.contract_id, CreditContract.contract_code)
+            .where(CreditContract.contract_id.in_(contract_ids))
+        )
+        for cid, ccode in cc_result:
+            contract_map[cid] = ccode
+
     return [
         {
             "order_id": d.order_id,
@@ -334,6 +346,7 @@ async def get_shift_dispatches(
             "access_key": d.access_key,
             "credit_contract_id": d.credit_contract_id,
             "credit_status": d.credit_status,
+            "contract_code": contract_map.get(d.credit_contract_id, "") if d.credit_contract_id else "",
             "sri_status": d.sri_status,
             "key49_access_key": d.key49_access_key,
         }
