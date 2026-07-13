@@ -638,16 +638,16 @@ SUBTOTAL: $ {{subtotal}}
 ===
 FORMA DE PAGO: {{payment_method}}
 {#credit}---
+.
+.
+.
+.
+FIRMA: ____________________________
+.
+RECIBIDO POR: ______________________
+.
+CEDULA: ____________________________
 CONTRATO: {{contract_code}}
----
-RECIBI CONFORME: _________________________
-
-
-FIRMA: ___________________________________
-
-
-CEDULA: __________________________________
----
 {/credit}---
 {#subsidy_amount}VALOR TOTAL SIN SUBSIDIO: $ {{amount}}
 AHORRO POR SUBSIDIO: $ {{subsidy_amount}}
