@@ -10,8 +10,9 @@ This service runs every 60 seconds and cancels dispatches that:
   - status == 'AUTHORIZED'
   - total == 0.00
   - created more than threshold seconds ago:
-      * FULL preset → 1800s (30 min — safe for large truck fill-ups)
-      * MONEY/VOLUME preset → 900s (15 min — typical ATO timeout)
+      * Pump IDLE → 120s (2 min — empty tank, ATO timeout, no fuel)
+      * FULL preset (pump not idle) → 1800s (30 min — truck fill-ups)
+      * MONEY/VOLUME preset (pump not idle) → 900s (15 min — typical ATO)
   - pump is NOT actively dispensing (verified via FusionBridge)
 
 All cancellations are logged for audit trail.
@@ -38,6 +39,7 @@ logger = logging.getLogger("pos.cleanup")
 CLEANUP_INTERVAL_SECONDS = 60   # How often to scan for orphans
 ORPHAN_AGE_FULL = 1800          # FULL preset: 30 min (trucks, tankers)
 ORPHAN_AGE_PRESET = 900         # MONEY/VOLUME preset: 15 min (typical ATO)
+ORPHAN_AGE_IDLE = 120           # Pump IDLE + AUTHORIZED $0: 2 min (empty tank, ATO)
 FUSION_BRIDGE_TIMEOUT = 5.0     # Seconds to wait for FusionBridge status
 # ───────────────────────────────────────────────────────────
 
@@ -136,14 +138,16 @@ async def _cancel_orphan_dispatches(db: AsyncSession | None = None) -> int:
             age = int((now - dispatch.created_at).total_seconds())
             threshold = _orphan_threshold(dispatch)
 
-            if age < threshold:
-                skipped_age += 1
-                continue
-
-            # Check if pump is still actively dispensing
+            # ── Fast cancel: pump confirmed IDLE + empty tank / ATO ──
+            # Only for MONEY/VOLUME presets (not FULL — those need 30 min).
+            # If the pump is IDLE and the dispatch is still AUTHORIZED+$0.00,
+            # no fuel was dispensed (empty tank, ATO timeout). Safe to cancel.
+            pump_is_idle = False
             if dispatch.hose_id and dispatch.hose_id in hose_to_pump:
                 fusion_pump = hose_to_pump[dispatch.hose_id]
                 pump_status = pump_statuses.get(fusion_pump, "")
+                pump_is_idle = (pump_status == "IDLE")
+
                 if pump_status in ("FUELLING", "STARTING", "AUTHORIZED"):
                     logger.debug(
                         "dispatch_cleanup: skipping dispatch_id=%s — pump %s "
@@ -152,6 +156,24 @@ async def _cancel_orphan_dispatches(db: AsyncSession | None = None) -> int:
                     )
                     skipped_active += 1
                     continue
+
+            if pump_is_idle and age >= ORPHAN_AGE_IDLE:
+                # Fast path: pump is IDLE, no fuel was dispensed
+                dispatch.status = "CANCELLED"
+                dispatch.sri_status = None
+                cancelled += 1
+                logger.info(
+                    "dispatch_cleanup: fast-cancelled dispatch_id=%s order_id=%s "
+                    "hose_id=%s preset=%s/%s — pump IDLE for %ds (empty tank / ATO)",
+                    dispatch.dispatch_id, dispatch.order_id, dispatch.hose_id,
+                    dispatch.preset_type, dispatch.preset_value, age,
+                )
+                continue
+
+            # Normal path: needs to exceed preset-specific threshold
+            if age < threshold:
+                skipped_age += 1
+                continue
 
             # Safe to cancel
             dispatch.status = "CANCELLED"

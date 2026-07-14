@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.database import get_db
-from app.models import CashMovement, Dispatch, DispatchPayment, Shift, Transfer
+from app.models import CashMovement, Dispatch, DispatchPayment, PaymentMethod, Shift, Transfer
 from app.models.user import User
 from app.schemas import (
     CashMovementResponse,
@@ -229,8 +229,24 @@ async def get_cash_summary(
         )
     ) or 0.0
 
+    # Non-cash sales breakdown (cards, credit, yalobox, etc.)
+    non_cash_result = await db.execute(
+        select(PaymentMethod.name, func.coalesce(func.sum(DispatchPayment.amount), 0))
+        .join(Dispatch, DispatchPayment.dispatch_id == Dispatch.dispatch_id)
+        .join(PaymentMethod, DispatchPayment.payment_method_id == PaymentMethod.payment_method_id)
+        .where(
+            Dispatch.shift_id == shift_id,
+            Dispatch.status == "COLLECTED",
+            DispatchPayment.payment_method_id != 1,  # exclude EFECTIVO
+        )
+        .group_by(PaymentMethod.name)
+    )
+    non_cash_sales = [
+        {"payment_method": row[0], "total": round(float(row[1]), 2)}
+        for row in non_cash_result.all()
+    ]
+
     opening = float(shift.opening_cash)
-    # Cast all to float — Numeric columns return Decimal from asyncpg
     balance = opening + float(income or 0) + float(sales_cash or 0) - float(expense or 0) - float(deposits or 0) - float(transfers_out or 0) - float(safe_drops or 0)
 
     return CashSummaryResponse(
@@ -244,6 +260,7 @@ async def get_cash_summary(
         total_transfers_received=round(transfers_received, 2),
         total_transfers_sent=round(transfers_out, 2),
         total_safe_drops=round(safe_drops, 2),
+        non_cash_sales=non_cash_sales,
     )
 
 

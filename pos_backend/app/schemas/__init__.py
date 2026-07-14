@@ -440,6 +440,10 @@ class CashMovementResponse(BaseModel):
     running_balance: Decimal
 
 
+class NonCashSalesItem(BaseModel):
+    payment_method: str  # e.g. "Tarjeta", "Crédito", "Yalobox"
+    total: Decimal
+
 class CashSummaryResponse(BaseModel):
     shift_id: int
     opening_cash: Decimal
@@ -451,6 +455,7 @@ class CashSummaryResponse(BaseModel):
     total_transfers_received: Decimal = Decimal("0")
     total_transfers_sent: Decimal = Decimal("0")
     total_safe_drops: Decimal = Decimal("0")
+    non_cash_sales: list[NonCashSalesItem] = []
 
 
 # ── Transfers ────────────────────────────────────────────────────

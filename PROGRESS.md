@@ -1,10 +1,47 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-07-14** · Rama: `main` · HEAD: `905db62`
+> Última actualización: **2026-07-14** · Rama: `main` · HEAD: `v0.35.2`
 
 ---
 
-## v0.35.1 (2026-07-14) — Hotfix: dispatch cleanup + complete race condition
+## v0.35.2 (2026-07-14) — SRI cleanup + bulk invoice fix + cash summary
+
+### SRI/Key49 — limpieza masiva
+- 268 despachos regularizados: polling timeout + Key49 offline + datos inválidos
+- $6,249 en facturas ahora autorizadas por el SRI
+- 43 cédulas corregidas (dígito verificador módulo 10) + búsqueda API Sercobaco
+- 16 RUCs corregidos con datos reales
+- 4 REJECTED → reasignados a INGENIERIA DE SISTEMAS GRISBI
+- CONSUMIDOR FINAL eliminado (no aplica en gasolineras)
+- Resultado: 381 problemas → 0 accionables
+
+### Fix: PENDING_BULK_INVOICE sequential leak
+- Bug: contratos NO_INDEFINIDO consumían secuenciales al crear despacho
+- credit_status no se seteaba sin `product_id` en el body
+- Fix: resolver `contract_type` antes del sequential guard
+- 53 secuenciales recuperados (vueltos a NULL)
+
+### POS: Resumen de Turno
+- Nueva página `/cash/summary` con ventas (efectivo/tarjeta/crédito), movimientos, resultado
+- Botón "📊 Resumen de Turno" en módulo Caja
+- Backend: `CashSummaryResponse.non_cash_sales`
+
+### Cleanup: fast-cancel para tanque vacío
+- Pump IDLE + AUTHORIZED $0 + 120s → cancel rápido (tanque vacío, ATO)
+
+### Archivos modificados
+- `pos_backend/app/services/dispatch_cleanup.py` — idle threshold 120s
+- `pos_backend/app/api/dispatches.py` — bulk invoice sequential guard
+- `pos_backend/app/api/cash.py` — non-cash sales in summary
+- `pos_backend/app/schemas/__init__.py` — NonCashSalesItem + CashSummaryResponse
+- `pos/src/lib/api/types.ts` — ShiftCashSummary actualizado
+- `pos/src/routes/(pos)/cash/summary/+page.svelte` — nueva
+- `pos/src/routes/(pos)/cash/+page.svelte` — botón resumen
+- `NEXT_SESSION.md`, `PROGRESS.md`
+
+---
+
+## v0.35.1 (2026-07-14) — Hotfix: dispatch cleanup race condition
 
 ### 🔥 Incidente crítico
 - MINERA PIRINCAY (persona 1101): despacho de 168.425 galones DIESEL por $539.63 no registrado

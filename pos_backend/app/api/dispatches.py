@@ -134,30 +134,40 @@ async def create_dispatch(
                     credit_contract_id = contract.contract_id
 
         if credit_contract_id:
-            # Validate credit availability (returns contract + effective amount, auto-capped)
-            product_id = body.items[0].product_id if body.items else None
-            if product_id:
-                from app.models.credit import CreditContract
-                # Resolve vehicle_id from plate for credit validation
-                credit_vehicle_id = 0
-                if body.plate:
-                    v_res = (await db.execute(
-                        select(Vehicle).where(Vehicle.plate == body.plate.upper().replace(" ", ""))
-                    )).scalar_one_or_none()
-                    if v_res:
-                        credit_vehicle_id = v_res.vehicle_id
-
-                contract, _ = await validate_credit_dispatch(
-                    db, credit_vehicle_id, product_id,
-                    Decimal(str(body.unit_price)) if body.unit_price else Decimal("0")
-                )
-                credit_contract_id = contract.contract_id
+            # Resolve contract type to set credit_status (needed BEFORE sequential guard)
+            contract = (await db.execute(
+                select(CreditContract).where(CreditContract.contract_id == credit_contract_id)
+            )).scalar_one_or_none()
+            if contract:
                 credit_status = "PENDING_BULK_INVOICE" if contract.contract_type == "NO_INDEFINIDO" else "PENDING_PAYMENT"
 
-    # Consume sequential for SALE/CREDIT — each dispenser has its own emission point
+                # Validate credit availability (returns contract + effective amount, auto-capped)
+                product_id = body.items[0].product_id if body.items else None
+                if product_id:
+                    # Resolve vehicle_id from plate for credit validation
+                    credit_vehicle_id = 0
+                    if body.plate:
+                        v_res = (await db.execute(
+                            select(Vehicle).where(Vehicle.plate == body.plate.upper().replace(" ", ""))
+                        )).scalar_one_or_none()
+                        if v_res:
+                            credit_vehicle_id = v_res.vehicle_id
+
+                    contract, _ = await validate_credit_dispatch(
+                        db, credit_vehicle_id, product_id,
+                        Decimal(str(body.unit_price)) if body.unit_price else Decimal("0")
+                    )
+                    credit_contract_id = contract.contract_id
+
+    # Consume sequential for SALE/CREDIT — each dispenser has its own emission point.
+    # PENDING_BULK_INVOICE (sector público) does NOT consume a sequential —
+    # the invoice is emitted later as a single global "liquidación".
     sequential_number = None
     ep = None
-    if dispatch_type.affects_cash or (dispatch_type.dispatch_type_id == 2 and credit_status != "PENDING_BULK_INVOICE"):
+    if credit_status == "PENDING_BULK_INVOICE":
+        # No sequential for bulk invoices — emitted later as global "liquidación"
+        sequential_number = None
+    elif dispatch_type.affects_cash or dispatch_type.dispatch_type_id == 2:
         dispenser_result = await db.execute(
             select(Dispenser).where(Dispenser.dispenser_id == body.dispenser_id)
         )

@@ -456,10 +456,12 @@ export interface ShiftCashSummary {
 	current_balance: number;
 	total_income: number;
 	total_expense: number;
+	total_deposits: number;
 	total_sales_cash: number;
 	total_transfers_received: number;
 	total_transfers_sent: number;
 	total_safe_drops: number;
+	non_cash_sales: Array<{ payment_method: string; total: number }>;
 }
 
 export interface CreateCashMovementRequest {

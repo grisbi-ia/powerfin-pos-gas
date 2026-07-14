@@ -1,8 +1,29 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-07-14) — v0.35.1
+## Estado actual (2026-07-14) — v0.35.2
 
 ### ✅ Logros de la sesión
+
+#### SRI/Key49 — limpieza masiva de facturas electrónicas ✅
+- 268 despachos regularizados (polling timeout + Key49 offline + datos inválidos)
+- $6,249 en facturas ahora autorizadas por el SRI
+- 43 cédulas corregidas (dígito verificador) + búsqueda vía API Sercobaco
+- 16 RUCs corregidos con datos reales de clientes
+- 4 REJECTED reasignados a GRISBI y enviados
+- 1 CONSUMIDOR FINAL → eliminado (no aplica en gasolineras)
+- Resultado final: 381 problemas → 0 accionables
+
+#### Fix: PENDING_BULK_INVOICE no consume secuenciales ✅
+- Bug: despachos de contratos NO_INDEFINIDO consumían secuenciales al crearse
+- Causa: credit_status no se seteaba sin product_id → guard no funcionaba
+- Fix: resolver contract_type antes del sequential guard
+- 53 secuenciales quemados → vueltos a NULL
+
+#### POS: Resumen de Turno en módulo Caja ✅
+- Nueva página `/cash/summary` con desglose completo
+- Efectivo, tarjeta, crédito, movimientos, resultado neto
+- Botón "📊 Resumen de Turno" en pantalla de Caja
+- Backend: `CashSummaryResponse.non_cash_sales` agregado
 
 #### 🔥 Hotfix: dispatch cleanup race condition — incidente MINERA PIRINCAY ✅
 - Despacho fantasma localizado en logs FusionBridge: 168.425 gal DIESEL = $539.63
@@ -92,6 +113,7 @@
 | ATO Wayne | 180s (próximo cambio a 300s) |
 | Cleanup FULL | 1800s (30 min) |
 | Cleanup MONEY/VOLUME | 900s (15 min) |
+| Cleanup IDLE (empty tank) | 120s (2 min) |
 | Contratos | INDEFINIDO (GRISBI), NO_INDEFINIDO (GAD PAUTE) |
 
 ## Base de datos

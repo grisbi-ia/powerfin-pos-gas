@@ -62,6 +62,16 @@
 		</button>
 	</div>
 
+	<!-- Resumen de Turno -->
+	<button
+		class="touch-btn card p-4 text-center hover:shadow-md transition w-full mb-3 disabled:opacity-40 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200"
+		on:click={() => goto('/cash/summary')}
+		disabled={!$shift}
+	>
+		<div class="text-2xl mb-1">📊</div>
+		<div class="text-sm font-semibold text-blue-700">Resumen de Turno</div>
+	</button>
+
 	<!-- Cerrar Turno -->
 	<button
 		class="touch-btn card p-4 text-center hover:shadow-md transition w-full mb-4 disabled:opacity-40"
