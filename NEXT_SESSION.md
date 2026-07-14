@@ -1,8 +1,18 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-07-13) — v0.35.0
+## Estado actual (2026-07-14) — v0.35.1
 
 ### ✅ Logros de la sesión
+
+#### 🔥 Hotfix: dispatch cleanup race condition — incidente MINERA PIRINCAY ✅
+- Despacho fantasma localizado en logs FusionBridge: 168.425 gal DIESEL = $539.63
+- Despacho #6749 reconstruido en BD (CANCELLED → COMPLETED, $539.63)
+- **Fix #1**: cleanup verifica pump status vía FusionBridge antes de cancelar
+- **Fix #2**: threshold progresivo — FULL=1800s (30min), MONEY/VOLUME=900s (15min)
+- **Fix #3**: completeDispatch reactiva CANCELLED con fuel real + guard anti-colisión
+- Auditoría completa: `docs/DISPATCH_AUDIT.md` — 40 guardias mapeadas
+- Tests: 404/404 ✅ (7 cleanup tests, 2 nuevos para FULL preset)
+- Deploy a producción exitoso
 
 #### Despachos a crédito — sector público + contratos ✅
 - `PENDING_BULK_INVOICE` credit_status para contratos NO_INDEFINIDO
@@ -11,11 +21,11 @@
 - Admin: módulo contracts (listado + liquidación)
 - 48 despachos GAD PAUTE vinculados al contrato IC-GADMCP-00049-2026
 
-#### Cleanup automático de despachos huérfanos ✅
-- Servicio `dispatch_cleanup.py`: cada 60s cancela AUTHORIZED + $0.00 con >900s
-- `ORPHAN_AGE_SECONDS = 900` (15 min) — seguro para camiones grandes
+#### Cleanup automático de despachos huérfanos ✅ (v0.35.0)
+- Servicio `dispatch_cleanup.py`: cada 60s cancela AUTHORIZED + $0.00
 - Endpoints: `GET /orphans`, `POST /cleanup-orphans`
 - 5 tests dedicados
+- ⚠️ v0.35.1: thresholds progresivos + verificación pump status
 
 #### Ticket de crédito con firma ✅
 - `contractCode` en receipt data (backend → FusionBridge)
@@ -80,7 +90,8 @@
 | Estación | NEOGAS |
 | Surtidores | 4: 1 SUPER-ECO, 2 ECO, 3 DIESEL, 4 DIESEL |
 | ATO Wayne | 180s (próximo cambio a 300s) |
-| Cleanup huérfanos | 900s (15 min) |
+| Cleanup FULL | 1800s (30 min) |
+| Cleanup MONEY/VOLUME | 900s (15 min) |
 | Contratos | INDEFINIDO (GRISBI), NO_INDEFINIDO (GAD PAUTE) |
 
 ## Base de datos
@@ -94,7 +105,10 @@
 ## Lecciones aprendidas
 
 - **NUNCA cancelar AUTHORIZED $0.00 sin verificar si el surtidor está cargando.**
-- **El cleanup service espera 15 min** — suficiente para el camión más grande.
+- **El cleanup service ahora verifica el pump status vía FusionBridge** antes de cancelar.
+- **FULL presets (tanqueros) tienen 30 min de threshold** — no 15 min como antes.
+- **completeDispatch/reactivate protege contra pérdida de datos** si un cleanup cancela prematuramente.
+- **Siempre verificar logs de FusionBridge** (`journalctl -u fusion-bridge`) ante despachos sospechosos.
 - **payment_method codes cambian entre entornos** — no hardcodear.
 - **Las migraciones Alembic requieren `powerfin-gas migrate-db`** si no se usa auto.
-- **`.svelte-kit/output` y `build/` pueden quedar con permisos de root** — chown preventivo.
+- **`.svelte-kit/output` y `build/` pueden quedar con permisos de root`** — chown preventivo.

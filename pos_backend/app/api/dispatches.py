@@ -391,6 +391,32 @@ async def complete_dispatch(
     if dispatch.status != "AUTHORIZED":
         if dispatch.status == "COMPLETED" and float(dispatch.total or 0) == 0 and body.amount and float(body.amount) > 0:
             pass  # Proceed to correct the zero totals
+        elif dispatch.status == "CANCELLED" and body.amount and float(body.amount) > 0:
+            # Reactivate: cleanup service cancelled while pump was still dispensing.
+            # Guard: don't reactivate if a newer dispatch was created on the same
+            # hose after cancellation (hose was reused).
+            newer = (await db.execute(
+                text("SELECT 1 FROM dispatches WHERE hose_id = :hid AND dispatch_id > :did AND status != 'CANCELLED' LIMIT 1"),
+                {"hid": dispatch.hose_id, "did": dispatch.dispatch_id}
+            )).scalar()
+            if newer:
+                logger.warning(
+                    "complete_dispatch: NOT reactivating CANCELLED dispatch %s "
+                    "(order=%s) — hose %s has a newer active dispatch",
+                    dispatch.dispatch_id, order_id, dispatch.hose_id
+                )
+                return {"status": "ok", "detail": "hose reused after cancellation"}
+
+            logger.warning(
+                "complete_dispatch: reactivating CANCELLED dispatch %s "
+                "(order=%s) with real amount=%s volume=%s — "
+                "was cancelled while pump was still FUELLING",
+                dispatch.dispatch_id, order_id, body.amount, body.volume
+            )
+            dispatch.status = "COMPLETED"
+            dispatch.completed_at = datetime.now(ECUADOR_TZ)
+            dispatch.sri_status = None  # Clear any cancelled SRI status
+            # Fall through to update totals below
         else:
             return {"status": "ok"}
 
@@ -509,6 +535,29 @@ async def complete_dispatch_by_pump(
     if dispatch.status == "AUTHORIZED":
         dispatch.status = "COMPLETED"
         dispatch.completed_at = datetime.now(ECUADOR_TZ)
+    elif dispatch.status == "CANCELLED" and body.amount and float(body.amount) > 0:
+        # Reactivate: cleanup cancelled while pump was still dispensing.
+        # Guard: don't reactivate if hose was reused after cancellation.
+        newer = (await db.execute(
+            text("SELECT 1 FROM dispatches WHERE hose_id = :hid AND dispatch_id > :did AND status != 'CANCELLED' LIMIT 1"),
+            {"hid": hose.hose_id, "did": dispatch.dispatch_id}
+        )).scalar()
+        if newer:
+            logger.warning(
+                "complete_by_pump: NOT reactivating CANCELLED dispatch %s "
+                "(hose=%s) — hose has a newer active dispatch",
+                dispatch.dispatch_id, hose.hose_id
+            )
+            return {"status": "ok", "detail": "hose reused after cancellation"}
+
+        logger.warning(
+            "complete_by_pump: reactivating CANCELLED dispatch %s "
+            "(hose=%s) with real amount=%s volume=%s",
+            dispatch.dispatch_id, hose.hose_id, body.amount, body.volume
+        )
+        dispatch.status = "COMPLETED"
+        dispatch.completed_at = datetime.now(ECUADOR_TZ)
+        dispatch.sri_status = None
     elif dispatch.status == "COMPLETED" and float(dispatch.total or 0) > 0:
         # Already completed with real totals — nothing to do
         return {"status": "ok", "detail": "already completed with totals"}

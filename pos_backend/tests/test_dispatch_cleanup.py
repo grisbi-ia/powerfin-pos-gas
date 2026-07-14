@@ -10,7 +10,8 @@ from app.models.dispatch import Dispatch
 from app.services.dispatch_cleanup import (
     _cancel_orphan_dispatches,
     get_orphan_count,
-    ORPHAN_AGE_SECONDS,
+    ORPHAN_AGE_FULL,
+    ORPHAN_AGE_PRESET,
 )
 
 
@@ -50,16 +51,16 @@ async def test_orphan_not_cancelled_when_too_recent(db):
     await db.commit()
 
     count = await get_orphan_count(db=db)
-    assert count == 0  # Too recent, under ORPHAN_AGE_SECONDS threshold
+    assert count == 0  # Too recent, under threshold
 
     cancelled = await _cancel_orphan_dispatches(db=db)
     assert cancelled == 0  # Nothing cancelled
 
 
 @pytest.mark.asyncio
-async def test_orphan_cancelled_when_old_enough(db):
-    """AUTHORIZED + $0.00 dispatch old enough should be cancelled."""
-    old_time = datetime.now(ECUADOR_TZ) - timedelta(seconds=ORPHAN_AGE_SECONDS + 60)
+async def test_orphan_cancelled_when_old_enough_money(db):
+    """AUTHORIZED + $0.00 MONEY dispatch old enough should be cancelled."""
+    old_time = datetime.now(ECUADOR_TZ) - timedelta(seconds=ORPHAN_AGE_PRESET + 60)
 
     await db.execute(
         sa_text("INSERT INTO shifts (shift_id, user_id, opening_cash, status, accounting_date) "
@@ -102,9 +103,74 @@ async def test_orphan_cancelled_when_old_enough(db):
 
 
 @pytest.mark.asyncio
+async def test_full_preset_not_cancelled_before_30min(db):
+    """FULL preset dispatch under 30 min should NOT be cancelled
+    even if MONEY threshold (15 min) has passed."""
+    old_time = datetime.now(ECUADOR_TZ) - timedelta(seconds=ORPHAN_AGE_PRESET + 120)
+    # 17 min old — under FULL (30 min) but over MONEY (15 min)
+
+    await db.execute(
+        sa_text("INSERT INTO shifts (shift_id, user_id, opening_cash, status, accounting_date) "
+                "VALUES (103, 1, 0.00, 'OPEN', CURRENT_DATE)")
+    )
+    await db.flush()
+
+    await db.execute(
+        sa_text("""
+            INSERT INTO dispatches (order_id, shift_id, dispenser_id, hose_id,
+                grade_id, dispatch_type_id, subtotal, tax_amount, total, status,
+                preset_type, preset_value, created_at, authorized_by_user_id)
+            VALUES ('OV-TEST-FULL-001', 103, 1, 1,
+                'DIESEL', 1, 0.00, 0.00, 0.00, 'AUTHORIZED',
+                'VOLUME', 'FULL', :created_at, 1)
+        """),
+        {"created_at": old_time},
+    )
+    await db.commit()
+
+    # Should NOT be orphan yet (only 17 min, under 30 min threshold)
+    count = await get_orphan_count(db=db)
+    assert count == 0
+
+    cancelled = await _cancel_orphan_dispatches(db=db)
+    assert cancelled == 0
+
+
+@pytest.mark.asyncio
+async def test_full_preset_cancelled_after_30min(db):
+    """FULL preset dispatch older than 30 min should be cancelled."""
+    old_time = datetime.now(ECUADOR_TZ) - timedelta(seconds=ORPHAN_AGE_FULL + 60)
+
+    await db.execute(
+        sa_text("INSERT INTO shifts (shift_id, user_id, opening_cash, status, accounting_date) "
+                "VALUES (104, 1, 0.00, 'OPEN', CURRENT_DATE)")
+    )
+    await db.flush()
+
+    await db.execute(
+        sa_text("""
+            INSERT INTO dispatches (order_id, shift_id, dispenser_id, hose_id,
+                grade_id, dispatch_type_id, subtotal, tax_amount, total, status,
+                preset_type, preset_value, created_at, authorized_by_user_id)
+            VALUES ('OV-TEST-FULL-002', 104, 1, 1,
+                'DIESEL', 1, 0.00, 0.00, 0.00, 'AUTHORIZED',
+                'VOLUME', 'FULL', :created_at, 1)
+        """),
+        {"created_at": old_time},
+    )
+    await db.commit()
+
+    count = await get_orphan_count(db=db)
+    assert count == 1
+
+    cancelled = await _cancel_orphan_dispatches(db=db)
+    assert cancelled == 1
+
+
+@pytest.mark.asyncio
 async def test_completed_with_amount_not_cancelled(db):
     """COMPLETED dispatch with real amount should NEVER be auto-cancelled."""
-    old_time = datetime.now(ECUADOR_TZ) - timedelta(seconds=ORPHAN_AGE_SECONDS + 60)
+    old_time = datetime.now(ECUADOR_TZ) - timedelta(seconds=ORPHAN_AGE_PRESET + 60)
 
     await db.execute(
         sa_text("INSERT INTO shifts (shift_id, user_id, opening_cash, status, accounting_date) "
