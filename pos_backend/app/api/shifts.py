@@ -184,6 +184,21 @@ async def close_shift(
     if not shift:
         raise HTTPException(status_code=404, detail="Turno no encontrado")
 
+    # Guard: block close if there are uncollected (COMPLETED) dispatches
+    pending_result = await db.execute(
+        select(func.count()).select_from(Dispatch).where(
+            Dispatch.shift_id == shift_id,
+            Dispatch.status == "COMPLETED"
+        )
+    )
+    pending_count = pending_result.scalar() or 0
+    if pending_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"No puedes cerrar el turno: hay {pending_count} despacho(s) pendiente(s) de cobro. "
+                   "Cobra o cancela todos los despachos antes de cerrar."
+        )
+
     shift.status = "CLOSED"
     shift.closed_at = datetime.now(ECUADOR_TZ)
 

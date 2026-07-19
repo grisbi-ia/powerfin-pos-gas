@@ -1,8 +1,19 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-07-14) — v0.35.2
+## Estado actual (2026-07-19) — v0.35.3
 
-### ✅ Logros de la sesión
+### ✅ Logros de la sesión (19-jul-2026)
+
+#### Fix: close shift guard para despachos sin cobrar ✅
+- Bug: turno #130 (Alex Chiriap) cerrado con despacho #7949 sin cobrar → dispensador 2-B bloqueado
+- Causa: `close_shift` no validaba despachos COMPLETED pendientes
+- Fix: guard en `pos_backend/app/api/shifts.py` — bloquea cierre si hay ≥1 COMPLETED
+- Intervención manual: despacho #7949 movido a turno 131 + payment insertado
+- Tests: 16/16 ✅
+
+---
+
+### ✅ Logros de la sesión anterior (14-jul-2026)
 
 #### SRI/Key49 — limpieza masiva de facturas electrónicas ✅
 - 268 despachos regularizados (polling timeout + Key49 offline + datos inválidos)
@@ -78,6 +89,12 @@
 ### 🆕 Próximas tareas
 
 ```
+🔴 ☐ 0. DEPLOY — Subir fix close_shift_guard a PROD (v0.35.3)
+   · ./scripts/deploy-to-server.sh backend
+   · ssh app@<server> 'powerfin-gas deploy-backend'
+   · sudo systemctl restart powerfin-backend
+   · Verificar: intentar cerrar turno con despacho COMPLETED → debe dar 409
+
 ☐ 1. POS — Mejorar UI del flujo de crédito
    · Pantalla de búsqueda: simplificar botones (muchos causan confusión)
    · Indicador visual persistente de "modo crédito" durante todo el flujo

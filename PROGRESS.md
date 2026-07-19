@@ -1,6 +1,26 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-07-14** · Rama: `main` · HEAD: `v0.35.2`
+> Última actualización: **2026-07-19** · Rama: `main` · HEAD: `v0.35.3`
+
+---
+
+## v0.35.3 (2026-07-19) — Fix: close shift guard para despachos sin cobrar
+
+### Bug: turno cerrado con despachos COMPLETED sin cobrar
+- Despachador Alex Chiriap: turno #130 cerrado con despacho #7949 (3.062 gal, $10.00) sin cobrar
+- Dispensador 2-B bloqueado: la validación de autorización rechaza nuevos despachos si hay COMPLETED
+- Causa raíz: `close_shift` no validaba despachos pendientes antes de cerrar el turno
+- Fix: guard que bloquea el cierre si hay ≥1 despacho en estado COMPLETED
+- Mensaje: "No puedes cerrar el turno: hay N despacho(s) pendiente(s) de cobro..."
+- 16/16 tests pasando, sin regresiones
+
+### Intervención manual en PROD
+- Despacho #7949: movido de shift 130 → 131, insertado dispatch_payment ($10.00 EFECTIVO)
+- Pendiente de deploy del fix para prevenir recurrencia
+
+### Archivos modificados
+- `pos_backend/app/api/shifts.py` — guard en close_shift (+15 líneas)
+- `PROGRESS.md`, `NEXT_SESSION.md`, `docs/NEXT_SESION.md`
 
 ---
 

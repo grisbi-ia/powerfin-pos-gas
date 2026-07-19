@@ -1,7 +1,27 @@
 # NEXT_SESION.md — Powerfin POS
 
 > Resumen y tareas pendientes para la próxima sesión.
-> Fecha: 2026-06-19 · Tag actual: v0.23.1
+> Fecha: 2026-07-19 · Tag actual: v0.35.3
+
+---
+
+## ✅ Completado esta sesión (19-jul-2026)
+
+### 1. Fix: close shift guard para despachos sin cobrar (v0.35.3)
+
+- **Bug:** turno #130 (Alex Chiriap, 18-jul-2026) cerrado con despacho #7949 sin cobrar ($10.00, 3.062 gal ECO)
+- **Impacto:** dispensador 2-B bloqueado — validación 409 rechaza autorizar si hay COMPLETED en la manguera
+- **Causa raíz:** `close_shift` no validaba despachos COMPLETED pendientes de cobro
+- **Fix:** guard en `pos_backend/app/api/shifts.py` (+15 líneas) que cuenta despachos COMPLETED y bloquea con 409
+- **Intervención manual PROD:** despacho #7949 → turno 131, payment insertado ($10.00 EFECTIVO)
+- Tests: 16/16 pasando
+
+### 🔴 Tarea urgente: Deploy a PROD
+```bash
+./scripts/deploy-to-server.sh backend
+ssh app@<server> 'powerfin-gas deploy-backend'
+sudo systemctl restart powerfin-backend
+```
 
 ---
 
