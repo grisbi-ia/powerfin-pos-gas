@@ -1,6 +1,32 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-07-19** · Rama: `main` · HEAD: `v0.35.3`
+> Última actualización: **2026-07-20** · Rama: `main` · HEAD: `v0.35.4`
+
+---
+
+## v0.35.4 (2026-07-20) — Fix: Admin Dashboard gráficas mensuales sin datos
+
+### Bug: gráficas "Mensual" no mostraban datos de otros meses
+- Dashboard Admin, pestaña "Mensual": gráficas "Ventas por Día" y "Galones por Día"
+  solo mostraban el mes seleccionado; los datos del mes anterior/siguiente no aparecían
+- Causa: `ComparisonChart.svelte` alineaba datasets por etiqueta con nombre de mes
+  incluido (`"17 Jun"` vs `"17 Jul"` → no match)
+- Fix: comparar solo por número de día en modo `monthly`; también derivar `allLabels`
+  desde cualquier dataset disponible (no solo `current`) por si el mes seleccionado está vacío
+
+### DB_ACCESS.md actualizado
+- IP principal: `100.97.47.123` (Tailscale — siempre disponible)
+- IP respaldo: `192.168.1.25` (LAN local)
+- Comandos de ejemplo usan la IP Tailscale por defecto
+
+### Limpieza
+- `docs/NEXT_SESION.md` borrado — duplicado desactualizado (v0.23.1) con typo en el nombre
+
+### Archivos modificados
+- `admin/src/lib/components/dashboard/ComparisonChart.svelte` — fix alineación mensual
+- `docs/DB_ACCESS.md` — IPs duales (Tailscale + LAN)
+- `docs/NEXT_SESION.md` — eliminado
+- `PROGRESS.md`, `NEXT_SESSION.md` — actualizados
 
 ---
 

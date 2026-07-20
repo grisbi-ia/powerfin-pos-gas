@@ -1,6 +1,27 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-07-19) — v0.35.3
+## Estado actual (2026-07-20) — v0.35.4
+
+### ✅ Logros de la sesión (20-jul-2026)
+
+#### Fix: Admin Dashboard — gráficas mensuales sin datos de otros meses ✅
+- Bug: pestaña "Mensual", gráficas "Ventas por Día" y "Galones por Día"
+  solo mostraban el mes seleccionado; previous/next no aparecían
+- Causa: `ComparisonChart.svelte` comparaba etiquetas con nombre de mes
+  (`"17 Jun"` vs `"17 Jul"` → null)
+- Fix: en modo `monthly`, alineación por número de día; `allLabels` desde
+  cualquier dataset (no solo `current`)
+- Archivo: `admin/src/lib/components/dashboard/ComparisonChart.svelte`
+- Pendiente: deploy a PROD (`./scripts/deploy-to-server.sh admin`)
+
+#### DB_ACCESS.md — IPs duales ✅
+- IP principal: `100.97.47.123` (Tailscale, siempre disponible)
+- IP respaldo: `192.168.1.25` (LAN, solo oficina)
+
+#### Limpieza: docs/NEXT_SESION.md ✅
+- Eliminado — duplicado con typo, desactualizado (v0.23.1)
+
+---
 
 ### ✅ Logros de la sesión (19-jul-2026)
 
@@ -95,7 +116,12 @@
    · sudo systemctl restart powerfin-backend
    · Verificar: intentar cerrar turno con despacho COMPLETED → debe dar 409
 
-☐ 1. POS — Mejorar UI del flujo de crédito
+🔴 ☐ 1. DEPLOY — Subir fix admin dashboard monthly charts (v0.35.4)
+   · ./scripts/deploy-to-server.sh admin
+   · ssh app@<server> 'powerfin-gas deploy-admin'
+   · Verificar: Dashboard → Mensual → gráficas deben mostrar 3 líneas
+
+☐ 2. POS — Mejorar UI del flujo de crédito
    · Pantalla de búsqueda: simplificar botones (muchos causan confusión)
    · Indicador visual persistente de "modo crédito" durante todo el flujo
    · El despachador debe saber en cada paso si está en venta normal o crédito
@@ -106,17 +132,17 @@
    · Botones de acción: Cancelar huérfano, Restaurar, Forzar completado
    · Solo ADMIN/SUPERVISOR — evitar intervención SQL manual
 
-☐ 3. Admin — modificar precios de Lista de Precios
+☐ 4. Admin — modificar precios de Lista de Precios
    · Pantalla price-lists/[id]: editar unit_price inline en la tabla de items
 
-☐ 4. credit_contracts — agregar payment_method_id
+☐ 5. credit_contracts — agregar payment_method_id
    · Cada contrato sabe con qué método se cobra (sin buscar por código)
 
-☐ 5. Precios programados — cambio automático a las 00:00 horas
+☐ 6. Precios programados — cambio automático a las 00:00 horas
 
-☐ 6. Pago mixto (efectivo + tarjeta)
-☐ 7. identity_service.py — mover URL y token a system_config
-☐ 8. Nginx rate limiting login
+☐ 7. Pago mixto (efectivo + tarjeta)
+☐ 8. identity_service.py — mover URL y token a system_config
+☐ 9. Nginx rate limiting login
 ```
 
 ---
@@ -137,9 +163,11 @@
 
 | Dato | Valor |
 |------|-------|
-| Host | 192.168.1.25:5432 |
+| Host (Tailscale) | 100.97.47.123:5432 |
+| Host (LAN) | 192.168.1.25:5432 |
 | Database | powerfin_gas |
 | User (lectura) | agent_llm / AgentLLM123 |
+| Ver | docs/DB_ACCESS.md |
 
 ## Lecciones aprendidas
 

@@ -60,9 +60,10 @@
     } else if (period === 'annual') {
       allLabels = Array.from({length: 12}, (_, m) => monthNames[m + 1]);
     } else {
-      // monthly — derive days from current dataset's date labels
-      if (current.length > 0) {
-        const firstRaw = current[0].period_label;
+      // monthly — derive days from any non-empty dataset, preferring current
+      const source = current.length > 0 ? current : (previous.length > 0 ? previous : next);
+      if (source.length > 0) {
+        const firstRaw = source[0].period_label;
         const parts = firstRaw.split('-');
         if (parts.length === 3) {
           const y = parseInt(parts[0]);
@@ -94,6 +95,13 @@
     const curMap = buildLookup(current);
     const nextMap = buildLookup(next);
 
+    // Extract day number from a monthly period_label like "2026-06-15" → 15
+    function extractDay(raw: string): number | null {
+      const parts = raw.split('-');
+      if (parts.length === 3) return parseInt(parts[2]);
+      return null;
+    }
+
     // For monthly comparison, we need to match date labels to day+month labels
     function formatLookupLabel(raw: string): string {
       if (period === 'daily') return raw.split('T')[1]?.substring(0, 5) || raw;
@@ -101,7 +109,7 @@
         const m = parseInt(raw);
         return monthNames[m] || raw;
       }
-      // monthly: "2026-06-15" → "15 Jun"
+      // monthly: "2026-06-15" → "15 Jun" (month name from the raw label itself)
       const parts = raw.split('-');
       if (parts.length === 3) return `${parseInt(parts[2])} ${monthNames[parseInt(parts[1])]}`;
       return raw;
@@ -109,12 +117,26 @@
 
     // ── Align data to allLabels ──────────────────────────────
     const lookupValue = (label: string, map: Map<string, number>) => {
-      // For monthly, try to match by formatted label
+      if (period === 'monthly') {
+        // Compare by day number only — months differ across previous/current/next
+        const labelDay = extractDayFromLabel(label);
+        if (labelDay === null) return null;
+        for (const [rawKey, val] of map) {
+          if (extractDay(rawKey) === labelDay) return val;
+        }
+        return null;
+      }
       for (const [rawKey, val] of map) {
         if (formatLookupLabel(rawKey) === label) return val;
       }
       return null;
     };
+
+    // "15 Jul" → 15, "7 Jun" → 7
+    function extractDayFromLabel(label: string): number | null {
+      const day = parseInt(label.split(' ')[0]);
+      return isNaN(day) ? null : day;
+    }
 
     const prevData = allLabels.map(l => lookupValue(l, prevMap));
     const curData = allLabels.map(l => lookupValue(l, curMap));
