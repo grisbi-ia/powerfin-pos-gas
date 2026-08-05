@@ -62,6 +62,7 @@
 	let confirmingPayment = false;
 	let referenceCode = '';
 	let confirmed = false;
+	let collecting = false;
 	let printing = false;
 	let hasPrinted = false;
 	let printSent = false;  // set after successful print, triggers auto-redirect
@@ -460,7 +461,7 @@
 	async function handleCollect() {
 		if (!canConfirmPayment) { error = 'Seleccione una forma de pago'; return; }
 		if (!collectOrder) { error = 'Orden no encontrada — regrese al inicio'; return; }
-		confirmed = true;
+		collecting = true;
 		error = '';
 		try {
 			const shiftId = $shift?.shift_id ?? 0;
@@ -469,6 +470,8 @@
 			const collectResult = await powerfin.collectDispatch(token(), collectOrder.orderId, { collected_by_shift_id: shiftId, payment_method_id: paymentMethodId, collected_amount: finalAmount, change_amount: realChange, reference_code: referenceCode || undefined });
 		// Store receipt data from backend (DB-persisted, same as reprint)
 		receiptData = (collectResult as any)?.receipt_data ?? null;
+			confirmed = true;
+			collecting = false;
 			// Note: do NOT removeOrder here — it would nullify collectOrder reactively
 			// and destroy the collect UI before the user sees the print/confirmation.
 			// The order is removed in handleNewSale() when the user clicks "Nueva Venta".
@@ -486,7 +489,7 @@
 					.then(() => bridge.paymentUnlock(saleId, lid))
 					.catch(() => {});  // silent — not blocking
 			}
-		} catch (err: any) { error = err?.message || 'Error al registrar cobro'; confirmed = false; }
+		} catch (err: any) { error = err?.message || 'Error al registrar cobro'; confirmed = false; collecting = false; }
 	}
 
 	async function doPrint() {
@@ -1073,8 +1076,8 @@
 						<div class="flex justify-between text-sm"><span class="text-gray-500">Total</span><span class="font-bold">${finalAmount.toFixed(2)}</span></div>
 						<div class="flex justify-between text-sm mt-1"><span class="text-gray-500">Volumen</span><span>{finalVolume} {unitAbbr}</span></div>
 					</div>
-					<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 font-bold text-lg" on:click={handleCollect} disabled={confirmingPayment || confirmed}>
-						{confirmingPayment ? '⏳ Confirmando...' : '✅ Confirmar despacho a crédito'}
+					<button class="touch-btn w-full bg-primary text-white rounded-xl py-4 font-bold text-lg" on:click={handleCollect} disabled={collecting || confirmed}>
+						{collecting ? '⏳ Procesando...' : '✅ Confirmar despacho a crédito'}
 					</button>
 				</div>
 				{:else}
@@ -1107,7 +1110,7 @@
 					</div>
 					{#if error}<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-3">{error}</div>{/if}
 					<button class="touch-btn w-full bg-green-500 hover:bg-green-600 text-white rounded-xl py-4 text-lg font-bold disabled:opacity-50"
-						on:click={() => confirmingPayment = true} disabled={!canConfirmPayment || loading}>Confirmar — Cobrar ${finalAmount.toFixed(2)}</button>
+						on:click={() => confirmingPayment = true} disabled={!canConfirmPayment || loading || collecting}>Confirmar — Cobrar ${finalAmount.toFixed(2)}</button>
 				</div>
 			{/if}
 			{/if}
@@ -1127,9 +1130,9 @@
 							{/if}
 						</div>
 						<div class="grid grid-cols-2 gap-2">
-							<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={() => confirmingPayment = false}>Cancelar</button>
-							<button class="touch-btn bg-green-500 text-white rounded-xl py-3 font-semibold"
-								on:click={() => { confirmingPayment = false; handleCollect(); }}>Sí, Cobrar</button>
+							<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={() => confirmingPayment = false} disabled={collecting}>Cancelar</button>
+							<button class="touch-btn bg-green-500 text-white rounded-xl py-3 font-semibold disabled:opacity-50"
+								on:click={() => { confirmingPayment = false; handleCollect(); }} disabled={collecting}>{collecting ? '⏳ Procesando...' : 'Sí, Cobrar'}</button>
 						</div>
 					</div>
 				</div>

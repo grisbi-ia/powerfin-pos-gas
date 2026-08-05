@@ -154,6 +154,7 @@ def generate_shift_receipt_pdf(
     non_cash_sales: list[dict],
     total_sales: float,
     dispatch_count: int,
+    meter_readings: list[dict] | None = None,
     company_name: str = "NEOGAS",
     company_ruc: str = "",
     company_address: str = "",
@@ -305,6 +306,52 @@ def generate_shift_receipt_pdf(
             row_pair(label, f"$ {total:,.2f}")
         divider()
 
+    # ── Meter Readings ──
+    if meter_readings:
+        line("<b>LECTURAS DE MEDIDORES</b>", section_header)
+        # Compact table header
+        tbl = Table(
+            [[
+                Paragraph("<b>Medidor</b>", left_style),
+                Paragraph("<b>Apertura</b>", amount_right),
+                Paragraph("<b>Cierre</b>", amount_right),
+                Paragraph("<b>Dif.</b>", amount_right),
+            ]],
+            colWidths=[30 * mm, 15 * mm, 15 * mm, 12 * mm],
+        )
+        tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 1),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+            ('LINEBELOW', (0, 0), (-1, 0), 0.3, colors.grey),
+        ]))
+        elements.append(tbl)
+        for mr in meter_readings:
+            name = mr.get('meter_name', '')[:20]
+            opening = mr.get('opening_reading') or mr.get('opening')
+            closing = mr.get('closing_reading') or mr.get('closing')
+            diff = mr.get('difference')
+            tbl = Table(
+                [[
+                    Paragraph(name, left_style),
+                    Paragraph(f"{float(opening):,.2f}" if opening is not None else "—", amount_right),
+                    Paragraph(f"{float(closing):,.2f}" if closing is not None else "—", amount_right),
+                    Paragraph(f"{float(diff):,.2f}" if diff is not None else "—", amount_right),
+                ]],
+                colWidths=[30 * mm, 15 * mm, 15 * mm, 12 * mm],
+            )
+            tbl.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 1),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+                ('TOPPADDING', (0, 0), (-1, -1), 1),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+            ]))
+            elements.append(tbl)
+        divider()
+
     # ── Totals ──
     line(f"Total Ventas: $ {total_sales:,.2f}")
     line(f"Despachos: {dispatch_count}")
@@ -407,4 +454,123 @@ def generate_shift_transactions_excel(
 
     buf = io.BytesIO()
     wb.save(buf)
+    return buf.getvalue()
+
+
+# ── Meter Readings Export ───────────────────────────────────────────
+
+
+def generate_meter_readings_excel(
+    items: list[dict],
+    company_name: str = "NEOGAS",
+    date_from: str = "",
+    date_to: str = "",
+) -> bytes:
+    """Generate Excel report for meter readings."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Lecturas Medidores"
+
+    # Header
+    header_font = Font(bold=True, size=11)
+    ws.append([f"LECTURAS DE MEDIDORES — {company_name}"])
+    ws.merge_cells("A1:H1")
+    ws["A1"].font = Font(bold=True, size=14)
+    if date_from or date_to:
+        ws.append([f"Período: {date_from or '...'} — {date_to or '...'}"])
+        ws.merge_cells("A2:H2")
+    ws.append([])
+
+    cols = ["Turno", "Apertura", "Cierre", "Usuario", "Medidor", "Tipo", "Lectura Inicial", "Lectura Final", "Diferencia"]
+    ws.append(cols)
+    for cell in ws[ws.max_row]:
+        cell.font = header_font
+        cell.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+
+    for item in items:
+        ws.append([
+            item.get("shift_id"),
+            item.get("shift_opened_at", ""),
+            item.get("shift_closed_at", ""),
+            item.get("user_name", ""),
+            item.get("meter_name", ""),
+            item.get("meter_type", ""),
+            f"{item['opening_reading']:,.2f}" if item.get("opening_reading") is not None else "—",
+            f"{item['closing_reading']:,.2f}" if item.get("closing_reading") is not None else "—",
+            f"{item['difference']:,.2f}" if item.get("difference") is not None else "—",
+        ])
+
+    # Auto-fit columns
+    for col in ws.columns:
+        max_len = 0
+        for cell in col:
+            if cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 3, 25)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def generate_meter_readings_pdf(
+    items: list[dict],
+    company_name: str = "NEOGAS",
+    date_from: str = "",
+    date_to: str = "",
+) -> bytes:
+    """Generate PDF report for meter readings."""
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from datetime import datetime
+
+    buf = io.BytesIO()
+    page_w, page_h = 297 * mm, 210 * mm  # A4 landscape
+    doc = SimpleDocTemplate(buf, pagesize=(page_w, page_h),
+                            leftMargin=10 * mm, rightMargin=10 * mm,
+                            topMargin=10 * mm, bottomMargin=10 * mm)
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=14)
+    subtitle_style = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=9, textColor=colors.grey)
+    header_style = ParagraphStyle('Header', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold')
+    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7)
+
+    elements = []
+    elements.append(Paragraph(f"LECTURAS DE MEDIDORES — {company_name}", title_style))
+    if date_from or date_to:
+        elements.append(Paragraph(f"Período: {date_from or '...'} — {date_to or '...'}", subtitle_style))
+    elements.append(Spacer(1, 5 * mm))
+
+    # Table
+    header = [Paragraph(c, header_style) for c in
+              ["Turno", "Apertura", "Cierre", "Usuario", "Medidor", "Tipo", "Inicial", "Final", "Diferencia"]]
+    data = [header]
+    for item in items:
+        data.append([
+            Paragraph(str(item.get("shift_id", "")), cell_style),
+            Paragraph(item.get("shift_opened_at", "")[:10] if item.get("shift_opened_at") else "", cell_style),
+            Paragraph(item.get("shift_closed_at", "")[:10] if item.get("shift_closed_at") else "", cell_style),
+            Paragraph(item.get("user_name", ""), cell_style),
+            Paragraph(item.get("meter_name", ""), cell_style),
+            Paragraph(item.get("meter_type", ""), cell_style),
+            Paragraph(f"{item['opening_reading']:,.2f}" if item.get("opening_reading") is not None else "—", cell_style),
+            Paragraph(f"{item['closing_reading']:,.2f}" if item.get("closing_reading") is not None else "—", cell_style),
+            Paragraph(f"{item['difference']:,.2f}" if item.get("difference") is not None else "—", cell_style),
+        ])
+
+    col_widths = [35*mm, 40*mm, 40*mm, 50*mm, 55*mm, 28*mm, 32*mm, 32*mm, 32*mm]
+    tbl = Table(data, colWidths=col_widths)
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#D9E1F2")),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    elements.append(tbl)
+
+    doc.build(elements)
     return buf.getvalue()

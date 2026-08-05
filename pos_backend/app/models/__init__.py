@@ -12,6 +12,7 @@ from app.models.dispatch import (
     Transfer,
 )
 from app.models.dispenser import Dispenser, Hose
+from app.models.mechanical_meter import MechanicalMeter, MeterReading
 from app.models.payment import PaymentMethod
 from app.models.person import Person, Vehicle
 from app.models.pricing import PriceList, PriceListItem
@@ -35,6 +36,8 @@ __all__ = [
     "EmissionPoint",
     "Grade",
     "Hose",
+    "MechanicalMeter",
+    "MeterReading",
     "PaymentMethod",
     "Person",
     "PriceList",

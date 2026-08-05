@@ -2,7 +2,7 @@ import * as mock from './powerfin.mock';
 import { USE_MOCKS_POWERFIN } from './env';
 import type {
 	User, LoginRequest, LoginResponse, AppConfig, Customer,
-	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
+	PriceInfo, Shift, OpenShiftRequest, CloseShiftRequest, CloseShiftResponse,
 	CreateDispatchRequest, CreateDispatchResponse, SaleCompletedData
 } from './types';
 
@@ -84,7 +84,7 @@ export async function getCurrentShift(token: string): Promise<Shift | null> {
 }
 
 export async function closeShift(
-	token: string, shiftId: number, data: { notes: string }
+	token: string, shiftId: number, data: CloseShiftRequest
 ): Promise<CloseShiftResponse> {
 	if (USE_MOCKS_POWERFIN) return mock.closeShift(token, shiftId, data);
 	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/close`), {
@@ -404,5 +404,30 @@ export async function getCreditContracts(token: string): Promise<any[]> {
 		headers: { Authorization: `Bearer ${token}` }
 	});
 	if (!res.ok) return [];
+	return res.json();
+}
+
+// ── Meter Readings ──────────────────────────────────────────
+
+export async function getShiftMeterReadings(
+	token: string, shiftId: number
+): Promise<{ shift_id: number; meters: any[] }> {
+	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/meter-readings`), {
+		headers: { Authorization: `Bearer ${token}` }
+	});
+	if (!res.ok) throw new Error('Error cargando lecturas');
+	return res.json();
+}
+
+export async function updateShiftMeterReadings(
+	token: string, shiftId: number,
+	data: { reading_type: string; meter_readings: { meter_id: number; reading_value: string }[] }
+): Promise<{ shift_id: number; meters: any[] }> {
+	const res = await fetch(powerfinUrl(`/api/pos/shifts/${shiftId}/meter-readings`), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) throw new Error('Error guardando lecturas');
 	return res.json();
 }

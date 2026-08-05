@@ -21,6 +21,7 @@ class Dispenser(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     hoses: Mapped[list["Hose"]] = relationship(back_populates="dispenser")
+    mechanical_meters: Mapped[list["MechanicalMeter"]] = relationship(back_populates="dispenser")
 
 
 class Hose(Base):

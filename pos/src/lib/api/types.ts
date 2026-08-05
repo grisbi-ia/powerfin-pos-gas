@@ -62,6 +62,7 @@ export interface DispenserConfig {
 		A: HoseConfig[];
 		B: HoseConfig[];
 	};
+	mechanical_meters: MechanicalMeterConfig[];
 }
 
 export interface HoseConfig {
@@ -73,6 +74,20 @@ export interface HoseConfig {
 	unit_price: number;
 	base_price?: number;
 	subsidy_per_unit?: number;
+}
+
+export interface MechanicalMeterConfig {
+	meter_id: number;
+	dispenser_id: number;
+	name: string;
+	meter_type: 'PRODUCT' | 'HOSE';
+	grade_id: number | null;
+	grade_code: string | null;
+	grade_name: string | null;
+	hose_id: number | null;
+	hose_side: string | null;
+	sort_order: number;
+	is_active: boolean;
 }
 
 export interface GradeConfig {
@@ -196,10 +211,22 @@ export interface OpenShiftRequest {
 	opening_cash: number;
 	notes: string;
 	user_name?: string;
+	meter_readings?: MeterReadingItem[];
+}
+
+export interface MeterReadingItem {
+	meter_id: number;
+	reading_value: string;  // Decimal as string for precision
+}
+
+export interface SaveMeterReadingsRequest {
+	reading_type: 'OPENING' | 'CLOSING';
+	meter_readings: MeterReadingItem[];
 }
 
 export interface CloseShiftRequest {
 	notes: string;
+	meter_readings?: MeterReadingItem[];
 }
 
 export interface CloseShiftResponse {
@@ -226,6 +253,26 @@ export interface CloseShiftResponse {
 	sales_cash: number;
 	sales_cash_count: number;
 	non_cash_sales: { method_code: string; method_name: string; total: number; count: number }[];
+	meter_readings: ShiftMeterPair[];
+}
+
+export interface ShiftMeterPair {
+	meter_id: number;
+	meter_name: string;
+	dispenser_name: string | null;
+	meter_type: string;
+	grade_name: string | null;
+	hose_side: string | null;
+	opening_reading: number | null;
+	closing_reading: number | null;
+	difference: number | null;
+	reference_price: number | null;
+	reference_value: number | null;
+}
+
+export interface ShiftMeterReadingsResponse {
+	shift_id: number;
+	meters: ShiftMeterPair[];
 }
 
 export interface DispatchOrder {

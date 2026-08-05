@@ -130,7 +130,11 @@ _log = logging.getLogger("pos.validation")
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = [f"{'.'.join(str(l) for l in e['loc'])}: {e['msg']} ({e.get('type','')})" for e in exc.errors()]
     _log.warning(f"422 on {request.method} {request.url.path} — errors={errors}")
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    # Sanitize errors: remove ctx (may contain non-serializable objects like ValueError)
+    sanitized = []
+    for e in exc.errors():
+        sanitized.append({k: str(v) if k == 'ctx' else v for k, v in e.items()})
+    return JSONResponse(status_code=422, content={"detail": sanitized, "message": "; ".join(errors)})
 
 app.include_router(api_router)
 

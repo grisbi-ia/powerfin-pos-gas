@@ -1,6 +1,38 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-07-20) — v0.35.4
+## Estado actual (2026-08-05) — v0.35.5
+
+### ✅ Logros de la sesión (05-ago-2026)
+
+#### Fix: SaleWizard — rebote en pantalla de cobro ✅
+- Bug: al cobrar con tarjeta/transferencia (requiere comprobante), el botón "Grabar"
+  causaba un rebote visual — `confirmed = true` antes del API, luego `false` si fallaba.
+- Fix: nuevo estado `collecting` con spinner "⏳ Procesando...", `confirmed` solo tras éxito.
+- Botones deshabilitados durante `collecting` para prevenir doble-click.
+- Archivo: `pos/src/lib/components/SaleWizard.svelte`
+- Deploy: `./scripts/deploy-to-server.sh frontend` + `powerfin-gas deploy-frontend`
+
+#### SRI/Key49 — reconciliación manual ✅
+- 34 despachos NOTIFIED verificados uno por uno contra API Key49: todos presentes
+- 4 PENDING (polling timeout) actualizados a NOTIFIED con fechas reales
+- Resultado: 42 cobrados, 100% enviados a Key49, 0 perdidos
+
+#### Intervenciones manuales en PROD ✅
+- Despacho #12450: $62.04 DIESEL recreado (MINERA PIRINCAY) — perdido por corte de energía + cleanup
+- Pagos corregidos: #12440 ($26.00) y #12427 ($100.00) de EFECTIVO → TARJETA CREDITO/DEBITO
+- 4 PENDING → NOTIFIED sincronizados con Key49
+
+#### Nuevo: Medidores mecánicos (mechanical meters) ✅
+- Modelo, API admin CRUD, lecturas vinculadas a turnos
+- Páginas POS: captura de lecturas al abrir/cerrar turno
+- 2 migraciones Alembic, tests dedicados
+
+#### CODE_REVIEW_FINDINGS.md generado ✅
+- Revisión por 4 módulos (pos_backend, fusion-bridge, pos/, admin/)
+- 19 hallazgos: 7🔴 alta, 8🟡 media, 4🟢 baja
+- Ver documento para detalle completo
+
+---
 
 ### ✅ Logros de la sesión (20-jul-2026)
 
@@ -110,16 +142,22 @@
 ### 🆕 Próximas tareas
 
 ```
-🔴 ☐ 0. DEPLOY — Subir fix close_shift_guard a PROD (v0.35.3)
-   · ./scripts/deploy-to-server.sh backend
-   · ssh app@<server> 'powerfin-gas deploy-backend'
-   · sudo systemctl restart powerfin-backend
-   · Verificar: intentar cerrar turno con despacho COMPLETED → debe dar 409
+🔴 ☐ 0. CODE_REVIEW — Revisar y resolver CODE_REVIEW_FINDINGS.md
+   · 19 hallazgos: 7 alta prioridad, 8 media, 4 baja
+   · Revisar uno por uno, marcar [x] al resolver o documentar decisión
+   · Prioridad #1: posible doble conexión TCP en FusionBridge
+   · Prioridad #2: secuencial fiscal se pierde en silencio
+   · Prioridad #3: facturación SRI en background sin logging
+   · Prioridad #4: token/credenciales hardcodeadas en identity_service.py
+   · Prioridad #5: lógica de reactivación duplicada en dispatches.py
+   · Prioridad #6: SaleWizard.svelte con lógica de negocio (refactorizar)
+   · Ver documento completo: CODE_REVIEW_FINDINGS.md
 
-🔴 ☐ 1. DEPLOY — Subir fix admin dashboard monthly charts (v0.35.4)
-   · ./scripts/deploy-to-server.sh admin
-   · ssh app@<server> 'powerfin-gas deploy-admin'
-   · Verificar: Dashboard → Mensual → gráficas deben mostrar 3 líneas
+🔴 ☐ 1. DEPLOY — Subir v0.35.5 a PROD
+   · ./scripts/deploy-to-server.sh frontend  (fix rebote cobro)
+   · ./scripts/deploy-to-server.sh all        (medidores mecánicos + resto)
+   · ssh app@192.168.1.25 'powerfin-gas deploy-all'
+   · powerfin-gas status
 
 ☐ 2. POS — Mejorar UI del flujo de crédito
    · Pantalla de búsqueda: simplificar botones (muchos causan confusión)
@@ -171,6 +209,9 @@
 
 ## Lecciones aprendidas
 
+- **NUNCA poner `confirmed = true` antes de que el API responda.** Usar un estado
+  intermedio (`collecting`, `loading`) para feedback visual. El rebote `true→false`
+  confunde al usuario y oculta el mensaje de error.
 - **NUNCA cancelar AUTHORIZED $0.00 sin verificar si el surtidor está cargando.**
 - **El cleanup service ahora verifica el pump status vía FusionBridge** antes de cancelar.
 - **FULL presets (tanqueros) tienen 30 min de threshold** — no 15 min como antes.

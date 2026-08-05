@@ -1,6 +1,6 @@
 import type {
 	User, LoginRequest, LoginResponse, AppConfig, Customer,
-	PriceInfo, Shift, OpenShiftRequest, CloseShiftResponse,
+	PriceInfo, Shift, OpenShiftRequest, CloseShiftRequest, CloseShiftResponse,
 	VehicleResult, CustomerFormData, RegisterCustomerResponse,
 	CollectDispatchRequest, CollectDispatchResponse,
 	DispatchOrder,
@@ -39,7 +39,8 @@ const MOCK_CONFIG: AppConfig = {
 				B: [
 					{ hose_id: 2, fusion_pump_id: 2, fusion_hose_id: 1, grade_id: 'DIESEL', grade_name: 'Diesel', unit_price: 3.103 }
 				]
-			}
+			},
+			mechanical_meters: []
 		}
 	],
 	grades: [
@@ -262,7 +263,7 @@ export async function getCurrentShift(_token: string): Promise<Shift | null> {
 }
 
 export async function closeShift(
-	_token: string, _shiftId: number, _data: { notes: string }
+	_token: string, _shiftId: number, _data: CloseShiftRequest
 ): Promise<CloseShiftResponse> {
 	await delay(500);
 	mockShift = null;
@@ -293,6 +294,7 @@ export async function closeShift(
 			{ method_code: 'TARJETA', method_name: 'Tarjeta', total: 120, count: 2 },
 			{ method_code: 'QR', method_name: 'QR', total: 80, count: 2 },
 		],
+		meter_readings: [],
 	};
 }
 
@@ -668,10 +670,12 @@ export async function getShiftCashSummary(
 		current_balance: openingCash + total_income + salesCash - total_expense,
 		total_income,
 		total_expense,
+		total_deposits: 0,
 		total_sales_cash: salesCash,
 		total_transfers_received: 0,
 		total_transfers_sent: 0,
-		total_safe_drops: 0
+		total_safe_drops: 0,
+		non_cash_sales: [],
 	};
 }
 

@@ -16,7 +16,9 @@ export const nodes = [
 	() => import('./nodes/12'),
 	() => import('./nodes/13'),
 	() => import('./nodes/14'),
-	() => import('./nodes/15')
+	() => import('./nodes/15'),
+	() => import('./nodes/16'),
+	() => import('./nodes/17')
 ];
 
 export const server_loads = [];
@@ -25,16 +27,18 @@ export const dictionary = {
 		"/(pos)": [3,[2]],
 		"/(pos)/cash": [4,[2]],
 		"/(pos)/cash/movement": [5,[2]],
-		"/(pos)/cash/transfer": [6,[2]],
-		"/(pos)/confirmation": [7,[2]],
-		"/(pos)/fueling": [8,[2]],
-		"/(pos)/history": [9,[2]],
-		"/login": [13],
-		"/(pos)/new-dispatch": [10,[2]],
-		"/(pos)/sale": [11,[2]],
-		"/shift/close": [14],
-		"/shift/open": [15],
-		"/(pos)/users": [12,[2]]
+		"/(pos)/cash/summary": [6,[2]],
+		"/(pos)/cash/transfer": [7,[2]],
+		"/(pos)/confirmation": [8,[2]],
+		"/(pos)/fueling": [9,[2]],
+		"/(pos)/history": [10,[2]],
+		"/login": [14],
+		"/(pos)/new-dispatch": [11,[2]],
+		"/(pos)/sale": [12,[2]],
+		"/shift/close": [15],
+		"/shift/meters": [16],
+		"/shift/open": [17],
+		"/(pos)/users": [13,[2]]
 	};
 
 export const hooks = {

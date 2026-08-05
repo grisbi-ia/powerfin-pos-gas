@@ -5,21 +5,8 @@
 	import { shift } from '$lib/stores/shift';
 	import * as powerfin from '$lib/api/powerfin';
 
-	let openingShift = false;
-	let shiftError = '';
-
-	async function handleOpenShift() {
-		if (!$auth.token) return;
-		openingShift = true;
-		shiftError = '';
-		try {
-			const result = await powerfin.openShift($auth.token, { opening_cash: 0, notes: '', user_name: '' });
-			shift.set(result);
-		} catch {
-			shiftError = 'Error al abrir el turno';
-		} finally {
-			openingShift = false;
-		}
+	function handleOpenShift() {
+		goto('/shift/open');
 	}
 </script>
 
@@ -62,15 +49,25 @@
 		</button>
 	</div>
 
-	<!-- Resumen de Turno -->
-	<button
-		class="touch-btn card p-4 text-center hover:shadow-md transition w-full mb-3 disabled:opacity-40 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200"
-		on:click={() => goto('/cash/summary')}
-		disabled={!$shift}
-	>
-		<div class="text-2xl mb-1">📊</div>
-		<div class="text-sm font-semibold text-blue-700">Resumen de Turno</div>
-	</button>
+	<!-- Resumen de Turno + Lecturas de Medidores -->
+	<div class="grid grid-cols-2 gap-3 mb-3">
+		<button
+			class="touch-btn card p-3 text-center hover:shadow-md transition disabled:opacity-40 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200"
+			on:click={() => goto('/cash/summary')}
+			disabled={!$shift}
+		>
+			<div class="text-xl mb-1">📊</div>
+			<div class="text-xs font-semibold text-blue-700">Resumen de Turno</div>
+		</button>
+		<button
+			class="touch-btn card p-3 text-center hover:shadow-md transition disabled:opacity-40 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200"
+			on:click={() => goto('/shift/meters')}
+			disabled={!$shift}
+		>
+			<div class="text-xl mb-1">📏</div>
+			<div class="text-xs font-semibold text-teal-700">Lecturas Medidores</div>
+		</button>
+	</div>
 
 	<!-- Cerrar Turno -->
 	<button
@@ -85,15 +82,11 @@
 	{#if !$shift}
 		<div class="card p-4 text-center">
 			<p class="text-sm text-gray-500 mb-3">Debe abrir su turno para realizar movimientos de caja.</p>
-			{#if shiftError}
-				<div class="bg-red-50 text-red-600 text-sm rounded-lg py-2 mb-3">{shiftError}</div>
-			{/if}
 			<button
-				class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold disabled:opacity-50"
+				class="touch-btn w-full bg-primary text-white rounded-xl py-4 text-lg font-semibold"
 				on:click={handleOpenShift}
-				disabled={openingShift}
 			>
-				{openingShift ? 'Abriendo turno...' : '🔓 Abrir Turno'}
+				🔓 Abrir Turno
 			</button>
 		</div>
 	{/if}

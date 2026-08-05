@@ -250,6 +250,8 @@ public class ReceiptBuilder {
         public boolean isReprint;
         // Non-cash sales (formatted as multi-line string)
         public String nonCashLines;
+        // Meter readings (formatted as multi-line string)
+        public String meterLines;
 
         @SuppressWarnings("unchecked")
         public static ShiftCloseData fromMap(Map<String, Object> request) {
@@ -298,6 +300,25 @@ public class ReceiptBuilder {
                     if (!name.isEmpty()) sb.append(name).append(" (").append(count).append("): $ ").append(total).append("\n");
                 }
                 d.nonCashLines = sb.toString().trim();
+            }
+            // Meter readings: format as table rows
+            java.util.List<Map<String, Object>> meters = (java.util.List<Map<String, Object>>) data.get("meterReadings");
+            if (meters != null && !meters.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append(String.format("%-18s %10s %10s %10s", "MEDIDOR", "APERTURA", "CIERRE", "DIF"));
+                sb.append("\n");
+                sb.append("-".repeat(48));
+                sb.append("\n");
+                for (Map<String, Object> m : meters) {
+                    String name = String.valueOf(m.getOrDefault("meter_name", ""));
+                    if (name.length() > 18) name = name.substring(0, 16) + ".";
+                    String opening = String.valueOf(m.getOrDefault("opening", "—"));
+                    String closing = String.valueOf(m.getOrDefault("closing", "—"));
+                    String diff = String.valueOf(m.getOrDefault("difference", "—"));
+                    sb.append(String.format("%-18s %10s %10s %10s", name, opening, closing, diff));
+                    sb.append("\n");
+                }
+                d.meterLines = sb.toString().trim();
             }
             return d;
         }

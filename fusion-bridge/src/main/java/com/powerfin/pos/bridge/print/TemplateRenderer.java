@@ -423,6 +423,11 @@ public class TemplateRenderer {
                     resolved = resolved.replace("{#reprint}", "").replace("{/reprint}", "");
                     if (resolved.isBlank()) continue;
                 }
+                if (resolved.contains("{#meters}") || resolved.contains("{/meters}")) {
+                    if (data.meterLines == null || data.meterLines.isEmpty()) continue;
+                    resolved = resolved.replace("{#meters}", "").replace("{/meters}", "");
+                    if (resolved.isBlank()) continue;
+                }
 
                 resolved = resolved
                     .replace("{{location_name}}", nvl(data.locationName, "GASOLINERA"))
@@ -454,7 +459,8 @@ public class TemplateRenderer {
                     .replace("{{total_sales}}", nvl(data.totalSales, "0.00"))
                     .replace("{{surplus}}", nvl(data.surplus, ""))
                     .replace("{{shortage}}", nvl(data.shortage, ""))
-                    .replace("{{noncash_lines}}", nvl(data.nonCashLines, ""));
+                    .replace("{{noncash_lines}}", nvl(data.nonCashLines, ""))
+                    .replace("{{meter_lines}}", nvl(data.meterLines, ""));
 
                 boolean isSep = resolved.trim().matches("-{3,}") || resolved.trim().matches("={3,}");
                 if (isSep) {
@@ -541,6 +547,12 @@ CIERRE: {{closed_at}}
 {{noncash_lines}}
 ---
 {/noncash}
+
+{#meters}[CENTER][BOLD]LECTURAS DE MEDIDORES[/BOLD][/CENTER]
+---
+{{meter_lines}}
+---
+{/meters}
 [CENTER][BOLD]TOTAL VENTAS DEL TURNO: $ {{total_sales}}[/BOLD][/CENTER]
 ---
 [CENTER]POWERFIN GAS[/CENTER]

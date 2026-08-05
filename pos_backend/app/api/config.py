@@ -12,6 +12,7 @@ from app.models import (
     Dispenser,
     Grade,
     Hose,
+    MechanicalMeter,
     PaymentMethod,
     PriceList,
     SystemConfig,
@@ -25,6 +26,7 @@ from app.schemas import (
     GradeResponse,
     HoseResponse,
     LocationResponse,
+    MechanicalMeterResponse,
     PaymentMethodResponse,
     PollingConfig,
     PriceListResponse,
@@ -112,6 +114,14 @@ async def get_config(
             "subsidy_per_unit": float(p.subsidy_per_unit) if p.subsidy_per_unit else 0,
         }
 
+    # Mechanical meters (active, grouped by dispenser for config)
+    meters_result = (await db.execute(
+        select(MechanicalMeter).where(MechanicalMeter.is_active == True)
+    )).scalars().all()
+    meters_by_dispenser: dict[int, list[MechanicalMeter]] = {}
+    for m in meters_result:
+        meters_by_dispenser.setdefault(m.dispenser_id, []).append(m)
+
     dispensers = []
     for d in dispensers_raw:
         sides: dict[str, list] = {"A": [], "B": []}
@@ -129,6 +139,42 @@ async def get_config(
                 subsidy_per_unit=pinfo.get("subsidy_per_unit", 0),
             )
             sides[h.side].append(hose_data)
+
+        # Build meter list for this dispenser
+        meter_list = []
+        for m in meters_by_dispenser.get(d.dispenser_id, []):
+            grade_code = None
+            grade_name = None
+            hose_side = None
+            if m.meter_type == "PRODUCT" and m.grade_id:
+                for g in grades_result:
+                    if g.grade_id == m.grade_id:
+                        grade_code = g.code
+                        grade_name = g.name
+                        break
+            elif m.meter_type == "HOSE" and m.hose_id:
+                for h in d.hoses:
+                    if h.hose_id == m.hose_id:
+                        hose_side = h.side
+                        grade_code = h.grade_id
+                        grade_name = product_map.get(h.grade_id, h.grade_id)
+                        break
+            meter_list.append(
+                MechanicalMeterResponse(
+                    meter_id=m.meter_id,
+                    dispenser_id=m.dispenser_id,
+                    name=m.name,
+                    meter_type=m.meter_type,
+                    grade_id=m.grade_id,
+                    grade_code=grade_code,
+                    grade_name=grade_name,
+                    hose_id=m.hose_id,
+                    hose_side=hose_side,
+                    sort_order=m.sort_order,
+                    is_active=m.is_active,
+                )
+            )
+
         dispensers.append(
             DispenserConfigResponse(
                 dispenser_id=d.dispenser_id,
@@ -136,6 +182,7 @@ async def get_config(
                 printer_ip=d.printer_ip,
                 printer_port=d.printer_port,
                 sides={k: v for k, v in sides.items() if v},
+                mechanical_meters=meter_list,
             )
         )
 

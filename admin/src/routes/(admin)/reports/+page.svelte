@@ -5,7 +5,7 @@
   import DataTable from '$components/DataTable.svelte';
   import { toast } from '$lib/utils/toast';
 
-  let activeTab = $state<'sales'|'dispatches'|'shifts'|'cash'>('sales');
+  let activeTab = $state<'sales'|'dispatches'|'shifts'|'cash'|'meters'>('sales');
   let items=$state<any[]>([]); let total=$state(0); let page=$state(1); let pages=$state(1);
   let loading=$state(true); let error=$state(''); let search=$state('');
 
@@ -130,6 +130,7 @@
       if(activeTab==='sales') endpoint=`/reports/sales?${params}`;
       else if(activeTab==='dispatches') endpoint=`/reports/dispatches?${params}`;
       else if(activeTab==='shifts') endpoint=`/reports/shifts?${params}`;
+      else if(activeTab==='meters') endpoint=`/reports/meter-readings?${params}`;
       else endpoint=`/reports/cash-summary?${params}`;
 
       const d=await api.get<any>(endpoint);items=d.items;total=d.total;pages=d.pages;
@@ -137,6 +138,7 @@
       itemCount = total;
       if(activeTab==='sales'||activeTab==='dispatches') totalAmount=items.reduce((s:number,i:any)=>s+(i.amount||0),0);
       else if(activeTab==='shifts') totalAmount=items.reduce((s:number,i:any)=>s+(i.collected||0),0);
+      else if(activeTab==='meters') { totalAmount=0; itemCount=items.length; }
       else totalAmount=items.reduce((s:number,i:any)=>s+(i.amount||0),0);
 
       chartDataReady = (activeTab==='sales'||activeTab==='dispatches') && items.length>0;
@@ -222,6 +224,7 @@
       let endpoint='';
       if(activeTab==='sales') endpoint='/reports/sales/export';
       else if(activeTab==='shifts') endpoint='/reports/shifts/export';
+      else if(activeTab==='meters') endpoint='/reports/meter-readings/export';
       else endpoint='/reports/cash-summary/export';
       let url=`/api/admin${endpoint}?format=${format}`;
       if(dateFrom) url+=`&date_from=${dateFrom}`; if(dateTo) url+=`&date_to=${dateTo}`;
@@ -263,10 +266,11 @@
     load();
   });
 
-  const cols:Record<string,{key:string;label:string;sortable?:boolean;type?:string}[]> = {
+  const cols:Record<string,{key:string;label:string;sortable?:boolean;type?:'date'|'datetime'|'currency'}[]> = {
     sales: [{key:'date',label:'Fecha',type:'datetime'},{key:'dispenser_name',label:'Surtidor'},{key:'hose_side',label:'Lado'},{key:'grade',label:'Grado'},{key:'customer_name',label:'Cliente'},{key:'plate',label:'Placa'},{key:'payment_method',label:'Pago'},{key:'amount',label:'Monto',type:'currency'},{key:'volume',label:'Volumen'},{key:'shift_id',label:'Turno'},{key:'authorized_by',label:'Usuario'},{key:'contract_code',label:'Contrato'},{key:'sri_status',label:'SRI'},{key:'status',label:'Estado'}],
     shifts: [{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'opened_at',label:'Apertura',type:'datetime'},{key:'closed_at',label:'Cierre',type:'datetime'},{key:'status',label:'Estado'},{key:'opening_cash',label:'Caja Inicial',type:'currency'},{key:'collected',label:'Cobrado Total',type:'currency'},{key:'collected_cash',label:'Efectivo Ventas',type:'currency'},{key:'efectivo_actual',label:'Efectivo Actual',type:'currency'},{key:'surplus',label:'Sobrante',type:'currency'},{key:'shortage',label:'Faltante',type:'currency'}],
     cash: [{key:'date',label:'Fecha',type:'date'},{key:'shift_id',label:'Turno'},{key:'user_name',label:'Usuario'},{key:'type',label:'Tipo'},{key:'amount',label:'Monto',type:'currency'},{key:'observation',label:'Observación'}],
+    meters: [{key:'shift_id',label:'Turno'},{key:'shift_closed_at',label:'Cierre Turno',type:'date'},{key:'user_name',label:'Usuario'},{key:'meter_name',label:'Medidor'},{key:'meter_type',label:'Tipo'},{key:'opening_reading',label:'Inicial',type:'currency'},{key:'closing_reading',label:'Final',type:'currency'},{key:'difference',label:'Diferencia',type:'currency'}],
   };
 </script>
 
@@ -284,6 +288,7 @@
     <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='sales'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='sales') load(); else activeTab='sales'}}><DollarSign class="w-4 h-4 inline mr-1"/>Ventas</button>
     <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='shifts'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='shifts') load(); else activeTab='shifts'}}><Users class="w-4 h-4 inline mr-1"/>Turnos</button>
     <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='cash'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='cash') load(); else activeTab='cash'}}><Wallet class="w-4 h-4 inline mr-1"/>Caja</button>
+  <button class="px-4 py-2 text-sm font-medium rounded-lg {activeTab==='meters'?'bg-primary-500 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}" onclick={()=>{if(activeTab==='meters') load(); else activeTab='meters'}}>📏 Lecturas</button>
     <div class="flex-1 hidden sm:block"></div>
     <input type="date" bind:value={dateFrom} class="px-3 py-2 text-sm border border-gray-300 rounded-md"/>
     <span class="text-sm text-gray-500 py-2">a</span>

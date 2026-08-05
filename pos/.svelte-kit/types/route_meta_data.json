@@ -3,6 +3,7 @@
 	"/": [],
 	"/(pos)/cash": [],
 	"/(pos)/cash/movement": [],
+	"/(pos)/cash/summary": [],
 	"/(pos)/cash/transfer": [],
 	"/(pos)/confirmation": [],
 	"/(pos)/fueling": [],
@@ -11,6 +12,7 @@
 	"/(pos)/new-dispatch": [],
 	"/(pos)/sale": [],
 	"/shift/close": [],
+	"/shift/meters": [],
 	"/shift/open": [],
 	"/(pos)/users": []
 }

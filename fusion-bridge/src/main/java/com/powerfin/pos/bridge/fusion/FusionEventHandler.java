@@ -149,8 +149,9 @@ public class FusionEventHandler {
             "orderId", orderId != null ? orderId : ""
         ));
 
-        Log.info(String.format("New transaction — saleId=%s, pump=%d, hose=%d, volume=%s, amount=%s, orderId=%s",
-            saleId, pumpId, hoseId, volume, amount, orderId));
+        String fcr = msg.params.getOrDefault("FCR", "(unknown)");
+        Log.info(String.format("New transaction — saleId=%s, pump=%d, hose=%d, volume=%s, amount=%s, orderId=%s, FCR=%s",
+            saleId, pumpId, hoseId, volume, amount, orderId, fcr));
 
         // ── Complete dispatch on backend (POS-independent) ──────────
         // The POS may be offline (phone off, battery dead, no signal).

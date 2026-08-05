@@ -17,6 +17,7 @@ from app.api.admin.deps import get_admin_user, require_permission
 from app.database import get_db
 from app.models.company import SystemConfig
 from app.models.dispenser import Dispenser, Hose
+from app.models.mechanical_meter import MechanicalMeter
 from app.models.product import Grade
 from app.models.tributary import EmissionPoint
 from app.models.user import User
@@ -176,8 +177,47 @@ async def create_dispenser(
     return await _dispenser_to_detail(d, db)
 
 
+async def _meter_to_response(m: MechanicalMeter, db: AsyncSession) -> dict:
+    """Build a mechanical meter dict for admin detail."""
+    grade_code = None
+    grade_name = None
+    hose_side = None
+
+    if m.meter_type == "PRODUCT" and m.grade_id:
+        grade = await db.get(Grade, m.grade_id)
+        if grade:
+            grade_code = grade.code
+            grade_name = grade.name
+
+    if m.meter_type == "HOSE" and m.hose_id:
+        hose = await db.get(Hose, m.hose_id)
+        if hose:
+            hose_side = hose.side
+            grade_code = hose.grade_id
+            g_result = await db.execute(
+                select(Grade).where(Grade.code == hose.grade_id)
+            )
+            g = g_result.scalar_one_or_none()
+            if g:
+                grade_name = g.name
+
+    return {
+        "meter_id": m.meter_id,
+        "dispenser_id": m.dispenser_id,
+        "name": m.name,
+        "meter_type": m.meter_type,
+        "grade_id": m.grade_id,
+        "grade_code": grade_code,
+        "grade_name": grade_name,
+        "hose_id": m.hose_id,
+        "hose_side": hose_side,
+        "sort_order": m.sort_order,
+        "is_active": m.is_active,
+    }
+
+
 async def _dispenser_to_detail(d: Dispenser, db: AsyncSession) -> dict:
-    """Build dispenser detail with hoses and emission point label."""
+    """Build dispenser detail with hoses, meters, and emission point label."""
     # Re-fetch with hoses eager-loaded
     result = await db.execute(
         select(Dispenser)
@@ -190,6 +230,15 @@ async def _dispenser_to_detail(d: Dispenser, db: AsyncSession) -> dict:
     for h in d.hoses:
         hoses.append(await _hose_to_detail(h, db))
 
+    # Load mechanical meters
+    meters_result = await db.execute(
+        select(MechanicalMeter)
+        .where(MechanicalMeter.dispenser_id == d.dispenser_id)
+        .order_by(MechanicalMeter.sort_order)
+    )
+    meters = meters_result.scalars().all()
+    meter_list = [await _meter_to_response(m, db) for m in meters]
+
     return {
         "dispenser_id": d.dispenser_id,
         "code": d.code,
@@ -201,6 +250,7 @@ async def _dispenser_to_detail(d: Dispenser, db: AsyncSession) -> dict:
         "sort_order": d.sort_order,
         "is_active": d.is_active,
         "hoses": hoses,
+        "mechanical_meters": meter_list,
     }
 
 

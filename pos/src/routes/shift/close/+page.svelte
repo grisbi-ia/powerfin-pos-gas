@@ -6,7 +6,7 @@
 	import { config } from '$lib/stores/config';
 	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge';
-	import type { CloseShiftResponse } from '$lib/api/types';
+	import type { CloseShiftResponse, MechanicalMeterConfig, ShiftMeterPair } from '$lib/api/types';
 
 	let loading = false;
 	let error = '';
@@ -15,6 +15,22 @@
 	let printing = false;
 	let printed = false;
 	let result: CloseShiftResponse | null = null;
+	let meterReadingsInput: Record<number, string> = {};  // closing readings input
+	let showMeterReadings = false;
+
+	// Collect all active meters for reading input
+	$: allMeters = ($config?.dispensers || []).flatMap(d =>
+		(d.mechanical_meters || [])
+			.filter(m => m.is_active)
+			.map(m => ({ ...m, dispenser_name: d.name }))
+	);
+
+	$: metersByDispenser = allMeters.reduce((acc, m) => {
+		const key = m.dispenser_id;
+		if (!acc[key]) acc[key] = { name: m.dispenser_name, meters: [] };
+		acc[key].meters.push(m);
+		return acc;
+	}, {} as Record<number, { name: string; meters: MechanicalMeterConfig[] }>);
 
 	function formatCurrency(v: number | string): string {
 		const num = typeof v === 'number' ? v : Number(v ?? 0);
@@ -26,8 +42,18 @@
 		loading = true;
 		error = '';
 
+		const readings = Object.entries(meterReadingsInput)
+			.filter(([, v]) => String(v ?? '').trim() !== '')
+			.map(([meterId, value]) => ({
+				meter_id: parseInt(meterId),
+				reading_value: String(value)
+			}));
+
 		try {
-			const res = await powerfin.closeShift($auth.token!, $shift.shift_id, { notes: '' });
+			const res = await powerfin.closeShift($auth.token!, $shift.shift_id, {
+				notes: '',
+				meter_readings: readings.length > 0 ? readings : undefined
+			});
 			result = res;
 			closed = true;
 			shift.clear();
@@ -84,6 +110,15 @@
 						count: n.count,
 						total: n.total.toFixed(2),
 					})),
+					meterReadings: (result.meter_readings || []).map(pair => ({
+						meter_name: pair.meter_name,
+						dispenser_name: pair.dispenser_name || '',
+						grade_name: pair.grade_name || '',
+						hose_side: pair.hose_side || '',
+						opening: pair.opening_reading != null ? Number(pair.opening_reading).toFixed(2) : '—',
+						closing: pair.closing_reading != null ? Number(pair.closing_reading).toFixed(2) : '—',
+						difference: pair.difference != null ? Number(pair.difference).toFixed(2) : '—',
+					})),
 				}
 			});
 			printed = true;
@@ -95,6 +130,16 @@
 	}
 
 	function handleBack() { goto('/'); }
+
+	function truncateDecimal(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const v = input.value;
+		const parts = v.split('.');
+		if (parts.length > 1 && parts[1].length > 2) {
+			input.value = parts[0] + '.' + parts[1].substring(0, 2);
+			input.dispatchEvent(new Event('input'));
+		}
+	}
 </script>
 
 <Header title="Cerrar Turno" showBack={!closed} onBack={handleBack} />
@@ -111,6 +156,42 @@
 				⚠️ Antes de cerrar, asegúrese de haber realizado todos sus depósitos y transferencias.
 				Su efectivo en caja debe ser CERO.
 			</div>
+
+			<!-- Meter Readings Section -->
+			{#if allMeters.length > 0}
+				<div class="mb-4">
+					<button
+						class="touch-btn w-full bg-gray-100 text-gray-700 rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2"
+						on:click={() => { showMeterReadings = !showMeterReadings; if (showMeterReadings) allMeters.forEach(m => { if (!(m.meter_id in meterReadingsInput)) meterReadingsInput[m.meter_id] = ''; }); }}
+					>
+						📏 {showMeterReadings ? 'Ocultar' : 'Ingresar'} Lecturas de Medidores ({allMeters.length})
+					</button>
+
+					{#if showMeterReadings}
+						{#each Object.values(metersByDispenser) as group}
+							<div class="card p-3 mt-3">
+								<h4 class="text-xs font-bold text-gray-400 uppercase mb-2">{group.name}</h4>
+								{#each group.meters as m}
+									<div class="mb-2 last:mb-0">
+										<label class="block text-xs text-gray-500 mb-1">
+											{m.name}
+											{#if m.grade_name} ({m.grade_name}){/if}
+											{#if m.hose_side} — Lado {m.hose_side}{/if}
+										</label>
+										<input
+											type="number" step="0.01" min="0"
+										inputmode="decimal"
+											bind:value={meterReadingsInput[m.meter_id]}
+											placeholder="Lectura final"
+											class="w-full px-3 py-2 text-sm font-mono text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+										/>
+									</div>
+								{/each}
+							</div>
+						{/each}
+					{/if}
+				</div>
+			{/if}
 
 			{#if error}
 				<div class="bg-red-50 text-red-600 text-sm text-center rounded-lg py-2 mb-4">{error}</div>
@@ -241,6 +322,38 @@
 							<span class="font-medium">{formatCurrency(sale.total)}</span>
 						</div>
 					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<!-- Lecturas de Medidores post-cierre -->
+		{#if result.meter_readings && result.meter_readings.length > 0}
+			<div class="card p-5 mb-4">
+				<h3 class="text-sm font-semibold text-gray-700 mb-3">📏 Lecturas de Medidores</h3>
+				<div class="overflow-x-auto">
+					<table class="w-full text-xs">
+						<thead>
+							<tr class="text-left text-gray-400 border-b border-gray-100">
+								<th class="pb-1 font-medium">Medidor</th>
+								<th class="pb-1 font-medium text-right">Apertura</th>
+								<th class="pb-1 font-medium text-right">Cierre</th>
+								<th class="pb-1 font-medium text-right">Diferencia</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each result.meter_readings as pair}
+								<tr class="border-b border-gray-50">
+									<td class="py-1.5">
+										<div class="font-medium text-gray-700">{pair.meter_name}</div>
+										<div class="text-gray-400">{pair.dispenser_name || ''}{#if pair.grade_name} · {pair.grade_name}{/if}{#if pair.hose_side} L{pair.hose_side}{/if}</div>
+									</td>
+									<td class="py-1.5 text-right font-mono text-gray-500">{pair.opening_reading != null ? Number(pair.opening_reading).toFixed(2) : '—'}</td>
+									<td class="py-1.5 text-right font-mono text-gray-700">{pair.closing_reading != null ? Number(pair.closing_reading).toFixed(2) : '—'}</td>
+									<td class="py-1.5 text-right font-mono font-semibold">{pair.difference != null ? Number(pair.difference).toFixed(2) : '—'}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
 			</div>
 		{/if}

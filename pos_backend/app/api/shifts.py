@@ -9,13 +9,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.config import ECUADOR_TZ
 from app.database import get_db
-from app.models import CashMovement, Dispatch, DispatchPayment, Shift
+from app.models import (
+    CashMovement,
+    Dispatch,
+    DispatchPayment,
+    MechanicalMeter,
+    MeterReading,
+    Shift,
+)
+from app.models.dispenser import Dispenser, Hose
 from app.models.payment import PaymentMethod
 from app.models.user import User
 from app.schemas import (
     CloseShiftRequest,
     CloseShiftResponse,
+    MeterReadingItem,
     OpenShiftRequest,
+    SaveMeterReadingsRequest,
+    ShiftMeterPair,
+    ShiftMeterReadingsResponse,
     ShiftResponse,
 )
 
@@ -49,6 +61,178 @@ async def list_shifts(
     ]
 
 
+async def _save_meter_readings(
+    db: AsyncSession,
+    shift_id: int,
+    readings: list[MeterReadingItem],
+    reading_type: str,
+    user_id: int,
+) -> list[str]:
+    """Save meter readings for a shift. Returns list of warning messages.
+
+    Rules:
+    - OPENING: write-once. If already exists, raises 409.
+    - CLOSING: editable while shift is open. Updates updated_at.
+    - Validates continuity: opening >= previous shift's closing (warning).
+    """
+    from datetime import datetime
+    from decimal import Decimal, ROUND_HALF_UP
+    from app.config import ECUADOR_TZ
+    warnings: list[str] = []
+    now = datetime.now(ECUADOR_TZ)
+    TWO_DECIMALS = Decimal('0.01')
+
+    for item in readings:
+        # Quantize to exactly 2 decimal places (banker's rounding HALF_UP)
+        value = item.reading_value.quantize(TWO_DECIMALS, rounding=ROUND_HALF_UP)
+        existing = (await db.execute(
+            select(MeterReading).where(
+                MeterReading.meter_id == item.meter_id,
+                MeterReading.shift_id == shift_id,
+                MeterReading.reading_type == reading_type,
+            )
+        )).scalar_one_or_none()
+
+        if reading_type == "OPENING" and existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"La lectura de apertura del medidor ID={item.meter_id} ya fue registrada "
+                       f"({float(existing.reading_value):,.2f}) y no puede modificarse."
+            )
+
+        if reading_type == "CLOSING" and existing is not None:
+            existing.reading_value = value
+            existing.recorded_by = user_id
+            existing.updated_at = now
+        elif existing is None:
+            db.add(MeterReading(
+                meter_id=item.meter_id,
+                shift_id=shift_id,
+                reading_type=reading_type,
+                reading_value=value,
+                recorded_by=user_id,
+            ))
+
+        # Continuity validation for OPENING: compare with previous shift's CLOSING
+        if reading_type == "OPENING":
+            prev_closing = (await db.execute(
+                select(MeterReading).join(
+                    Shift, MeterReading.shift_id == Shift.shift_id
+                ).where(
+                    MeterReading.meter_id == item.meter_id,
+                    MeterReading.reading_type == "CLOSING",
+                    Shift.status == "CLOSED",
+                    Shift.shift_id < shift_id,
+                ).order_by(Shift.shift_id.desc()).limit(1)
+            )).scalar_one_or_none()
+
+            if prev_closing is not None:
+                prev_val = float(prev_closing.reading_value)
+                new_val = float(value)
+                if new_val < prev_val:
+                    warnings.append(
+                        f"⚠️ Medidor ID={item.meter_id}: lectura de apertura ({new_val:,.2f}) "
+                        f"es menor que el cierre del turno anterior ({prev_val:,.2f}). "
+                        f"¿Es correcto?"
+                    )
+
+    await db.flush()
+    return warnings
+
+
+async def _build_meter_pairs(
+    db: AsyncSession,
+    shift_id: int,
+) -> list[ShiftMeterPair]:
+    """Build ShiftMeterPair list for a shift: opening + closing reading per meter."""
+    # Get all active meters (we show all, even if no readings)
+    meters = (await db.execute(
+        select(MechanicalMeter).where(MechanicalMeter.is_active == True)
+        .order_by(MechanicalMeter.dispenser_id, MechanicalMeter.sort_order)
+    )).scalars().all()
+
+    # Get all readings for this shift
+    readings_result = (await db.execute(
+        select(MeterReading).where(MeterReading.shift_id == shift_id)
+    )).scalars().all()
+    readings_map: dict[int, dict[str, MeterReading]] = {}
+    for r in readings_result:
+        readings_map.setdefault(r.meter_id, {})[r.reading_type] = r
+
+    pairs = []
+    for m in meters:
+        open_r = readings_map.get(m.meter_id, {}).get("OPENING")
+        close_r = readings_map.get(m.meter_id, {}).get("CLOSING")
+
+        # Resolve display names
+        dispenser_name = None
+        grade_name = None
+        hose_side = None
+
+        if m.dispenser_id:
+            d = await db.get(Dispenser, m.dispenser_id)
+            if d:
+                dispenser_name = d.name
+
+        if m.meter_type == "PRODUCT" and m.grade_id:
+            from app.models.product import Grade as GradeModel
+            g = await db.get(GradeModel, m.grade_id)
+            if g:
+                grade_name = g.name
+        elif m.meter_type == "HOSE" and m.hose_id:
+            h = await db.get(Hose, m.hose_id)
+            if h:
+                hose_side = h.side
+                from app.models.product import Grade as GradeModel
+                g_result = await db.execute(
+                    select(GradeModel).where(GradeModel.code == h.grade_id)
+                )
+                g = g_result.scalar_one_or_none()
+                if g:
+                    grade_name = g.name
+
+        # Calculate reference price (use grade's default price)
+        reference_price = None
+        if grade_name:
+            from app.models.product import Grade as GradeModel
+            from app.models.pricing import PriceList, PriceListItem
+            g_result = await db.execute(
+                select(GradeModel).where(GradeModel.name == grade_name)
+            )
+            g = g_result.scalar_one_or_none()
+            if g:
+                from app.models.product import Product
+                product = await db.get(Product, g.product_id)
+                if product:
+                    reference_price = float(product.base_price)
+
+        open_val = open_r.reading_value if open_r else None
+        close_val = close_r.reading_value if close_r else None
+        diff = None
+        ref_value = None
+        if open_val is not None and close_val is not None:
+            from decimal import Decimal
+            diff = Decimal(str(close_val)) - Decimal(str(open_val))
+            if reference_price is not None:
+                ref_value = diff * Decimal(str(reference_price))
+
+        pairs.append(ShiftMeterPair(
+            meter_id=m.meter_id,
+            meter_name=m.name,
+            dispenser_name=dispenser_name,
+            meter_type=m.meter_type,
+            grade_name=grade_name,
+            hose_side=hose_side,
+            opening_reading=open_val,
+            closing_reading=close_val,
+            difference=diff,
+            reference_price=reference_price,
+            reference_value=ref_value,
+        ))
+
+    return pairs
+
+
 @router.post("/open", response_model=ShiftResponse, status_code=201)
 async def open_shift(
     body: OpenShiftRequest,
@@ -73,6 +257,15 @@ async def open_shift(
         status="OPEN",
     )
     db.add(shift)
+    await db.flush()  # flush to get shift_id without committing
+
+    # Save opening meter readings if provided
+    warnings: list[str] = []
+    if body.meter_readings:
+        warnings = await _save_meter_readings(
+            db, shift.shift_id, body.meter_readings, "OPENING", current_user.user_id
+        )
+
     await db.commit()
     await db.refresh(shift)
 
@@ -84,6 +277,7 @@ async def open_shift(
         accounting_date=str(shift.accounting_date),
         status=shift.status,
         opening_cash=shift.opening_cash,
+        warnings=warnings,
     )
 
 
@@ -139,6 +333,8 @@ async def get_shift_receipt_data(
     surplus = float(shift.surplus or 0)
     shortage = float(shift.shortage or 0)
 
+    meter_pairs = await _build_meter_pairs(db, shift_id)
+
     return CloseShiftResponse(
         shift_id=shift_id,
         closed_at=shift.closed_at,
@@ -166,6 +362,7 @@ async def get_shift_receipt_data(
         sales_cash=round(summary["sales_cash"], 2),
         sales_cash_count=summary["sales_cash_count"],
         non_cash_sales=summary["non_cash_sales"],
+        meter_readings=meter_pairs,
     )
 
 
@@ -202,6 +399,12 @@ async def close_shift(
     shift.status = "CLOSED"
     shift.closed_at = datetime.now(ECUADOR_TZ)
 
+    # Save closing meter readings if provided
+    if body.meter_readings:
+        await _save_meter_readings(
+            db, shift_id, body.meter_readings, "CLOSING", current_user.user_id
+        )
+
     # Build financial summary
     summary = await _compute_shift_summary(db, shift_id)
 
@@ -219,6 +422,8 @@ async def close_shift(
         shift.shortage = 0
 
     await db.commit()
+
+    meter_pairs = await _build_meter_pairs(db, shift_id)
 
     return CloseShiftResponse(
         shift_id=shift_id,
@@ -247,6 +452,61 @@ async def close_shift(
         sales_cash=round(summary["sales_cash"], 2),
         sales_cash_count=summary["sales_cash_count"],
         non_cash_sales=summary["non_cash_sales"],
+        meter_readings=meter_pairs,
+    )
+
+
+@router.get("/{shift_id}/meter-readings", response_model=ShiftMeterReadingsResponse)
+async def get_shift_meter_readings(
+    shift_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get all meter readings for a shift (opening + closing pairs)."""
+    result = await db.execute(select(Shift).where(Shift.shift_id == shift_id))
+    shift = result.scalar_one_or_none()
+    if not shift:
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+    meter_pairs = await _build_meter_pairs(db, shift_id)
+    return ShiftMeterReadingsResponse(
+        shift_id=shift_id,
+        meters=meter_pairs,
+    )
+
+
+@router.put("/{shift_id}/meter-readings", response_model=ShiftMeterReadingsResponse)
+async def update_shift_meter_readings(
+    shift_id: int,
+    body: SaveMeterReadingsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Save or update meter readings for an existing shift (opening or closing).
+
+    Use this when the dispatcher skipped readings during shift open and wants
+    to register them later, or wants to edit readings before closing.
+    """
+    result = await db.execute(select(Shift).where(Shift.shift_id == shift_id))
+    shift = result.scalar_one_or_none()
+    if not shift:
+        raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+    if shift.status == "CLOSED":
+        raise HTTPException(status_code=400, detail="No se pueden modificar lecturas de un turno cerrado")
+
+    if body.reading_type == "CLOSING" and shift.status != "OPEN":
+        raise HTTPException(status_code=400, detail="El turno debe estar abierto para registrar lecturas de cierre")
+
+    warnings = await _save_meter_readings(
+        db, shift_id, body.meter_readings, body.reading_type, current_user.user_id
+    )
+    await db.commit()
+
+    meter_pairs = await _build_meter_pairs(db, shift_id)
+    return ShiftMeterReadingsResponse(
+        shift_id=shift_id,
+        meters=meter_pairs,
     )
 
 

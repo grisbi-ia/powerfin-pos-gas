@@ -827,10 +827,35 @@ async def shift_receipt_pdf(
     shortage = float(shift.shortage or 0)
     total_sales = round(summary["sales_cash"] + sum(n["total"] for n in summary["non_cash_sales"]), 2)
 
+    # Fetch meter readings for the receipt
+    from app.models.mechanical_meter import MechanicalMeter, MeterReading
+    meter_result = await db.execute(
+        select(MeterReading).where(MeterReading.shift_id == shift_id)
+    )
+    meter_readings_raw = meter_result.scalars().all()
+    # Build pairs: opening + closing per meter
+    meter_map: dict[int, dict] = {}
+    for r in meter_readings_raw:
+        meter_map.setdefault(r.meter_id, {})[r.reading_type] = float(r.reading_value)
+    meter_pairs = []
+    if meter_map:
+        meters = (await db.execute(
+            select(MechanicalMeter).where(MechanicalMeter.meter_id.in_(meter_map.keys()))
+        )).scalars().all()
+        meter_by_id = {m.meter_id: m for m in meters}
+        for mid, readings in meter_map.items():
+            m = meter_by_id.get(mid)
+            meter_pairs.append({
+                "meter_name": m.name if m else f"Medidor #{mid}",
+                "opening_reading": readings.get("OPENING"),
+                "closing_reading": readings.get("CLOSING"),
+                "difference": (readings.get("CLOSING", 0) or 0) - (readings.get("OPENING", 0) or 0) if "CLOSING" in readings and "OPENING" in readings else None,
+            })
+
     pdf_bytes = generate_shift_receipt_pdf(
         shift_id=shift_id,
-        opened_at=shift.opened_at.strftime("%Y-%m-%d %H:%M") if shift.opened_at else "",
-        closed_at=shift.closed_at.strftime("%Y-%m-%d %H:%M") if shift.closed_at else "",
+        opened_at=_fmt_date(shift.opened_at),
+        closed_at=_fmt_date(shift.closed_at),
         cashier=cashier,
         opening_cash=float(shift.opening_cash or 0),
         cash_income=round(summary["income"], 2),
@@ -852,6 +877,7 @@ async def shift_receipt_pdf(
         non_cash_sales=summary["non_cash_sales"],
         total_sales=total_sales,
         dispatch_count=summary["dispatch_count"],
+        meter_readings=meter_pairs if meter_pairs else None,
         company_name=company_name,
         company_ruc=company_ruc,
         company_address=company_address,
@@ -993,4 +1019,184 @@ async def shift_transactions_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=transacciones_turno_{shift_id}.xlsx"},
     )
+
+
+# ── Meter Readings Report ──────────────────────────────────────────────
+
+@router.get("/meter-readings")
+async def report_meter_readings(
+    date_from: str = Query("", description="YYYY-MM-DD"),
+    date_to: str = Query("", description="YYYY-MM-DD"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("reports", "read")),
+):
+    """Paginated list of shift meter readings with opening/closing pairs."""
+    from app.models.mechanical_meter import MechanicalMeter, MeterReading
+    import datetime as _dt
+
+    base_q = (
+        select(
+            MeterReading.shift_id,
+            MeterReading.meter_id,
+            MechanicalMeter.name.label("meter_name"),
+            MechanicalMeter.meter_type,
+            func.min(Shift.opened_at).label("shift_opened_at"),
+            func.min(Shift.closed_at).label("shift_closed_at"),
+            func.min(User.name).label("user_name"),
+        )
+        .join(Shift, MeterReading.shift_id == Shift.shift_id)
+        .join(User, Shift.user_id == User.user_id)
+        .join(MechanicalMeter, MeterReading.meter_id == MechanicalMeter.meter_id)
+        .where(Shift.status == "CLOSED")
+        .group_by(MeterReading.shift_id, MeterReading.meter_id, MechanicalMeter.name, MechanicalMeter.meter_type)
+    )
+
+    if date_from:
+        base_q = base_q.where(Shift.closed_at >= _dt.datetime.strptime(date_from, "%Y-%m-%d"))
+    if date_to:
+        base_q = base_q.where(Shift.closed_at < _dt.datetime.strptime(date_to, "%Y-%m-%d") + _dt.timedelta(days=1))
+
+    count_q = select(func.count()).select_from(base_q.subquery())
+    total = (await db.execute(count_q)).scalar() or 0
+    pages = max(1, math.ceil(total / page_size))
+
+    offset = (page - 1) * page_size
+    result = await db.execute(base_q.order_by(MeterReading.shift_id.desc()).offset(offset).limit(page_size))
+    rows = result.all()
+
+    # Fetch opening/closing values for each pair
+    items = []
+    for row in rows:
+        open_val = await db.scalar(
+            select(MeterReading.reading_value).where(
+                MeterReading.shift_id == row.shift_id,
+                MeterReading.meter_id == row.meter_id,
+                MeterReading.reading_type == "OPENING",
+            )
+        )
+        close_val = await db.scalar(
+            select(MeterReading.reading_value).where(
+                MeterReading.shift_id == row.shift_id,
+                MeterReading.meter_id == row.meter_id,
+                MeterReading.reading_type == "CLOSING",
+            )
+        )
+        diff = None
+        if open_val is not None and close_val is not None:
+            diff = float(close_val) - float(open_val)
+        items.append({
+            "shift_id": row.shift_id,
+            "shift_opened_at": _fmt_date(row.shift_opened_at),
+            "shift_closed_at": _fmt_date(row.shift_closed_at),
+            "user_name": row.user_name,
+            "meter_id": row.meter_id,
+            "meter_name": row.meter_name,
+            "meter_type": row.meter_type,
+            "opening_reading": float(open_val) if open_val is not None else None,
+            "closing_reading": float(close_val) if close_val is not None else None,
+            "difference": diff,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": pages,
+    }
+
+
+@router.post("/meter-readings/export")
+async def export_meter_readings(
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    format: str = Query("xlsx", pattern=r"^(xlsx|pdf)$"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("reports", "read")),
+):
+    """Export meter readings as Excel or PDF."""
+    from app.models.mechanical_meter import MechanicalMeter, MeterReading
+    from app.services.export_service import generate_meter_readings_excel, generate_meter_readings_pdf
+    import datetime as _dt
+
+    # Build the same query without pagination
+    base_q = (
+        select(
+            MeterReading.shift_id,
+            MeterReading.meter_id,
+            MechanicalMeter.name.label("meter_name"),
+            MechanicalMeter.meter_type,
+            func.min(Shift.opened_at).label("shift_opened_at"),
+            func.min(Shift.closed_at).label("shift_closed_at"),
+            func.min(User.name).label("user_name"),
+        )
+        .join(Shift, MeterReading.shift_id == Shift.shift_id)
+        .join(User, Shift.user_id == User.user_id)
+        .join(MechanicalMeter, MeterReading.meter_id == MechanicalMeter.meter_id)
+        .where(Shift.status == "CLOSED")
+        .group_by(MeterReading.shift_id, MeterReading.meter_id, MechanicalMeter.name, MechanicalMeter.meter_type)
+    )
+
+    if date_from:
+        base_q = base_q.where(Shift.closed_at >= _dt.datetime.strptime(date_from, "%Y-%m-%d"))
+    if date_to:
+        base_q = base_q.where(Shift.closed_at < _dt.datetime.strptime(date_to, "%Y-%m-%d") + _dt.timedelta(days=1))
+
+    result = await db.execute(base_q.order_by(MeterReading.shift_id.desc()))
+    rows = result.all()
+
+    items = []
+    for row in rows:
+        open_val = await db.scalar(
+            select(MeterReading.reading_value).where(
+                MeterReading.shift_id == row.shift_id,
+                MeterReading.meter_id == row.meter_id,
+                MeterReading.reading_type == "OPENING",
+            )
+        )
+        close_val = await db.scalar(
+            select(MeterReading.reading_value).where(
+                MeterReading.shift_id == row.shift_id,
+                MeterReading.meter_id == row.meter_id,
+                MeterReading.reading_type == "CLOSING",
+            )
+        )
+        diff = None
+        if open_val is not None and close_val is not None:
+            diff = float(close_val) - float(open_val)
+        items.append({
+            "shift_id": row.shift_id,
+            "shift_opened_at": _fmt_date(row.shift_opened_at),
+            "shift_closed_at": _fmt_date(row.shift_closed_at),
+            "user_name": row.user_name,
+            "meter_id": row.meter_id,
+            "meter_name": row.meter_name,
+            "meter_type": row.meter_type,
+            "opening_reading": float(open_val) if open_val is not None else None,
+            "closing_reading": float(close_val) if close_val is not None else None,
+            "difference": diff,
+        })
+
+    company_name = "NEOGAS"
+    ci_result = await db.execute(select(CompanyInfo).limit(1))
+    ci = ci_result.scalar_one_or_none()
+    if ci:
+        company_name = ci.commercial_name or ci.name or company_name
+
+    if format == "pdf":
+        pdf_bytes = generate_meter_readings_pdf(items, company_name, date_from, date_to)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=lecturas_medidores.pdf"},
+        )
+    else:
+        xlsx_bytes = generate_meter_readings_excel(items, company_name, date_from, date_to)
+        return Response(
+            content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=lecturas_medidores.xlsx"},
+        )
 

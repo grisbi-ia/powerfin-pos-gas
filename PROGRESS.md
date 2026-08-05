@@ -1,6 +1,66 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-07-20** · Rama: `main` · HEAD: `v0.35.4`
+> Última actualización: **2026-08-05** · Rama: `main` · HEAD: `v0.35.5`
+
+---
+
+## v0.35.5 (2026-08-05) — Fix: payment collection bounce + SRI reconciliation + mechanical meters
+
+### Fix: SaleWizard — rebote en pantalla de cobro con tarjeta/transferencia
+- Bug: al cobrar con método que requiere comprobante (tarjeta, transferencia),
+  `handleCollect()` ponía `confirmed = true` antes del API call. Si el API fallaba,
+  `confirmed = false` causaba un rebote visual sin mostrar el error.
+- Fix: nuevo estado `collecting` — spinner "⏳ Procesando..." mientras el API
+  responde. `confirmed = true` solo se pone tras éxito. Botones deshabilitados
+  durante `collecting` para prevenir doble-click.
+- Archivo: `pos/src/lib/components/SaleWizard.svelte`
+- Tests: 41/41 ✅ sin regresiones
+
+### SRI/Key49 — reconciliación manual de NOTIFIED + PENDING
+- 34 despachos NOTIFIED verificados contra Key49 — todos presentes, notificados al SRI
+- 4 despachos PENDING (polling timeout) actualizados a NOTIFIED con datos reales de Key49
+- Resultado: 38 NOTIFIED ($611.85) + 4 AUTHORIZED ($123.51) — 100% enviados a Key49
+- Cero despachos perdidos
+
+### Intervenciones manuales en PROD
+- Despacho #12450 recreado: $62.04 DIESEL, dispenser 3, MINERA PIRINCAY (perdido por corte de energía + cleanup)
+- 2 pagos corregidos: EFECTIVO → TARJETA CREDITO/DEBITO (refs 656, 657)
+- 4 PENDING → NOTIFIED con fechas reales de Key49
+
+### Nuevo: Medidores mecánicos (mechanical meters)
+- Modelo `MechanicalMeter` + CRUD admin API
+- Lecturas inicial/final vinculadas a turnos
+- Página POS: captura de lecturas al abrir/cerrar turno
+- Migraciones Alembic: `2f3a4b5c6d7e` + `3a4b5c6d7e8f`
+- Tests dedicados
+
+### CODE_REVIEW_FINDINGS.md
+- Revisión de código generada por 4 subagentes en paralelo (pos_backend, fusion-bridge, pos/, admin/)
+- 19 hallazgos: 7 alta prioridad, 8 media, 4 baja
+- Pendiente revisión sistemática en próxima sesión
+
+### Archivos modificados
+- `pos/src/lib/components/SaleWizard.svelte` — fix rebote cobro
+- `pos/src/lib/api/powerfin.ts`, `powerfin.mock.ts`, `types.ts` — meter readings API
+- `pos/src/routes/shift/open/+page.svelte` — lecturas mecánicas al abrir
+- `pos/src/routes/shift/close/+page.svelte` — lecturas mecánicas al cerrar
+- `pos/src/routes/shift/meters/+page.svelte` — nueva página
+- `pos/src/routes/(pos)/cash/+page.svelte` — mejoras UI
+- `pos_backend/app/models/mechanical_meter.py` — nuevo modelo
+- `pos_backend/app/api/admin/mechanical_meters.py` — nuevo endpoint admin
+- `pos_backend/app/api/admin/dispensers.py` — mejoras
+- `pos_backend/app/api/admin/reports.py` — mejoras reportes
+- `pos_backend/app/api/config.py` — meter readings en config
+- `pos_backend/app/api/shifts.py` — meter readings en turnos
+- `pos_backend/app/schemas/__init__.py` — schemas nuevos
+- `pos_backend/app/services/export_service.py` — mejoras export
+- `pos_backend/app/models/dispenser.py` — relación mechanical_meter
+- `fusion-bridge/.../FusionEventHandler.java` — fix
+- `fusion-bridge/.../ReceiptBuilder.java`, `TemplateRenderer.java` — mejoras impresión
+- `admin/src/routes/(admin)/dispensers/[id]/+page.svelte` — mejoras
+- `admin/src/routes/(admin)/reports/+page.svelte` — mejoras
+- `CODE_REVIEW_FINDINGS.md` — nuevo documento
+- `PROGRESS.md`, `NEXT_SESSION.md` — actualizados
 
 ---
 

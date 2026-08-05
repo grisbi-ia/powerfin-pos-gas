@@ -19,6 +19,7 @@ from app.api.admin.auth import router as admin_auth_router
 from app.api.admin.company import router as admin_company_router
 from app.api.admin.dashboard import router as admin_dashboard_router
 from app.api.admin.dispensers import router as admin_dispensers_router
+from app.api.admin.mechanical_meters import router as admin_mechanical_meters_router
 from app.api.admin.emission_points import router as admin_emission_points_router
 from app.api.admin.grades import router as admin_grades_router
 from app.api.admin.payment_methods import router as admin_payment_methods_router
@@ -47,6 +48,7 @@ router.include_router(admin_auth_router)
 router.include_router(admin_company_router)
 router.include_router(admin_dashboard_router)
 router.include_router(admin_dispensers_router)
+router.include_router(admin_mechanical_meters_router)
 router.include_router(admin_emission_points_router)
 router.include_router(admin_grades_router)
 router.include_router(admin_payment_methods_router)

@@ -83,6 +83,7 @@ class DispenserConfigResponse(BaseModel):
     printer_ip: Optional[str] = None
     printer_port: int = 9100
     sides: dict[str, list[HoseResponse]]
+    mechanical_meters: list["MechanicalMeterResponse"] = []
 
 
 class GradeResponse(BaseModel):
@@ -220,6 +221,7 @@ class OpenShiftRequest(BaseModel):
     opening_cash: Decimal = Decimal("0")
     notes: str = ""
     user_name: Optional[str] = None
+    meter_readings: list["MeterReadingItem"] = []
 
 
 class ShiftResponse(BaseModel):
@@ -230,12 +232,14 @@ class ShiftResponse(BaseModel):
     accounting_date: str
     status: str
     opening_cash: Decimal
+    warnings: list[str] = []
 
     model_config = {"from_attributes": True}
 
 
 class CloseShiftRequest(BaseModel):
     notes: str = ""
+    meter_readings: list["MeterReadingItem"] = []
 
 
 class CloseShiftResponse(BaseModel):
@@ -268,6 +272,7 @@ class CloseShiftResponse(BaseModel):
     # Non-cash sales breakdown
     non_cash_sales: list = []
     accounting_branch_code: Optional[str] = None
+    meter_readings: list["ShiftMeterPair"] = []
 
 
 # ── Dispatches ───────────────────────────────────────────────────
@@ -878,6 +883,7 @@ class AdminDispenserDetail(BaseModel):
     sort_order: int = 0
     is_active: bool
     hoses: list[AdminDispenserHoseDetail] = []
+    mechanical_meters: list["MechanicalMeterResponse"] = []
 
     model_config = {"from_attributes": True}
 
@@ -1255,3 +1261,100 @@ class PendingBulkDispatchItem(BaseModel):
     subtotal: float = 0
     tax_amount: float = 0
     total: float = 0
+
+
+# ── Mechanical Meters ─────────────────────────────────────────────
+
+class MechanicalMeterResponse(BaseModel):
+    """Meter info included in dispenser config and admin detail."""
+    meter_id: int
+    dispenser_id: int
+    name: str
+    meter_type: str  # PRODUCT | HOSE
+    grade_id: int | None = None
+    grade_code: str | None = None
+    grade_name: str | None = None
+    hose_id: int | None = None
+    hose_side: str | None = None
+    sort_order: int = 0
+    is_active: bool = True
+
+    model_config = {"from_attributes": True}
+
+
+class MeterReadingItem(BaseModel):
+    """A single meter reading entry in a shift open/close request."""
+    meter_id: int
+    reading_value: Decimal
+
+
+class MeterReadingResponse(BaseModel):
+    """A meter reading record with full context."""
+    reading_id: int
+    meter_id: int
+    meter_name: str
+    dispenser_name: str | None = None
+    meter_type: str
+    grade_name: str | None = None
+    hose_side: str | None = None
+    shift_id: int
+    reading_type: str  # OPENING | CLOSING
+    reading_value: Decimal
+    recorded_at: datetime | None = None
+    updated_at: datetime | None = None
+    recorded_by_name: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SaveMeterReadingsRequest(BaseModel):
+    """Save/update meter readings for an existing shift (post-open or pre-close)."""
+    reading_type: str = Field(min_length=5, max_length=10, pattern=r"^(OPENING|CLOSING)$")
+    meter_readings: list["MeterReadingItem"]
+
+
+class ShiftMeterReadingsResponse(BaseModel):
+    """All meter readings for a shift, grouped by meter with opening/closing pairs."""
+    shift_id: int
+    meters: list["ShiftMeterPair"] = []
+
+
+class ShiftMeterPair(BaseModel):
+    """Opening + closing reading for a single meter in a shift."""
+    meter_id: int
+    meter_name: str
+    dispenser_name: str | None = None
+    meter_type: str
+    grade_name: str | None = None
+    hose_side: str | None = None
+    opening_reading: Decimal | None = None
+    closing_reading: Decimal | None = None
+    difference: Decimal | None = None  # closing - opening
+    reference_price: float | None = None  # unit price for reference value
+    reference_value: Decimal | None = None  # difference * price
+
+
+class CreateMechanicalMeterRequest(BaseModel):
+    """Create a mechanical meter for a dispenser."""
+    name: str = Field(min_length=2, max_length=100)
+    meter_type: str = Field(min_length=3, max_length=20, pattern=r"^(PRODUCT|HOSE)$")
+    grade_id: int | None = None   # required if PRODUCT
+    hose_id: int | None = None    # required if HOSE
+    sort_order: int = 0
+
+    @model_validator(mode="after")
+    def validate_mapping(self):
+        if self.meter_type == "PRODUCT" and self.grade_id is None:
+            raise ValueError("PRODUCT meter requires grade_id")
+        if self.meter_type == "HOSE" and self.hose_id is None:
+            raise ValueError("HOSE meter requires hose_id")
+        return self
+
+
+class UpdateMechanicalMeterRequest(BaseModel):
+    """Update a mechanical meter. meter_type is immutable after creation."""
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    grade_id: int | None = None
+    hose_id: int | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
