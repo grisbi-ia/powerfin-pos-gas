@@ -2,14 +2,19 @@
 #
 # deploy-to-server.sh — Subir cambios al pre-deploy del servidor de producción
 # Desde: máquina de desarrollo (donde está el código fuente)
-# Hacia: app@192.168.1.25:/home/app/powerfin-deploy/
+# Hacia: app@100.97.47.123 (Tailscale) o app@192.168.1.25 (LAN oficina):/home/app/powerfin-deploy/
 #
 # USO:
-#   ./scripts/deploy-to-server.sh frontend   → sube pos/src/
+#   ./scripts/deploy-to-server.sh frontend         → sube pos/src/ (por Tailscale)
+#   ./scripts/deploy-to-server.sh frontend local   → sube pos/src/ (por LAN oficina)
 #   ./scripts/deploy-to-server.sh admin      → sube admin/src/
 #   ./scripts/deploy-to-server.sh backend    → sube pos_backend/app/
 #   ./scripts/deploy-to-server.sh fusion     → compila y sube JAR
 #   ./scripts/deploy-to-server.sh all        → los 4
+#
+# Host por defecto: REMOTE (Tailscale). Alternativas:
+#   ./scripts/deploy-to-server.sh <target> local     → IP LAN oficina (192.168.1.25)
+#   DEPLOY_HOST=local ./scripts/deploy-to-server.sh <target>
 #
 # Luego en el servidor:
 #   powerfin-gas pending       → ver qué llegó
@@ -22,11 +27,38 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-#LOCAL
-##SERVER="app@192.168.1.25"
+# ── Servidor de producción — 2 rutas de acceso ────────────────────
+# REMOTE → Tailscale (100.97.47.123): desde cualquier lugar
+# LOCAL  → LAN oficina (192.168.1.25): usar si Tailscale está caído y estás en la oficina
+REMOTE_SERVER="app@100.97.47.123"
+LOCAL_SERVER="app@192.168.1.25"
 
-#REMOTE
-SERVER="app@100.97.47.123"
+# Selección de host: argumento opcional (local|remote) o env DEPLOY_HOST
+DEPLOY_HOST="${DEPLOY_HOST:-remote}"
+
+resolve_server() {
+    case "$1" in
+        local)  SERVER="$LOCAL_SERVER" ;;
+        remote) SERVER="$REMOTE_SERVER" ;;
+        *) echo "Host inválido: '$1' (usa 'local' o 'remote')" >&2; exit 1 ;;
+    esac
+}
+
+# ── Verificación de conectividad antes de subir ───────────────────
+check_connectivity() {
+    info "Verificando conexión con $SERVER ..."
+    if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$SERVER" true 2>/dev/null; then
+        warn "No se pudo conectar a $SERVER"
+        if [ "$DEPLOY_HOST" = "remote" ]; then
+            echo "  → ¿Tailscale está caído? Si estás en la oficina usá la IP local:"
+            echo "      ./scripts/deploy-to-server.sh ${TARGET:-<target>} local"
+        else
+            echo "  → Verificá que estés en la red de la oficina (192.168.1.x)."
+        fi
+        exit 1
+    fi
+    ok "Conexión OK ($SERVER)"
+}
 
 PRE_DEPLOY="/home/app/powerfin-deploy"
 
@@ -129,7 +161,38 @@ deploy_admin() {
 }
 
 # ── Main ────────────────────────────────────────────────────────────
-case "${1:-}" in
+TARGET="${1:-}"
+HOST_ARG="${2:-$DEPLOY_HOST}"
+resolve_server "$HOST_ARG"
+DEPLOY_HOST="$HOST_ARG"  # host efectivo (para mensajes de ayuda)
+
+usage() {
+    echo "Uso: $0 [frontend|admin|backend|fusion|all] [local|remote]"
+    echo ""
+    echo "  1. $0 frontend    → sube pos/src/"
+    echo "  2. $0 admin       → sube admin/src/ + config"
+    echo "  3. $0 backend     → sube pos_backend/app/"
+    echo "  4. $0 fusion      → compila y sube JAR"
+    echo "  5. $0 all         → los 4 juntos"
+    echo ""
+    echo "  Host (opcional, por defecto remote/Tailscale):"
+    echo "    $0 frontend local   → IP LAN oficina 192.168.1.25 (Tailscale caído)"
+    echo "    DEPLOY_HOST=local $0 frontend   → lo mismo por variable de entorno"
+    echo ""
+    echo "  Luego en el servidor:"
+    echo "    powerfin-gas pending"
+    echo "    powerfin-gas deploy-all"
+    echo "    powerfin-gas status"
+}
+
+if [ -z "$TARGET" ]; then
+    usage
+    exit 1
+fi
+
+check_connectivity
+
+case "$TARGET" in
     frontend)
         deploy_frontend
         ;;
@@ -154,18 +217,7 @@ case "${1:-}" in
         echo "  powerfin-gas status        ← verificar"
         ;;
     *)
-        echo "Uso: $0 [frontend|admin|backend|fusion|all]"
-        echo ""
-        echo "  1. $0 frontend    → sube pos/src/"
-        echo "  2. $0 admin       → sube admin/src/ + config"
-        echo "  3. $0 backend     → sube pos_backend/app/"
-        echo "  4. $0 fusion      → compila y sube JAR"
-        echo "  5. $0 all         → los 4 juntos"
-        echo ""
-        echo "  Luego en el servidor:"
-        echo "    powerfin-gas pending"
-        echo "    powerfin-gas deploy-all"
-        echo "    powerfin-gas status"
+        usage
         exit 1
         ;;
 esac

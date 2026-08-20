@@ -1,6 +1,26 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-08-05) — v0.35.5
+## Estado actual (2026-08-20) — v0.35.6
+
+### ✅ Logros de la sesión (20-ago-2026)
+
+#### Fix: reimpresión de ticket respeta fecha/hora del despacho ✅
+- Bug: al reimprimir desde Historial, el ticket usaba la fecha/hora del momento de reimprimir
+  (`new Date()`) en vez de la fecha/hora original del despacho.
+- Fix: `handleReprint()` usa `order.created_at` (el mismo valor que muestra el historial),
+  con fallback a hora actual si viniera vacío.
+- Mismo patrón corregido en `reprintClose()`: usa `raw.closed_at` (fecha real del cierre).
+- Archivo: `pos/src/routes/(pos)/history/+page.svelte`
+- Validación: `npm run check` 0 errores + tests 41/41 ✅
+- Deploy: `./scripts/deploy-to-server.sh frontend` + `powerfin-gas deploy-frontend`
+
+#### Deploy: 2 IPs de acceso (Tailscale + LAN oficina) ✅
+- `deploy-to-server.sh`: default Tailscale `app@100.97.47.123`;
+  `./scripts/deploy-to-server.sh <target> local` → LAN `app@192.168.1.25`
+- Check de conectividad previo con hint claro si Tailscale está caído
+- `docs/DEPLOY_QUICK.md` actualizado con ambas rutas
+
+---
 
 ### ✅ Logros de la sesión (05-ago-2026)
 

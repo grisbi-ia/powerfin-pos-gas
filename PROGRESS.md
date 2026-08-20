@@ -1,6 +1,38 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-08-05** · Rama: `main` · HEAD: `v0.35.5`
+> Última actualización: **2026-08-20** · Rama: `main` · HEAD: `v0.35.6`
+
+---
+
+## v0.35.6 (2026-08-20) — Fix: reimpresión respeta fecha/hora original + deploy dual IP
+
+### Fix: reimpresión de ticket de despacho con fecha/hora original
+- Bug: al reimprimir un ticket desde Historial, `handleReprint()` usaba `new Date()`
+  (fecha/hora del momento de reimprimir) en vez de la fecha/hora del despacho.
+- Fix: usar `order.created_at` (mismo valor que muestra el historial) con fallback a
+  hora actual si viniera vacío. La impresión original (al momento del cobro) no cambia.
+- Fix adicional (mismo patrón, mismo archivo): `reprintClose()` usa `raw.closed_at`
+  (fecha real del cierre de turno) en lugar de `new Date()`.
+- Verificado: FusionBridge solo pasa `date`/`time` del frontend (no genera fecha propia);
+  la reimpresión de movimientos de caja ya usaba `m.created_at` (correcto).
+- Archivo: `pos/src/routes/(pos)/history/+page.svelte`
+- Validación: `npm run check` 0 errores + tests 41/41 ✅
+
+### Deploy: 2 IPs de acceso al servidor (Tailscale + LAN oficina)
+- `scripts/deploy-to-server.sh`: `REMOTE_SERVER="app@100.97.47.123"` (Tailscale, default)
+  y `LOCAL_SERVER="app@192.168.1.25"` (LAN oficina — si Tailscale está caído).
+- Nuevo argumento: `./scripts/deploy-to-server.sh <target> local` o por variable de
+  entorno `DEPLOY_HOST=local ./scripts/deploy-to-server.sh <target>`.
+- Verificación de conectividad previa (5s timeout) con mensaje claro si falla:
+  "¿Tailscale está caído? usá `local`" / "verificá la red de la oficina".
+- Host inválido rechazado; sin argumentos muestra uso sin intentar conectar.
+- `docs/DEPLOY_QUICK.md`: documentadas ambas rutas (tabla, Etapa 1, Etapa 2, instalación).
+
+### Archivos modificados
+- `pos/src/routes/(pos)/history/+page.svelte` — fix reimpresión (despacho + cierre turno)
+- `scripts/deploy-to-server.sh` — IP dual + check de conectividad + selector de host
+- `docs/DEPLOY_QUICK.md` — documentación de las 2 IPs
+- `PROGRESS.md`, `NEXT_SESSION.md` — actualizados
 
 ---
 

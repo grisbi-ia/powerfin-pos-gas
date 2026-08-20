@@ -139,6 +139,8 @@
 		const printerIp = dispenser?.printer_ip || '';
 		const printerPort = dispenser?.printer_port || 9100;
 		const loc = $config.location;
+		// Reprint must respect the dispatch's original date/time, not the reprint moment
+		const dispatchTime = order.created_at ? new Date(order.created_at) : new Date();
 
 		printing = order.order_id;
 		printError = null;
@@ -185,9 +187,9 @@
 					fiscalRegime: loc?.fiscal_regime ?? '',
 					sriEnvironment: loc?.sri_environment ?? 0,
 					emissionType: loc?.emission_type ?? 0,
-					// Date/time
-					date: new Date().toLocaleDateString('es-EC'),
-					time: new Date().toLocaleTimeString('es-EC'),
+					// Date/time — from the dispatch record, not the reprint moment
+					date: dispatchTime.toLocaleDateString('es-EC'),
+					time: dispatchTime.toLocaleTimeString('es-EC'),
 					shiftId: String(order.shift_id ?? ''),
 					cashierName: order.cashier_name ?? '',
 					creditStatus: order.credit_status ?? '',
@@ -249,9 +251,11 @@
 			const printerIp = cfg?.cash_printer_ip || (cfg?.dispensers?.[0]?.printer_ip) || '';
 			const printerPort = cfg?.cash_printer_port || (cfg?.dispensers?.[0]?.printer_port) || 9100;
 			// Map backend snake_case to FusionBridge camelCase
+			// Reprint must respect the shift's close date/time, not the reprint moment
+			const closeTime = (raw as any).closed_at ? new Date((raw as any).closed_at) : new Date();
 			const data: Record<string, unknown> = {
-				date: new Date().toLocaleDateString('es-EC'),
-				time: new Date().toLocaleTimeString('es-EC'),
+				date: closeTime.toLocaleDateString('es-EC'),
+				time: closeTime.toLocaleTimeString('es-EC'),
 				locationName: loc?.name || '',
 				locationAddress: loc?.address || '',
 				locationRuc: loc?.ruc || '',

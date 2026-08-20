@@ -1,6 +1,13 @@
 # Deploy rápido — Subir cambios a producción
 
-> Servidor: **192.168.1.25** · Usuario: **`app`** · OS: Debian 13
+> Servidor: **Debian 13** · Usuario: **`app`**
+>
+> **2 rutas de acceso al servidor:**
+>
+> | Ruta | IP | Cuándo usarla |
+> |---|---|---|
+> | **REMOTE** (Tailscale) | `100.97.47.123` | Desde cualquier lugar (por defecto) |
+> | **LOCAL** (LAN oficina) | `192.168.1.25` | En la oficina y Tailscale está caído |
 
 ## ⚠️ Regla de oro
 
@@ -28,8 +35,13 @@ Nunca subas:
 
 ### Etapa 1 — Desde desarrollo (subir al pre-deploy)
 
+> El script usa **Tailscale (`100.97.47.123`) por defecto**. Si estás en la
+> oficina y Tailscale está caído, agrega `local` al final para usar la IP de
+> la LAN (`192.168.1.25`). El script verifica la conexión antes de subir y te
+> avisa si falla.
+
 ```bash
-# Subir solo lo que cambió
+# Subir solo lo que cambió (por Tailscale)
 ./scripts/deploy-to-server.sh frontend
 ./scripts/deploy-to-server.sh admin
 ./scripts/deploy-to-server.sh backend
@@ -37,11 +49,20 @@ Nunca subas:
 
 # O todo junto
 ./scripts/deploy-to-server.sh all
+
+# ── Tailscale caído: misma salida por IP local de la oficina ──
+./scripts/deploy-to-server.sh frontend local
+./scripts/deploy-to-server.sh all local
+# (o con variable de entorno: DEPLOY_HOST=local ./scripts/deploy-to-server.sh frontend)
 ```
 
 ### Etapa 2 — Desde el servidor (aplicar cambios)
 
 ```bash
+# Desde fuera de la oficina (Tailscale)
+ssh app@100.97.47.123
+
+# En la oficina, si Tailscale está caído (LAN directa)
 ssh app@192.168.1.25
 
 powerfin-gas pending       # ver qué archivos llegaron
@@ -77,9 +98,10 @@ powerfin-gas clean all          powerfin-gas help
 ## Instalación inicial (primera vez en el servidor)
 
 ```bash
-# Copiar el binario al servidor
-scp scripts/powerfin-gas app@192.168.1.25:/tmp/
-ssh app@192.168.1.25
+# Copiar el binario al servidor (LAN oficina o Tailscale, lo que esté disponible)
+scp scripts/powerfin-gas app@192.168.1.25:/tmp/       # en la oficina
+scp scripts/powerfin-gas app@100.97.47.123:/tmp/      # por Tailscale
+ssh app@192.168.1.25  # o app@100.97.47.123
 sudo mv /tmp/powerfin-gas /usr/local/bin/powerfin-gas
 sudo chmod +x /usr/local/bin/powerfin-gas
 
