@@ -44,22 +44,6 @@ resolve_server() {
     esac
 }
 
-# ── Verificación de conectividad antes de subir ───────────────────
-check_connectivity() {
-    info "Verificando conexión con $SERVER ..."
-    if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$SERVER" true 2>/dev/null; then
-        warn "No se pudo conectar a $SERVER"
-        if [ "$DEPLOY_HOST" = "remote" ]; then
-            echo "  → ¿Tailscale está caído? Si estás en la oficina usá la IP local:"
-            echo "      ./scripts/deploy-to-server.sh ${TARGET:-<target>} local"
-        else
-            echo "  → Verificá que estés en la red de la oficina (192.168.1.x)."
-        fi
-        exit 1
-    fi
-    ok "Conexión OK ($SERVER)"
-}
-
 PRE_DEPLOY="/home/app/powerfin-deploy"
 
 # Colores
@@ -189,8 +173,6 @@ if [ -z "$TARGET" ]; then
     usage
     exit 1
 fi
-
-check_connectivity
 
 case "$TARGET" in
     frontend)
