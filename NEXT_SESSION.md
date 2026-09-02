@@ -49,7 +49,7 @@
 
 #### CODE_REVIEW_FINDINGS.md generado ✅
 - Revisión por 4 módulos (pos_backend, fusion-bridge, pos/, admin/)
-- 19 hallazgos: 7🔴 alta, 8🟡 media, 4🟢 baja
+- 26 hallazgos: 8🔴 alta, 9🟡 media, 9🟢 baja
 - Ver documento para detalle completo
 
 ---
@@ -163,7 +163,7 @@
 
 ```
 🔴 ☐ 0. CODE_REVIEW — Revisar y resolver CODE_REVIEW_FINDINGS.md
-   · 19 hallazgos: 7 alta prioridad, 8 media, 4 baja
+   · 26 hallazgos: 8 alta prioridad, 9 media, 9 baja
    · Revisar uno por uno, marcar [x] al resolver o documentar decisión
    · Prioridad #1: posible doble conexión TCP en FusionBridge
    · Prioridad #2: secuencial fiscal se pierde en silencio

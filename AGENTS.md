@@ -75,8 +75,11 @@ docs: ...
 chore: ...
 ```
 
-Branches: `main` (stable), `develop` (WIP), `feature/*`, `fix/*`
-Tags per phase: v0.1.0, v0.2.0, ..., v1.0.0
+Branches: `main` (stable — rama activa real, todo el trabajo aterriza aquí),
+`feature/*`, `fix/*` (short-lived opcionales). Tags por fase: v0.1.0 ... v0.35.6, ..., v1.0.0
+
+> Nota: aunque el flujo original contemplaba `develop` como WIP, en la práctica el
+> proyecto trabaja directo sobre `main` con tags por versión. Deploy desde `main` tras tests.
 
 ## Git versioning — mandatory after every phase
 
@@ -95,12 +98,13 @@ PATCH (0.0.X)  — bug fix or minor improvement
    FusionBridge:  ./mvnw test
    POS Backend:   cd pos_backend && source venv/bin/activate && pytest
    Powerfin POS:  npm run test && npm run check
+   Powerfin Admin: cd admin && npm run check (y npm run build si toca frontend admin)
 2. Update ROADMAP.md → mark completed tasks with [x], advance phase
 3. Update AGENTS.md → if changed conventions, new rules, or phase status
 4. Commit all changes
 5. Tag the version:
    git tag -a v0.1.0 -m "Phase 1: FusionBridge TCP connection"
-   git push origin develop --tags
+   git push origin main --tags
 ```
 
 **If any test fails → do NOT version, fix first.**
@@ -110,25 +114,37 @@ Nunca se versiona código roto.
 
 ```
 powerfin_pos_gas/
+├── NEXT_SESSION.md              ← Estado vivo de la sesión (fuente #1 del día a día)
+├── CODE_REVIEW_FINDINGS.md      ← 26 hallazgos de revisión por módulo (8🔴/9🟡/9🟢)
 ├── docs/                        ← authoritative reference (read before coding)
-│   ├── admin/                   ← 🆕 Admin-specific docs
+│   ├── admin/                   ← Admin docs
 │   │   ├── ADMIN_UI.md          ← Admin interface architecture
-│   │   ├── ADMIN_ROADMAP.md     ← Admin progress tracker (checklist vivo)
-│   │   └── UX_STANDARDS.md      ← UI/UX standards (colors, components, patterns)
+│   │   ├── ADMIN_ROADMAP.md     ← Admin progress tracker (checklist vivo, fases 12-17 ✅)
+│   │   ├── UX_STANDARDS.md      ← UI/UX standards (PRESCRIPTIVO para admin/)
+│   │   ├── CLOUDFLARE_TUNNEL.md ← Túnel Cloudflare + DNS + WAF en producción
+│   │   └── DASHBOARD_DIARIO.md  ← Dashboard Diario: 3 modos + comparación multi-período
 │   ├── FUSION_PROTOCOL.md       ← TCP protocol (validated real data)
 │   ├── FUSION_BRIDGE.md         ← Quarkus architecture + code sketches
 │   ├── POWERFIN_POS.md          ← SvelteKit architecture + code sketches
 │   ├── API_CONTRACT.md          ← endpoint contracts between all systems
-│   ├── INFRAESTRUCTURA.md       ← Debian setup, systemd, Nginx, Cloudflare, deploy
-│   ├── FLUJOS_OPERATIVOS.md     ← dispatcher workflows + mockups
 │   ├── ROADMAP.md               ← 17-phase development plan
 │   ├── POS_BACKEND.md           ← POS Backend schema, APIs, business rules
-│   └── IDENTITY_API.md          ← External identity lookup (Sercobaco/SRI)
-├── pos_backend/                 ← Python FastAPI backend
+│   ├── IDENTITY_API.md          ← External identity lookup (Sercobaco/SRI)
+│   ├── DEPLOY.md / DEPLOY_QUICK.md  ← Deploy dual IP (Tailscale + LAN)
+│   ├── DB_ACCESS.md             ← Acceso BD producción (lectura agent_llm)
+│   ├── DISPATCH_AUDIT.md        ← Auditoría: 40 guardias del flujo de despacho
+│   ├── KEY49-INTEGRATION-GUIDE.md / SOP_REENVIO_SRI_KEY49.md ← SRI electrónico
+│   └── (más: CUADRE_CAJA, TOPOLOGIA_DISPENSADORES, SISTEMA_PRUEBAS, SOP_*, ...)
+├── pos_backend/                 ← Python FastAPI backend (+ /api/admin/*)
 ├── fusion-bridge/               ← Quarkus sub-project (Java 21)
 ├── pos/                         ← SvelteKit sub-project — Powerfin POS
-└── admin/                       ← 🆕 SvelteKit sub-project — Powerfin Admin
+├── admin/                       ← SvelteKit sub-project — Powerfin Admin (independiente)
+└── scripts/                     ← deploy-to-server.sh (frontend/backend/admin/all)
 ```
+
+> 📌 **Estado vivo:** NEXT_SESSION.md y docs/admin/ADMIN_ROADMAP.md se actualizan en cada
+> sesión. AGENTS.md documenta convenciones y el resumen de fases — si hay conflicto,
+> manda el documento más reciente.
 
 ## Current state
 
@@ -210,60 +226,77 @@ Ready for production integration with POS frontend.
 - [x] powerfin-gas backup-db con pg_dump y auto-limpieza
 - [x] 7 tests backend + 41 frontend (0 regresiones)
 
-**Pendiente.**
-- [ ] Pago mixto (efectivo + tarjeta)
-- [ ] Flujo de crédito en el POS (selector en SaleWizard)
-- [ ] Roles/permisos enforcement real
-- [ ] identity_service.py — mover URL y token a system_config
-- [ ] Despachos ya enviados al SRI con $0.00 — conciliar manualmente
-
-**Phase 12 — Admin Backend CRUD + Auth (v0.22.0 — in progress).**
+**Phase 12 — Admin Backend CRUD + Auth (completed — v0.25.0).** 11 módulos CRUD,
+51 endpoints admin, 238 tests. Detalle vivo en docs/admin/ADMIN_ROADMAP.md.
 - [x] POST /api/admin/auth/login — login admin (username+password, JWT 4h)
-- [x] Admin auth guard + require_permission(resource, action)
-- [x] Users CRUD: GET (list/search/paginate), POST, GET/:id, PUT, DELETE (soft)
-- [ ] Roles CRUD: GET, POST, PUT
-- [ ] Products CRUD: GET, POST, PUT, DELETE
-- [ ] Grades CRUD: GET, POST, PUT, DELETE
-- [ ] Price-lists CRUD + items: GET, POST, PUT, DELETE
-- [ ] Dispensers + hoses CRUD: GET, POST, PUT
-- [ ] Emission-points CRUD: GET, POST, PUT
-- [ ] GET/PUT: company-info
-- [ ] GET/PUT: system-config (by key)
-- [ ] Payment-methods CRUD: GET, POST, PUT
-- [x] Paginación y búsqueda en endpoints implementados
-- [x] 36 tests admin (10 auth + 26 users)
-- [x] 93 tests POS intactos — sin regresiones
+- [x] Admin auth guard + require_permission(resource, action) + convención {'all': true}
+- [x] Users CRUD (search/paginate/sort, bcrypt, soft-delete)
+- [x] Roles CRUD (code inmutable ^[A-Z_]+$, permissions_json)
+- [x] Products CRUD (soft-delete, FK validation) + Grades CRUD
+- [x] Price-lists CRUD + items · Dispensers + hoses CRUD
+- [x] Emission-points CRUD · Payment-methods CRUD
+- [x] GET/PUT company-info + system-config (por key)
+- [x] Paginación obligatoria + búsqueda en todos los endpoints admin
 
-**Phase 13 — Admin Backend Dashboard + Reportes (v0.23.0).**
-- [ ] Dashboard: summary, sales-by-day, sales-by-product, sales-by-payment
-- [ ] Dashboard: top-customers, top-products
-- [ ] Reports: sales, dispatches, shifts, cash-summary
-- [ ] Export: PDF (reportlab) + Excel (openpyxl)
+**Phase 13 — Admin Backend Dashboard + Reportes (completed — v0.26.0).**
+- [x] Dashboard: summary, sales-by-day/product/payment, top-customers, top-products
+- [x] Evolution (daily/monthly/annual) + compare + top-periods + gallons-by-product
+- [x] Reports: sales, dispatches, shifts, cash-summary (con export xlsx/pdf)
+- [x] Export engine: PDF (reportlab) + Excel (openpyxl); Response (no StreamingResponse)
 
-**Phase 14 — Admin Frontend Layout + CRUD (v0.24.0).**
-- [ ] Proyecto SvelteKit independiente en admin/
-- [ ] Layout responsive: AdminShell + Sidebar + Topbar
-- [ ] Auth: login admin + JWT interceptor + route guarding
-- [ ] DataTable con sort, paginate, search, responsive (→ DataCard)
-- [ ] Pantallas CRUD: users, products, grades, prices, dispensers, etc.
+**Phase 14 — Admin Frontend Layout + CRUD (completed — v0.27.0/0.29.0, SvelteKit 5).**
+- [x] Proyecto SvelteKit independiente en admin/ (no comparte nada con pos/)
+- [x] Layout responsive: AdminShell + Sidebar + Topbar · login + JWT interceptor + guards
+- [x] DataTable con sort/paginate/search, responsive → DataCard
+- [x] Pantallas CRUD completas (users, roles, products, grades, prices, dispensers, etc.)
+- [x] Compat Svelte 5: $effect en vez de onMount, toast nativo (sin svelte-sonner)
+- [x] Rebrand "Powerfin GAS — Admin" (nombre empresa en sidebar/topbar)
 
-**Phase 15 — Admin Frontend Dashboard (v0.25.0).**
-- [ ] KPI cards + date range picker
-- [ ] Chart.js: sales-by-day (línea), products (donut), payment (pie)
-- [ ] Top customers, top products, responsive charts
+**Phase 15 — Admin Frontend Dashboard (completed — v0.28.0/0.33.0).**
+- [x] KPI cards + date range picker (default "Hoy")
+- [x] Chart.js: sales-by-day (línea), products (donut), payment (pie)
+- [x] Dashboard Diario: 3 modos (Hoy/Semana/Mes) + comparación multi-período
+- [x] Top customers, top products, responsive charts
 
-**Phase 16 — Admin Frontend Reportes + Export (v0.26.0).**
-- [ ] Pantallas de reportes con filtros avanzados
-- [ ] ExportButton → PDF / Excel con feedback de descarga
+**Phase 16 — Admin Frontend Reportes + Export (completed — v0.30.0).**
+- [x] Pantallas de reportes con filtros avanzados
+- [x] ExportButton → PDF / Excel (POST) con feedback de descarga
+- [x] Columnas Turno/Usuario/Contrato/Galones en ventas; Efectivo Actual en turnos
+- [x] Fechas en zona horaria Ecuador (UTC-5) en tablas y exports
 
-**Phase 17 — Cloudflare + Deploy + Go-live (v1.0.0 — en progreso v0.31.0).**
-- [x] Deploy script actualizado (deploy-to-server.sh + powerfin-gas con admin)
-- [x] Admin funcionando en producción (neoguayas2, :5174)
-- [x] Alembic migrations en git
-- [x] Cloudflare Tunnel + DNS + WAF
-- [ ] Nginx config con rate limiting
-- [ ] Prueba E2E: admin → POS
-- [x] Documentación final (docs/admin/CLOUDFLARE_TUNNEL.md)
+**Phase 17 — Cloudflare + Deploy + Go-live (completed — v0.32.0).** 🎉 En producción.
+- [x] Deploy script (deploy-to-server.sh + powerfin-gas) con soporte admin
+- [x] Admin en producción (NEOGAS, :5174) · Alembic migrations en git + auto-run al deployar
+- [x] Cloudflare Tunnel + DNS + WAF · Deploy dual IP (Tailscale default / LAN con `local`)
+- [x] Documentación (docs/admin/CLOUDFLARE_TUNNEL.md, DEPLOY_QUICK.md)
+- [ ] Nginx rate limiting en login — pendiente
+- [ ] Prueba E2E formal: admin → POS — pendiente
+
+**Post-Phase 17 — Operación y hardening (v0.33.0 → v0.35.6).**
+- [x] v0.34.0: crédito sector público (GAD PAUTE, PENDING_BULK_INVOICE), cleanup de
+      huérfanos, ticket de crédito con firma + contract_code
+- [x] v0.35.0: reportes admin con Turno/Usuario/Contrato, Efectivo Actual, timezone UTC-5
+- [x] v0.35.1: fix race cleanup (verifica pump vía FusionBridge, thresholds progresivos
+      FULL=30min / MONEY|VOLUME=15min / IDLE=2min)
+- [x] v0.35.2: limpieza SRI/Key49 (381 → 0 accionables), fix PENDING_BULK_INVOICE,
+      cash summary, idle cancel
+- [x] v0.35.3: close_shift guard — bloquea cierre si hay COMPLETED sin cobrar
+- [x] v0.35.4: fix gráficas mensuales (comparación por día del mes)
+- [x] v0.35.5: fix rebote cobro (estado `collecting`), reconciliación SRI, medidores mecánicos
+- [x] v0.35.6: reimpresión respeta fecha/hora original del despacho · deploy dual IP
+
+**Próximas tareas (fuente viva: NEXT_SESSION.md).**
+- [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP
+      FusionBridge, 🔴 #2 secuencial fiscal perdido en silencio, 🔴 #4 credenciales
+      hardcodeadas en identity_service.py)
+- [ ] UI flujo de crédito POS: simplificar botones + indicador persistente "modo crédito"
+- [ ] Admin: sección "Despachos con problemas" (cancelar/restaurar sin SQL manual)
+- [ ] Admin: editar precios inline en price-lists
+- [ ] credit_contracts: agregar payment_method_id (sin buscar por código)
+- [ ] Precios programados — cambio automático a las 00:00
+- [ ] Pago mixto (efectivo + tarjeta)
+- [ ] identity_service.py — mover URL y token a system_config
+- [ ] Nginx rate limiting login + prueba E2E admin → POS
 
 ## When building
 
@@ -271,20 +304,25 @@ Ready for production integration with POS frontend.
 - Stack: FastAPI + SQLAlchemy 2.0 (async) + asyncpg + Alembic
 - Virtual env: `pos_backend/venv/`
 - Run: `source venv/bin/activate && uvicorn app.main:app --reload --port 8080`
-- Test: `pytest` (93 tests)
-- DB: `localhost:5433/powerfin_gas` (user: postgres, pass: 1234abcd)
+- Test: `pytest` (421 tests — endpoints POS + admin /api/admin/*)
+- DB dev: `localhost:5433/powerfin_gas` (user: postgres, pass: 1234abcd)
 - Test DB: `localhost:5433/powerfin_gas_test`
+- DB prod (lectura): `100.97.47.123:5432` (Tailscale) / `192.168.1.25:5432` (LAN)
+  — user: agent_llm, ver docs/DB_ACCESS.md
+- Medidores mecánicos: modelo + lecturas vinculadas a turnos (abrir/cerrar turno POS)
 
 ### FusionBridge (Java)
 - Java package base: `com.powerfin.pos.bridge.*`
 - Quarkus annotations: `@ApplicationScoped`, `@RunOnVirtualThread` (I/O), `@Scheduled`, `@ConfigProperty`
 - Logging: `io.quarkus.logging.Log` — never `System.out.println`
+- Test: `./mvnw test` (67 tests)
 
 ### Powerfin POS (SvelteKit)
 - Svelte components: PascalCase (e.g. `DispenserCard.svelte`), TS files: kebab-case
 - No business logic in Svelte components — use `$lib/api/` and stores
 - Print policy config: `PRINTER_POLICY` env var (ALWAYS | ASK | NEVER)
 - ESC/POS library: `escpos-coffee` 4.1.0
+- Test: `npm run test && npm run check` (41 vitest tests, 0 TS errors)
 
 ### Powerfin Admin (SvelteKit) — proyecto independiente
 - Admin es un proyecto SvelteKit **separado** en `admin/`
@@ -299,7 +337,22 @@ Ready for production integration with POS frontend.
 - Roles: ADMIN (full), SUPERVISOR (read+export), DISPATCHER (sin acceso)
 - Soft-delete para entidades con integridad referencial (users, products, grades)
 - Paginación obligatoria en todos los endpoints admin
+- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 421)
 - Deploy: Nginx location /admin → SPA estática, independiente de /pos
+
+## Deploy (resumen — ver docs/DEPLOY_QUICK.md)
+
+```bash
+# Desde la máquina dev (2 rutas según red)
+./scripts/deploy-to-server.sh all          # → Tailscale app@100.97.47.123 (default)
+./scripts/deploy-to-server.sh all local    # → LAN app@192.168.1.25 (solo oficina)
+
+# En el servidor
+powerfin-gas deploy-all        # backend + frontend + admin (auto-run alembic)
+powerfin-gas status            # servicios + health :8080 :8090 :5173 :5174
+powerfin-gas backup-db         # pg_dump + auto-limpieza
+powerfin-gas migrate-db        # migraciones Alembic manuales si no hay auto
+```
 
 ## Connectivity tests (from server)
 
@@ -320,3 +373,6 @@ curl -s http://localhost:8090/health   # FusionBridge
 # Build admin (independiente)
 cd admin && npm run build
 ```
+
+> ⚠️ Las IPs de los ejemplos son de la LAN de oficina (192.168.1.x). Las reales se
+> configuran en BD (dispensers.printer_ip/printer_port, system_config). No hardcodear.
