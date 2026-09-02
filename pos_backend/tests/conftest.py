@@ -102,6 +102,7 @@ async def _seed_data(db: AsyncSession):
     db.add(SystemConfig(key="key49_base_url", value="https://key49.apx5.com/v1"))
     db.add(SystemConfig(key="key49_sandbox", value="true"))
     db.add(SystemConfig(key="key49_enabled", value="true"))
+    db.add(SystemConfig(key="powerfin_system_provider_ruc", value="0190411826001"))
 
     admin_role = Role(code="ADMIN", name="Admin")
     disp_role = Role(code="DISPATCHER", name="Despachador")

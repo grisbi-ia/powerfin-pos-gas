@@ -62,6 +62,23 @@ async def _get_key49_config(db: AsyncSession) -> dict:
     }
 
 
+async def _get_provider_ruc(db: AsyncSession) -> str:
+    """RUC of the software provider (GRISBI) — SRI requires it as
+    'RUC Proveedor' in additional_info on EVERY invoice (individual + global).
+
+    SELECT value FROM system_config WHERE key = 'powerfin_system_provider_ruc'
+
+    Included unconditionally in the payload: if the key is missing/empty the
+    field is still sent so Key49/SRI surfaces the error (no silent omission).
+    """
+    from app.models.company import SystemConfig
+    result = await db.execute(
+        select(SystemConfig).where(SystemConfig.key == "powerfin_system_provider_ruc")
+    )
+    cfg = result.scalar_one_or_none()
+    return (cfg.value or "").strip() if cfg else ""
+
+
 def _sri_id_type(person_id_type: str) -> str:
     return ID_TYPE_MAP.get(person_id_type.upper(), "05")
 
@@ -205,6 +222,7 @@ async def _build_invoice_payload(
         "additional_info": {
             "order_id": dispatch.order_id,
             "placa": await _get_plate(db, dispatch),
+            "RUC Proveedor": await _get_provider_ruc(db),
         },
     }
     return payload
@@ -568,6 +586,7 @@ async def emitir_factura_global(
             "time_unit": "days",
         }],
         "additional_info": {
+            "RUC Proveedor": await _get_provider_ruc(db),
             "contract_code": contract.contract_code,
             "contract_type": "SECTOR_PUBLICO",
             "dispatch_count": str(len(dispatches)),
