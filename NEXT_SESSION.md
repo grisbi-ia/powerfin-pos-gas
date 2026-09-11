@@ -20,14 +20,26 @@
   (cap 500 chars, columna `sri_messages`) en `emitir_factura` y
   `emitir_factura_global`. 6 tests nuevos en `test_key49_error_message.py`.
 
-### ⏳ Pendiente: recuperación de ~2.190 facturas PENDING
-- **234** con <24h (se reemiten con el retry normal) y **~1.959** con >24h
-  (el retry actual las marca `FAILED "Vencida"` porque el SRI rechaza fecha pasada).
-- **Plan propuesto:** script por lotes que regenera `access_key` con fecha de HOY
-  y reemite, con reconciliación previa contra Key49 vía
-  `GET /v1/invoices?access_key=…` para no duplicar.
-- ⚠️ **Requiere aprobación explícita antes de ejecutar en prod** (decisión fiscal:
-  facturas de ventas de días anteriores quedarían emitidas con fecha de hoy).
+### ⏳ Pendiente: recuperación de facturas PENDING (clasificadas)
+El conjunto PENDING **no es homogéneo**. Clasificación real (excluye `CANCELLED` y
+`PENDING_BULK_INVOICE`):
+- **588 ya están en Key49** (`key49_invoice_id` presente) → el estado en nuestra BD
+  está desactualizado. **Solo sincronizar** (NO reemitir: duplicaría).
+- **1.441 sin factura** → reemitir. Desglose: `2026-07`: 7, `2026-08`: 3,
+  `2026-09`: 1.431 (la cola del PLAN_EXPIRED).
+- **140 `PENDING_BULK_INVOICE`** (julio, sector público/GAD) → van por factura
+  **global**, no individual. Excluidos del script.
+
+Herramienta: `pos_backend/scripts/recover_pending_invoices.py` (DRY-RUN por defecto,
+reconciliación contra Key49 por `key49_invoice_id` y `?access_key=`, lotes con
+`--limit`, ritmo con `--delay`, modos `--classify-only` / `--sync-existing`).
+Regenera el `access_key` con fecha de HOY porque el SRI rechaza fechas pasadas.
+
+Flujo recomendado: `--classify-only` → `--limit 5` (dry-run) → `--limit 5 --execute`
+→ `--sync-existing --execute` → crecer lotes.
+
+⚠️ **Requiere aprobación explícita antes de ejecutar en prod** (decisión fiscal:
+facturas de ventas de días anteriores quedarían emitidas con fecha de hoy).
 
 ---
 
