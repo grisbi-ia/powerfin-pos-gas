@@ -79,6 +79,43 @@ async def _get_provider_ruc(db: AsyncSession) -> str:
     return (cfg.value or "").strip() if cfg else ""
 
 
+def _key49_error_message(resp: httpx.Response) -> str:
+    """Build a readable message from a Key49 error response.
+
+    Key49 returns structured errors like {"error": {"code": "PLAN_EXPIRED",
+    "message": "Plan expirado"}}. Capture code + message (+ validation
+    details) so operational failures are visible in sri_messages instead of
+    a bare HTTP status code (which hides the real cause).
+    """
+    try:
+        body = resp.json()
+    except Exception:
+        return f"Key49 HTTP {resp.status_code}: {resp.text[:300]}"
+
+    err = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(err, dict):
+        return f"Key49 HTTP {resp.status_code}: {json.dumps(body)[:300]}"
+
+    parts = []
+    if err.get("code"):
+        parts.append(str(err["code"]))
+    if err.get("message"):
+        parts.append(str(err["message"]))
+    details = err.get("details")
+    if isinstance(details, list):
+        detail_msgs = [
+            str(d.get("message") or d.get("field"))
+            for d in details
+            if isinstance(d, dict) and (d.get("message") or d.get("field"))
+        ]
+        if detail_msgs:
+            parts.append("; ".join(detail_msgs))
+
+    text = " \u2014 ".join(parts) if parts else json.dumps(body)[:300]
+    # sri_messages column is String(500) — never exceed it
+    return f"Key49 HTTP {resp.status_code}: {text}"[:500]
+
+
 def _sri_id_type(person_id_type: str) -> str:
     return ID_TYPE_MAP.get(person_id_type.upper(), "05")
 
@@ -309,23 +346,22 @@ async def emitir_factura(
                 return True
 
             elif resp.status_code == 400:
-                err = resp.json()
                 dispatch.sri_status = "FAILED"
-                dispatch.sri_messages = json.dumps(
-                    [d.get("message", "") for d in err.get("error", {}).get("details", [])]
-                ) or err.get("error", {}).get("message", "Validation error")
+                dispatch.sri_messages = json.dumps([_key49_error_message(resp)])
                 await db.commit()
                 return False
 
             elif resp.status_code == 429:
                 dispatch.sri_status = "PENDING"
-                dispatch.sri_messages = json.dumps(["Rate limit — se reintentará"])
+                dispatch.sri_messages = json.dumps(
+                    [_key49_error_message(resp) + " — se reintentará"]
+                )
                 await db.commit()
                 return False
 
             else:
                 dispatch.sri_status = "PENDING"
-                dispatch.sri_messages = json.dumps([f"Key49 HTTP {resp.status_code}"])
+                dispatch.sri_messages = json.dumps([_key49_error_message(resp)])
                 await db.commit()
                 return False
 
@@ -621,18 +657,14 @@ async def emitir_factura_global(
                     "errors": [],
                 }
             elif resp.status_code == 400:
-                err = resp.json()
                 return {
                     "sri_status": "FAILED",
-                    "errors": [
-                        d.get("message", "")
-                        for d in err.get("error", {}).get("details", [])
-                    ],
+                    "errors": [_key49_error_message(resp)],
                 }
             else:
                 return {
                     "sri_status": "PENDING",
-                    "errors": [f"Key49 HTTP {resp.status_code}"],
+                    "errors": [_key49_error_message(resp)],
                 }
 
     except TERMINAL_OUT_OF_SERVICE:

@@ -1,6 +1,37 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-08-20) — v0.35.6
+## Estado actual (2026-09-11) — v0.35.7
+
+### 🔴 Incidente Key49 PLAN_EXPIRED (03→11 sep) — RESUELTO
+- **Síntoma reportado:** "los Campos Adicionales no llegan" en producción.
+- **Realidad:** NO se emitía ninguna factura nueva desde **2026-09-03 15:37**.
+- **Causa raíz:** Key49 respondía `HTTP 402` con body
+  `{"error":{"code":"PLAN_EXPIRED","message":"Plan expirado"}}`.
+  El backend **descartaba el body** y guardaba solo `"Key49 HTTP 402"`, ocultando
+  la causa (1.427 despachos afectados).
+- **Diagnóstico:** `/tmp/k49_probe.py` arma el payload real con
+  `_build_invoice_payload` (BD prod, solo lectura) y hace POST directo a Key49
+  mostrando status + headers + body. Probado **con y sin** `RUC Proveedor` → mismo
+  `402 PLAN_EXPIRED`. El campo nunca fue el problema.
+- **Resolución:** Key49 renovó el plan. Reenvío real del despacho `20458` vía
+  `emitir_factura` → `NOTIFIED` (key49_invoice_id `054239f8-…`). XML del SRI confirma:
+  `<campoAdicional nombre="RUC Proveedor">0190411826001</campoAdicional>`.
+- **Fix:** `_key49_error_message()` captura `code` + `message` + `details`
+  (cap 500 chars, columna `sri_messages`) en `emitir_factura` y
+  `emitir_factura_global`. 6 tests nuevos en `test_key49_error_message.py`.
+
+### ⏳ Pendiente: recuperación de ~2.190 facturas PENDING
+- **234** con <24h (se reemiten con el retry normal) y **~1.959** con >24h
+  (el retry actual las marca `FAILED "Vencida"` porque el SRI rechaza fecha pasada).
+- **Plan propuesto:** script por lotes que regenera `access_key` con fecha de HOY
+  y reemite, con reconciliación previa contra Key49 vía
+  `GET /v1/invoices?access_key=…` para no duplicar.
+- ⚠️ **Requiere aprobación explícita antes de ejecutar en prod** (decisión fiscal:
+  facturas de ventas de días anteriores quedarían emitidas con fecha de hoy).
+
+---
+
+## Estado anterior (2026-08-20) — v0.35.6
 
 ### ✅ Logros de la sesión (20-ago-2026)
 
