@@ -96,16 +96,23 @@ async def lifespan(app: FastAPI):
     # Disabled during testing (pytest sets TESTING=1).
     import os
     cleanup_task = None
+    sri_sync_task = None
     if not os.environ.get("TESTING"):
         cleanup_task = asyncio.create_task(run_cleanup_loop())
+        # SRI/Key49 reconciler — reconciles dispatches stuck in PENDING after
+        # a poller timeout. Gated by system_config['sri_sync_enabled'] (default
+        # off), so it is inert unless explicitly enabled. Never re-emits.
+        from app.services.sri_sync_service import run_sri_sync_loop
+        sri_sync_task = asyncio.create_task(run_sri_sync_loop())
     yield
     # ── Shutdown ───────────────────────────────────────────
-    if cleanup_task is not None:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except asyncio.CancelledError:
-            pass
+    for task in (cleanup_task, sri_sync_task):
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(

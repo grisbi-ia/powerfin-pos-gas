@@ -18,6 +18,7 @@ Clave en `system_config`:
 | Clave | Valor | Efecto |
 |---|---|---|
 | `sri_monitor_enabled` | `true` | Habilita el módulo en Admin |
+| `sri_sync_enabled` | `true` | Habilita el **reconciler de fondo** (ver §2.1) |
 
 Se puede activar sin SQL, vía API (el PUT crea la clave si no existe):
 
@@ -47,6 +48,20 @@ Admin → **Facturación SRI** (`/sri`). Dos pestañas:
 - Tabla paginada con: fecha, orden, cliente, secuencial, total, estado,
   tipo de problema y mensaje.
 - **Export PDF / Excel**.
+
+### 2.1 Reconciler de fondo (PENDING_SENT)
+
+El flujo de emisión es *fire-and-forget*: tras la venta, un poller revisa Key49
+~20s (10 intentos × 2s). Cuando Key49/SRI tarda más (observado **~90–120s**), la
+factura **sí se autoriza** pero el despacho queda `PENDING` — un desync silencioso
+(histórico, no nuevo; solo era invisible).
+
+El reconciler (`app/services/sri_sync_service.py`) corre cada **120s** y:
+- Toma despachos `sri_status='PENDING'` **con** `key49_invoice_id` (o sea, ya enviados).
+- Lee su estado real en Key49 y actualiza el estado local.
+- **Nunca reemite** ni toca el flujo de venta.
+- Ignora filas muy nuevas (<90s, aún las maneja el poller) o muy viejas (>72h).
+- Está envuelto en `try/except` y detrás de `sri_sync_enabled` (default off).
 
 ## 3. Taxonomía de problemas
 
