@@ -287,10 +287,19 @@ async def main(argv: list[str]) -> int:
         sent = skipped = failed = synced = 0
 
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # ── 1. Sync statuses of rows already at Key49 ─────────────
+            # ── 1. Sync statuses of rows that have a Key49 reference ───
+            # Includes non-final statuses (FAILED/CREATED/SIGNED/SENT/
+            # RECEIVED/RETRY/REJECTED) — their real state may have changed
+            # at Key49 (e.g. a manual reprocess moved FAILED -> NOTIFIED).
             if args.sync_existing:
-                sync_rows = _candidate_filter(args, _apply_month_filter(already, args.month))
-                print(f"SINCRONIZAR estado de {len(sync_rows)} ya-invoiced…")
+                sync_all = (await db.execute(
+                    select(Dispatch).where(
+                        Dispatch.key49_invoice_id.isnot(None),
+                        Dispatch.sri_status.notin_(("AUTHORIZED", "NOTIFIED")),
+                    )
+                )).scalars().all()
+                sync_rows = _candidate_filter(args, _apply_month_filter(sync_all, args.month))
+                print(f"SINCRONIZAR estado de {len(sync_rows)} con referencia Key49 no-final…")
                 for d in sync_rows:
                     item = await _sync_existing(db, client, config, d, args.execute)
                     report["items"].append(item)
