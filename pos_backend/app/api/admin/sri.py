@@ -66,6 +66,8 @@ async def sri_documents(
     problem_type: str | None = Query(default=None),
     search: str = Query(default=""),
     only_problems: bool = Query(default=True),
+    key49: str | None = Query(default=None, pattern=r"^(yes|no)$",
+                              description="Filter by presence in Key49"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -74,11 +76,15 @@ async def sri_documents(
     """Paginated documents with SRI problems (default) or a status filter."""
     items, total = await svc.list_documents(
         db, date_from, date_to, status, problem_type, search,
-        only_problems, page, page_size,
+        only_problems, page, page_size, key49_filter=key49,
+    )
+    summary = await svc.documents_summary(
+        db, date_from, date_to, status, problem_type, search,
+        only_problems, key49_filter=key49,
     )
     pages = (total + page_size - 1) // page_size if page_size else 0
     return {"items": items, "total": total, "page": page,
-            "page_size": page_size, "pages": pages}
+            "page_size": page_size, "pages": pages, "summary": summary}
 
 
 @router.get("/documents/{dispatch_id}", dependencies=[Depends(require_sri_monitor_enabled)])
@@ -114,17 +120,19 @@ async def sri_documents_export(
     problem_type: str | None = Query(default=None),
     search: str = Query(default=""),
     only_problems: bool = Query(default=True),
+    key49: str | None = Query(default=None, pattern=r"^(yes|no)$"),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_permission("sri", "read")),
 ):
     """Export the problem-document inbox to PDF or Excel."""
     items, _total = await svc.list_documents(
         db, date_from, date_to, status, problem_type, search,
-        only_problems, page=1, page_size=5000,
+        only_problems, page=1, page_size=5000, key49_filter=key49,
     )
 
     columns = ["Fecha", "Order ID", "Cliente", "Cédula/RUC", "Placa",
-               "Total", "Estado SRI", "Tipo problema", "Secuencial", "Key49 ID"]
+               "Total", "Estado SRI", "Tipo problema", "En Key49",
+               "Secuencial", "Key49 ID"]
     rows = []
     for it in items:
         created = it.get("created_at")
@@ -141,7 +149,9 @@ async def sri_documents_export(
             fecha, it.get("order_id") or "", it.get("customer_name") or "",
             it.get("id_number") or "", it.get("plate") or "",
             f"${it.get('total', 0):,.2f}", it.get("sri_status") or "",
-            it.get("problem_type") or "", it.get("sequential_number") or "",
+            it.get("problem_type") or "",
+            "Sí" if it.get("has_key49_id") else "No",
+            it.get("sequential_number") or "",
             it.get("key49_invoice_id") or "",
         ])
 

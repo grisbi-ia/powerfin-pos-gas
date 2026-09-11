@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 import httpx
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ECUADOR_TZ
@@ -29,6 +29,16 @@ from app.models.tributary import EmissionPoint
 FINAL_OK = ("AUTHORIZED", "NOTIFIED")
 IN_PROGRESS = ("CREATED", "SIGNED", "SENT", "RECEIVED")
 PROBLEM_STATUSES = ("PENDING", "FAILED", "REJECTED")
+
+# SQL translation of problem types (kept in sync with classify_problem).
+_PROBLEM_TYPE_SQL = {
+    "NEVER_SENT": and_(Dispatch.sri_status == "PENDING", Dispatch.key49_invoice_id.is_(None)),
+    "PENDING_SENT": and_(Dispatch.sri_status == "PENDING", Dispatch.key49_invoice_id.isnot(None)),
+    "KEY49_FAILED": and_(Dispatch.sri_status == "FAILED", Dispatch.key49_invoice_id.isnot(None)),
+    "INVALID_DATA": and_(Dispatch.sri_status == "FAILED", Dispatch.key49_invoice_id.is_(None)),
+    "REJECTED": Dispatch.sri_status == "REJECTED",
+    "IN_PROGRESS": Dispatch.sri_status.in_(IN_PROGRESS),
+}
 
 
 def classify_problem(sri_status: str | None, has_key49_id: bool) -> str:
@@ -152,6 +162,42 @@ async def get_metrics(
     }
 
 
+def _document_conditions(
+    date_from: date | None,
+    date_to: date | None,
+    status_filter: str | None,
+    problem_type: str | None,
+    search: str,
+    only_problems: bool,
+    key49_filter: str | None = None,
+) -> list:
+    """Shared WHERE conditions for the documents list, summary and export."""
+    conds = _date_conditions(date_from, date_to, None)
+
+    if status_filter:
+        conds.append(Dispatch.sri_status == status_filter.upper())
+    elif only_problems:
+        conds.append(Dispatch.sri_status.in_(PROBLEM_STATUSES))
+
+    if problem_type and problem_type.upper() in _PROBLEM_TYPE_SQL:
+        conds.append(_PROBLEM_TYPE_SQL[problem_type.upper()])
+
+    if key49_filter == "yes":
+        conds.append(Dispatch.key49_invoice_id.isnot(None))
+    elif key49_filter == "no":
+        conds.append(Dispatch.key49_invoice_id.is_(None))
+
+    if search:
+        like = f"%{search.strip()}%"
+        conds.append(or_(
+            Dispatch.order_id.ilike(like),
+            Person.name.ilike(like),
+            Person.id_number.ilike(like),
+            Vehicle.plate.ilike(like),
+        ))
+    return conds
+
+
 async def list_documents(
     db: AsyncSession,
     date_from: date | None,
@@ -162,23 +208,12 @@ async def list_documents(
     only_problems: bool,
     page: int,
     page_size: int,
+    key49_filter: str | None = None,
 ) -> tuple[list[dict], int]:
     """Paginated list of SRI documents, defaulting to problem documents."""
-    conds = _date_conditions(date_from, date_to, None)
-
-    if status_filter:
-        conds.append(Dispatch.sri_status == status_filter.upper())
-    elif only_problems:
-        conds.append(Dispatch.sri_status.in_(PROBLEM_STATUSES))
-
-    if search:
-        like = f"%{search.strip()}%"
-        conds.append(or_(
-            Dispatch.order_id.ilike(like),
-            Person.name.ilike(like),
-            Person.id_number.ilike(like),
-            Vehicle.plate.ilike(like),
-        ))
+    conds = _document_conditions(
+        date_from, date_to, status_filter, problem_type, search, only_problems, key49_filter
+    )
 
     base = (
         select(Dispatch, Person, Vehicle)
@@ -201,13 +236,49 @@ async def list_documents(
     for dispatch, person, vehicle in rows:
         has_id = dispatch.key49_invoice_id is not None
         ptype = classify_problem(dispatch.sri_status, has_id)
-        if problem_type and ptype != problem_type.upper():
-            continue
         items.append(_document_row(dispatch, person, vehicle, ptype))
 
-    # When filtering by problem_type in Python the page size may shrink; that
-    # is acceptable for Phase 1 (read-only). Total reflects the DB filters.
     return items, int(total)
+
+
+async def documents_summary(
+    db: AsyncSession,
+    date_from: date | None,
+    date_to: date | None,
+    status_filter: str | None,
+    problem_type: str | None,
+    search: str,
+    only_problems: bool,
+    key49_filter: str | None = None,
+) -> dict:
+    """Counts over the WHOLE filtered set — how many exist in Key49 vs not."""
+    conds = _document_conditions(
+        date_from, date_to, status_filter, problem_type, search, only_problems, key49_filter
+    )
+    base = (
+        select(
+            Dispatch.sri_status.label("sri_status"),
+            Dispatch.key49_invoice_id.label("kid"),
+        )
+        .outerjoin(Person, Person.person_id == Dispatch.person_id)
+        .outerjoin(Vehicle, Vehicle.vehicle_id == Dispatch.vehicle_id)
+        .where(*conds)
+        .subquery()
+    )
+    row = (await db.execute(select(
+        func.count().label("total"),
+        func.count().filter(base.c.kid.isnot(None)).label("in_key49"),
+        func.count().filter(base.c.kid.is_(None)).label("not_in_key49"),
+        func.count().filter(and_(base.c.kid.is_(None), base.c.sri_status == "FAILED")).label("rejected_by_key49"),
+        func.count().filter(and_(base.c.kid.is_(None), base.c.sri_status == "PENDING")).label("never_sent"),
+    ).select_from(base))).one()
+    return {
+        "total": int(row.total),
+        "in_key49": int(row.in_key49),
+        "not_in_key49": int(row.not_in_key49),
+        "rejected_by_key49": int(row.rejected_by_key49),
+        "never_sent": int(row.never_sent),
+    }
 
 
 def _document_row(dispatch: Dispatch, person: Person | None, vehicle: Vehicle | None,

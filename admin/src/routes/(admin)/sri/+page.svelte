@@ -26,6 +26,7 @@
   let dateTo = $state(toLocalDate(today));
   let statusFilter = $state('');
   let problemType = $state('');
+  let key49Filter = $state('');
   let search = $state('');
   let onlyProblems = $state(true);
   let page = $state(1);
@@ -37,6 +38,7 @@
   let docs: any[] = $state([]);
   let total = $state(0);
   let pages = $state(1);
+  let summary: any = $state(null);
   let exporting = $state(false);
 
   const STATUS_OPTIONS = ['PENDING', 'FAILED', 'REJECTED', 'CREATED', 'SIGNED', 'SENT', 'RECEIVED', 'AUTHORIZED', 'NOTIFIED'];
@@ -44,7 +46,7 @@
     { value: 'NEVER_SENT', label: 'Nunca enviada' },
     { value: 'PENDING_SENT', label: 'Enviada, estado pendiente' },
     { value: 'KEY49_FAILED', label: 'Falló en Key49 (reintentos agotados)' },
-    { value: 'INVALID_DATA', label: 'Datos inválidos (CED/RUC)' },
+    { value: 'INVALID_DATA', label: 'Rechazado por Key49 (validación)' },
     { value: 'REJECTED', label: 'Rechazada por el SRI' },
     { value: 'IN_PROGRESS', label: 'En proceso' },
   ];
@@ -75,12 +77,13 @@
     error = '';
     try {
       const res = await api.get<any>(`/sri/documents?${qs({
-        status: statusFilter, problem_type: problemType, search,
+        status: statusFilter, problem_type: problemType, search, key49: key49Filter,
         only_problems: String(onlyProblems), page: String(page), page_size: String(pageSize),
       })}`);
       docs = res.items;
       total = res.total;
       pages = res.pages;
+      summary = res.summary;
     } catch (e: any) {
       error = e.message;
       docs = [];
@@ -95,19 +98,19 @@
     if (tab === 'summary') void loadSummary();
   });
   $effect(() => {
-    void tab; void dateFrom; void dateTo; void statusFilter; void problemType; void search; void onlyProblems; void page;
+    void tab; void dateFrom; void dateTo; void statusFilter; void problemType; void key49Filter; void search; void onlyProblems; void page;
     if (tab === 'documents') void loadDocs();
   });
 
   // Reset pagination when filters change
-  $effect(() => { void dateFrom; void dateTo; void statusFilter; void problemType; void search; void onlyProblems; page = 1; });
+  $effect(() => { void dateFrom; void dateTo; void statusFilter; void problemType; void key49Filter; void search; void onlyProblems; page = 1; });
 
   async function exportDocs(format: 'pdf' | 'xlsx') {
     exporting = true;
     try {
       const token = (await import('$lib/api/api')).getToken();
       const res = await fetch(`/api/admin/sri/documents/export?${qs({
-        format, status: statusFilter, problem_type: problemType, search,
+        format, status: statusFilter, problem_type: problemType, search, key49: key49Filter,
         only_problems: String(onlyProblems),
       })}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Error al exportar');
@@ -146,7 +149,7 @@
     NEVER_SENT: 'Nunca enviada',
     PENDING_SENT: 'Enviada, pendiente',
     KEY49_FAILED: 'Falló en Key49',
-    INVALID_DATA: 'Datos inválidos',
+    INVALID_DATA: 'Rechazado por Key49',
     REJECTED: 'Rechazada SRI',
   };
 </script>
@@ -312,6 +315,11 @@
             <option value="">Todos los tipos</option>
             {#each PROBLEM_OPTIONS as p}<option value={p.value}>{p.label}</option>{/each}
           </select>
+          <select bind:value={key49Filter} class="px-3 py-2 text-sm border border-gray-300 rounded-md">
+            <option value="">En Key49: todos</option>
+            <option value="yes">Solo en Key49</option>
+            <option value="no">Solo no llegaron a Key49</option>
+          </select>
           <label class="flex items-center gap-1.5 text-sm text-gray-600">
             <input type="checkbox" bind:checked={onlyProblems} /> Solo con problemas
           </label>
@@ -327,6 +335,15 @@
           </button>
         </div>
       </div>
+
+      {#if summary}
+        <div class="px-4 py-2 border-b border-gray-200 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-600 bg-gray-50">
+          <span><b class="text-gray-800">{summary.total}</b> en el filtro</span>
+          <span class="text-green-700">En Key49: <b>{summary.in_key49}</b></span>
+          <span class="text-red-700">No llegaron a Key49: <b>{summary.not_in_key49}</b></span>
+          <span class="text-gray-500">(rechazados por Key49: {summary.rejected_by_key49} · nunca enviados: {summary.never_sent})</span>
+        </div>
+      {/if}
 
       {#if docsLoading}
         <div class="flex justify-center py-12">
@@ -346,6 +363,7 @@
                 <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Estado</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Problema</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">En Key49</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Mensaje</th>
               </tr>
             </thead>
@@ -364,6 +382,13 @@
                     <span class="inline-block px-2 py-0.5 rounded text-xs font-medium {d.problem_type === 'REJECTED' || d.problem_type === 'INVALID_DATA' || d.problem_type === 'KEY49_FAILED' ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'}">
                       {problemLabels[d.problem_type] || d.problem_type}
                     </span>
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    {#if d.has_key49_id}
+                      <span class="text-green-600 font-medium">Sí</span>
+                    {:else}
+                      <span class="text-gray-400">No</span>
+                    {/if}
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-500 max-w-xs truncate" title={d.sri_messages || ''}>
                     {d.sri_messages || '—'}

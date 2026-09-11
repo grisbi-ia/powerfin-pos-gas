@@ -43,11 +43,15 @@ Admin → **Facturación SRI** (`/sri`). Dos pestañas:
   (plan expirado / no disponible / HTTP 402).
 
 ### Documentos
-- Filtros: rango de fechas, estado SRI, tipo de problema, búsqueda
+- Filtros: rango de fechas, estado SRI, tipo de problema, **En Key49**
+  (todos / solo en Key49 / solo no llegaron), búsqueda
   (orden, cliente, cédula/RUC, placa) y "Solo con problemas".
+- **Resumen del filtro**: total · En Key49 · No llegaron a Key49
+  (rechazados por Key49 en validación · nunca enviados). Esto evita confundir
+  "problemas" del monitor con los documentos que Key49 realmente tiene.
 - Tabla paginada con: fecha, orden, cliente, secuencial, total, estado,
-  tipo de problema y mensaje.
-- **Export PDF / Excel**.
+  tipo de problema, **En Key49 (Sí/No)** y mensaje.
+- **Export PDF / Excel** (incluye columna "En Key49").
 
 ### 2.1 Reconciler de fondo (PENDING_SENT)
 
