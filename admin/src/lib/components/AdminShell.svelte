@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Menu, LayoutDashboard, Users, Shield, Package, Ruler, DollarSign, Truck, FileCode, Building2, Settings, CreditCard, BarChart3, LogOut, Activity, FileText } from 'lucide-svelte';
+  import { Menu, LayoutDashboard, Users, Shield, Package, Ruler, DollarSign, Truck, FileCode, Building2, Settings, CreditCard, BarChart3, LogOut, Activity, FileText, FileCheck } from 'lucide-svelte';
   import { currentUser, logout } from '$stores/auth';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
@@ -28,6 +28,7 @@
     { href: '/system-config', label: 'Configuración', icon: Settings },
     { href: '/payment-methods', label: 'Pagos', icon: CreditCard },
     { href: '/contracts', label: 'Contratos', icon: FileText },
+    { href: '/sri', label: 'Facturación SRI', icon: FileCheck },
     { href: '/reports', label: 'Reportes', icon: BarChart3 },
   ];
 

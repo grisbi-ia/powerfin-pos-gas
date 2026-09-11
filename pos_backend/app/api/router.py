@@ -27,6 +27,7 @@ from app.api.admin.price_lists import router as admin_price_lists_router
 from app.api.admin.products import router as admin_products_router
 from app.api.admin.reports import router as admin_reports_router
 from app.api.admin.roles import router as admin_roles_router
+from app.api.admin.sri import router as admin_sri_router
 from app.api.admin.system_config import router as admin_system_config_router
 from app.api.admin.users import router as admin_users_router
 
@@ -56,5 +57,6 @@ router.include_router(admin_price_lists_router)
 router.include_router(admin_products_router)
 router.include_router(admin_reports_router)
 router.include_router(admin_roles_router)
+router.include_router(admin_sri_router)
 router.include_router(admin_system_config_router)
 router.include_router(admin_users_router)

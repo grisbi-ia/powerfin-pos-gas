@@ -1,6 +1,28 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-09-11) — v0.35.7
+## Estado actual (2026-09-11) — v0.36.0
+
+### ✨ Nuevo: Módulo Monitoreo SRI/Key49 en Admin (Fase 1 — solo lectura)
+- Sección **"Facturación SRI"** (`/sri`) en Admin, con pestañas **Resumen** y
+  **Documentos**. Ver `docs/admin/SRI_MONITOR.md`.
+- Resumen: KPIs (total, autorizados +% éxito, en proceso, con problemas, tiempo
+  a autorización), emisiones por día, problemas por tipo y salud de Key49.
+- Documentos: bandeja filtrable (estado, tipo de problema, búsqueda, rango) con
+  **export PDF/Excel**.
+- Taxonomía de problemas: `NEVER_SENT`, `PENDING_SENT`, `KEY49_FAILED`,
+  `INVALID_DATA`, `REJECTED`, `IN_PROGRESS`, `OK`.
+- **Feature flag `sri_monitor_enabled`** (default **off**) → el módulo no ejecuta
+  consultas hasta activarlo. Activar con
+  `PUT /api/admin/system-config/sri_monitor_enabled` `{"value":"true"}`.
+- **No invasivo**: 100% aditivo, no toca el flujo de venta ni el POS.
+- Tests: **445 passed** (13 nuevos). `admin npm run check` y `build` OK.
+- **Fases 2/3 pendientes**: acciones (sync/reproceso en lote, jobs+auditoría) y
+  scheduler automático opt-in. Reproceso con cambio de fecha: solo ADMIN, caso
+  por caso. `KEY49_FAILED` sigue siendo manual en Key49.
+
+---
+
+## Estado anterior (2026-09-11) — v0.35.7
 
 ### 🔴 Incidente Key49 PLAN_EXPIRED (03→11 sep) — RESUELTO
 - **Síntoma reportado:** "los Campos Adicionales no llegan" en producción.
