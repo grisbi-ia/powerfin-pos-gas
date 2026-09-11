@@ -359,6 +359,32 @@ async def emitir_factura(
                 await db.commit()
                 return False
 
+            elif resp.status_code == 409:
+                # Duplicate: the invoice already exists at Key49. Key49 returns
+                # error.existing_document — link it instead of losing the ref.
+                existing = (
+                    resp.json().get("error", {}).get("existing_document") or {}
+                )
+                if existing.get("id"):
+                    dispatch.key49_invoice_id = existing["id"]
+                    dispatch.key49_access_key = existing.get("access_key")
+                    dispatch.sri_status = existing.get("status") or "NOTIFIED"
+                    auth_raw = existing.get("authorization_date")
+                    if auth_raw:
+                        try:
+                            dispatch.sri_authorization_date = datetime.fromisoformat(
+                                auth_raw.replace("Z", "+00:00")
+                            )
+                        except ValueError:
+                            dispatch.sri_authorization_date = datetime.now(ECUADOR_TZ)
+                    dispatch.sri_messages = None
+                    await db.commit()
+                    return True
+                dispatch.sri_status = "PENDING"
+                dispatch.sri_messages = json.dumps([_key49_error_message(resp)])
+                await db.commit()
+                return False
+
             else:
                 dispatch.sri_status = "PENDING"
                 dispatch.sri_messages = json.dumps([_key49_error_message(resp)])
