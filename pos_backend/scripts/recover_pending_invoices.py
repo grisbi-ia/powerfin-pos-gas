@@ -90,9 +90,13 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--classify-only", action="store_true", help="Only print the classification, no API calls")
     p.add_argument("--sync-existing", action="store_true",
                    help="Refresh status of dispatches already present at Key49")
+    p.add_argument("--sync-only", action="store_true",
+                   help="Only sync existing (skip the re-emission phase)")
     p.add_argument("--shard", help="i/N — process only dispatch_id %% N == i (parallel workers)")
     p.add_argument("--delay", type=float, default=2.5,
                    help="Seconds between live emissions to respect Key49 rate limit (default 2.5)")
+    p.add_argument("--sync-delay", type=float, default=0.35,
+                   help="Seconds between sync GETs (default 0.35)")
     p.add_argument("--report", default="/tmp/k49_recovery.json", help="JSON report output path")
     return p.parse_args(argv)
 
@@ -191,6 +195,19 @@ async def _sync_existing(db, client, config, dispatch: Dispatch, execute: bool) 
         )
     except httpx.HTTPError as exc:
         return {"dispatch_id": dispatch.dispatch_id, "result": "SYNC_ERROR", "error": str(exc)}
+    if r.status_code == 404:
+        # Phantom reference: our DB has a key49_invoice_id that Key49 does not
+        # know about (old/purged tenant). Clear it so it is re-emitted.
+        if execute:
+            dispatch.key49_invoice_id = None
+            dispatch.key49_access_key = None
+            dispatch.sri_status = "PENDING"
+            dispatch.sri_messages = json.dumps(
+                ["Referencia Key49 inexistente (404) — se reemitirá"]
+            )[:500]
+            await db.commit()
+        return {"dispatch_id": dispatch.dispatch_id, "order_id": dispatch.order_id,
+                "result": "SYNC_404_CLEARED" if execute else "WOULD_CLEAR_404"}
     if r.status_code != 200:
         return {"dispatch_id": dispatch.dispatch_id, "result": f"SYNC_HTTP_{r.status_code}"}
 
@@ -280,8 +297,19 @@ async def main(argv: list[str]) -> int:
                     print(f"  #{d.dispatch_id} {d.order_id}: {item['result']} "
                           f"{item.get('new_status', '')}")
                     synced += 1
+                    if args.sync_delay > 0:
+                        await asyncio.sleep(args.sync_delay)
 
-            # ── 2. Re-emit missing ────────────────────────────────────
+            # ── 2. Re-emit missing (not in --sync-existing mode) ──────
+            if args.sync_existing or args.sync_only:
+                report["summary"] = {"synced": synced, "emitted_or_would": 0,
+                                     "skipped": 0, "failed": 0}
+                report["finished_at"] = datetime.now(ECUADOR_TZ).isoformat()
+                with open(args.report, "w", encoding="utf-8") as fh:
+                    json.dump(report, fh, indent=2, ensure_ascii=False)
+                print(f"\n=== SYNC — {mode} === sincronizados: {synced}")
+                print(f"Reporte: {args.report}")
+                return 0
             candidates = _candidate_filter(args, _apply_month_filter(missing, args.month))
             print(f"\nREEMITIR {len(candidates)} sin factura "
                   f"(de {len(missing)} totales)")
