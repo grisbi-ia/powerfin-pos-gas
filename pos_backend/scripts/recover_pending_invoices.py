@@ -90,6 +90,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--classify-only", action="store_true", help="Only print the classification, no API calls")
     p.add_argument("--sync-existing", action="store_true",
                    help="Refresh status of dispatches already present at Key49")
+    p.add_argument("--shard", help="i/N — process only dispatch_id %% N == i (parallel workers)")
     p.add_argument("--delay", type=float, default=2.5,
                    help="Seconds between live emissions to respect Key49 rate limit (default 2.5)")
     p.add_argument("--report", default="/tmp/k49_recovery.json", help="JSON report output path")
@@ -151,6 +152,9 @@ def _candidate_filter(args, dispatches: list[Dispatch]) -> list[Dispatch]:
         return [d for d in dispatches if d.dispatch_id in wanted]
     cutoff = datetime.now(ECUADOR_TZ) - timedelta(hours=args.min_age_hours)
     sel = [d for d in dispatches if d.created_at and d.created_at < cutoff]
+    if args.shard:
+        idx, total = (int(x) for x in args.shard.split("/"))
+        sel = [d for d in sel if d.dispatch_id % total == idx]
     sel.sort(key=lambda d: d.created_at, reverse=(args.order == "newest"))
     return sel[: args.limit]
 
