@@ -294,8 +294,17 @@ Ready for production integration with POS frontend.
 - [x] v0.37.3: se exige cliente en `SALE` (`requires_customer` ahora se valida) y se
       persiste `dispatches.plate_raw` para no perder la placa cuando el vehículo no
       está registrado. Errores explícitos (422/404), sin fallbacks silenciosos.
+- [x] v0.38.0: validación de cédula/RUC (módulo 10 en cédula; el módulo 11 del RUC
+      NO es confiable → estructura + registro del SRI) en backend y POS, y **el POS
+      obliga a re-pedir la identificación**: `persons.id_number` nulable, guardias en
+      lookup/registro/despacho/cobro/facturación, paso de re-captura en el POS,
+      “no existe en el registro” separado de “proveedor caído”, y script de limpieza
+      de IDs inválidos con respaldo. Motivo: 7 facturas perdidas el 09-13.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
+- [ ] Ejecutar `scripts/limpiar_ids_invalidos.py --apply` (198 clientes con ID inválido)
+      y re-emitir las 7 facturas del 09-13 + backlog (~165 FAILED)
+- [ ] Sercobaco (broker de cédulas) caído: `No existe un contrato activo` → escalar contrato
 - [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP
       FusionBridge, 🔴 #2 secuencial fiscal perdido en silencio, 🔴 #4 credenciales
       hardcodeadas en identity_service.py)

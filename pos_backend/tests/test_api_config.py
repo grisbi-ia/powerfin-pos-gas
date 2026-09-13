@@ -51,25 +51,40 @@ class TestCustomersAPI:
         assert any("ABC1234" in c["plates"] for c in data)
 
     async def test_get_by_id(self, client, auth_headers):
-        r = await client.get("/api/pos/customers/by-id?id_type=CED&id_number=0912345678", headers=auth_headers)
+        r = await client.get("/api/pos/customers/by-id?id_type=CED&id_number=0912345675", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
         assert data["name"] == "Juan Carlos Pérez"
 
     async def test_get_by_id_not_found(self, client, auth_headers):
-        r = await client.get("/api/pos/customers/by-id?id_type=CED&id_number=9999999999", headers=auth_headers)
+        # Valid identification, not registered → 404
+        r = await client.get("/api/pos/customers/by-id?id_type=CED&id_number=0101644193", headers=auth_headers)
         assert r.status_code == 404
+
+    async def test_get_by_id_rejects_invalid_cedula(self, client, auth_headers):
+        # Invalid check digit → 422 with an actionable message (never a lookup)
+        r = await client.get("/api/pos/customers/by-id?id_type=CED&id_number=0102126197", headers=auth_headers)
+        assert r.status_code == 422
+        assert "dígito verificador" in r.json()["detail"]
 
     async def test_create_customer(self, client, auth_headers):
         r = await client.post("/api/pos/customers", headers=auth_headers, json={
-            "id_type": "CED", "id_number": "1712345678",
+            "id_type": "CED", "id_number": "1712345675",
             "name": "Nuevo Cliente", "email": "nuevo@test.com",
             "plate": "NEW1234"
         })
         assert r.status_code == 201
         data = r.json()
-        assert data["customer_id"] == "1712345678"
+        assert data["customer_id"] == "1712345675"
         assert data["price_list"] == "STANDARD"
+
+    async def test_create_customer_rejects_invalid_cedula(self, client, auth_headers):
+        r = await client.post("/api/pos/customers", headers=auth_headers, json={
+            "id_type": "CED", "id_number": "1708860005",
+            "name": "Edgar Gallas", "email": "x@test.com"
+        })
+        assert r.status_code == 422
+        assert "dígito verificador" in r.json()["detail"]
 
 
 class TestProductsAPI:
@@ -119,7 +134,7 @@ class TestPricesAPI:
         assert data["grade_id"] == "DIESEL"
 
     async def test_price_by_customer(self, client, auth_headers):
-        r = await client.get("/api/pos/prices?customerId=0912345678&gradeId=DIESEL", headers=auth_headers)
+        r = await client.get("/api/pos/prices?customerId=0912345675&gradeId=DIESEL", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
         assert data["grade_id"] == "DIESEL"

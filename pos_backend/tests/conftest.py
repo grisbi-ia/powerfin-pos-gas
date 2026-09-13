@@ -146,7 +146,7 @@ async def _seed_data(db: AsyncSession):
     ])
 
     db.add_all([
-        Person(person_id=1, id_type="CED", id_number="0912345678", name="Juan Carlos Pérez", price_list_id=2),
+        Person(person_id=1, id_type="CED", id_number="0912345675", name="Juan Carlos Pérez", price_list_id=2),
         Person(person_id=2, id_type="RUC", id_number="1790012345001", name="Transportes Andinos S.A.", price_list_id=1),
     ])
 

@@ -75,7 +75,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
             "unit_price": 3.103, "payment_method_id": 1,
-            "customer_id": "0912345678",
+            "customer_id": "0912345675",
             "dispatch_type_code": "SALE",
             "items": [
                 {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
@@ -96,7 +96,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
             "unit_price": 3.103, "payment_method_id": 1,
-            "customer_id": "0912345678",
+            "customer_id": "0912345675",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -116,7 +116,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "10.00",
             "unit_price": 3.103, "payment_method_id": 1,
-            "customer_id": "0912345678",
+            "customer_id": "0912345675",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -134,7 +134,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "10.00",
             "unit_price": 3.103, "payment_method_id": 1,
-            "customer_id": "0912345678",
+            "customer_id": "0912345675",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -150,7 +150,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "50.00",
             "unit_price": 50.00, "payment_method_id": 1,
-            "customer_id": "0912345678",
+            "customer_id": "0912345675",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 10, "unit_price": 5.00, "tax_rate": 0}]
         })
@@ -224,7 +224,7 @@ class TestPublicSectorDispatch:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
             "unit_price": 3.103, "payment_method_id": 1,
-            "customer_id": "0912345678",
+            "customer_id": "0912345675",
             "dispatch_type_code": "SALE",
             "items": [
                 {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
@@ -322,7 +322,7 @@ class TestCreateDispatchCustomerValidation:
         await db.commit()
 
         r = await client.post("/api/pos/dispatches", headers=auth_headers,
-                              json=self._body(customer_id="0912345678"))
+                              json=self._body(customer_id="0912345675"))
         assert r.status_code == 422
         assert "inactivo" in r.json()["detail"].lower()
 
@@ -332,7 +332,7 @@ class TestCreateDispatchCustomerValidation:
         from app.models.dispatch import Dispatch
         await self._open_shift(client, auth_headers)
         r = await client.post("/api/pos/dispatches", headers=auth_headers,
-                              json=self._body(customer_id="0912345678", plate="ZZZ-9999"))
+                              json=self._body(customer_id="0912345675", plate="ZZZ-9999"))
         assert r.status_code == 201
         order_id = r.json()["order_id"]
         row = (await db.execute(

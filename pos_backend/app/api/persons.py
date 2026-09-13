@@ -9,7 +9,12 @@ from app.database import get_db
 from app.models import Person, Vehicle
 from app.models.user import User
 from app.schemas import UpdatePersonRequest
-from app.services.identity_service import IdentityLookupError, lookup_person
+from app.services.id_validation import normalize_id_number, validate_identification
+from app.services.identity_service import (
+    IdentityLookupError,
+    IdentityNotFoundError,
+    lookup_person,
+)
 
 router = APIRouter(prefix="/api/pos/persons", tags=["persons"])
 
@@ -24,13 +29,23 @@ async def person_lookup(
     """
     Unified person lookup with fallback chain:
 
+    0. Validate the identification (cédula module-10 / RUC structure). An
+       invalid number never reaches the DB nor the external API: it comes
+       back as 422 so the dispatcher asks the customer again.
     1. Search local PostgreSQL → if found, return immediately
     2. Call external identity API (Sercobaco/SRI) with 5s timeout
     3. If external API returns data, return it (marked as local: false)
     4. If nothing found, return found: false → POS shows manual form
     """
     id_type = id_type.upper()
-    id_number = id_number.strip()
+    id_number = normalize_id_number(id_number)
+
+    # ═══════════════════════════════════════════════
+    # Step 0: local validation of the identification
+    # ═══════════════════════════════════════════════
+    error = validate_identification(id_type, id_number)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
 
     # ═══════════════════════════════════════════════
     # Step 1: Search local database
@@ -86,13 +101,30 @@ async def person_lookup(
     # ═══════════════════════════════════════════════
     try:
         external = await lookup_person(id_type, id_number)
+    except IdentityNotFoundError as e:
+        # The registry answered: the number does not exist. Key49 would reject the
+        # invoice, so the dispatcher must ask the customer again (blocked).
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{e}. Verifique el número con el cliente: no se puede "
+                "facturar con una identificación inexistente."
+            ),
+        ) from e
     except IdentityLookupError:
-        # Step 3: Nothing found anywhere — return empty
+        # Step 3: Nothing found anywhere. The identification itself is valid
+        # (step 0), so the POS may register it manually — but the failed
+        # verification is reported, never swallowed.
         return {
             "found": False,
             "local": False,
             "source": None,
             "data": None,
+            "external_lookup_failed": True,
+            "warning": (
+                "No se pudo verificar automáticamente (Sercobaco/SRI). "
+                "Confirme el nombre y los datos con el cliente."
+            ),
         }
 
     # ═══════════════════════════════════════════════
@@ -153,13 +185,50 @@ async def update_person(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Update a person's fields (name, address, phone, email, etc.)."""
+    """Update a person's fields (name, address, phone, email, etc.).
+
+    Also the endpoint the POS uses to **re-capture an identification** after the
+    dispatcher asked the customer again (used to fix customers whose recorded
+    identification was invalid/cleared). Sending `id_number` requires
+    `id_type` and validates the check digit — an invalid number is refused with
+    422, never stored.
+    """
     result = await db.execute(
         select(Person).where(Person.person_id == person_id)
     )
     person = result.scalar_one_or_none()
     if not person:
         raise HTTPException(status_code=404, detail="Persona no encontrada")
+
+    # ── Identification change (re-capture) ──
+    if body.id_number is not None:
+        new_number = normalize_id_number(body.id_number)
+        new_type = (body.id_type or person.id_type or "").strip().upper()
+
+        error = validate_identification(new_type, new_number)
+        if error:
+            raise HTTPException(status_code=422, detail=error)
+
+        # The unique constraint is (id_type, id_number) — check explicitly so
+        # the dispatcher gets a clear message instead of an IntegrityError.
+        duplicate = (await db.execute(
+            select(Person).where(
+                Person.id_type == new_type,
+                Person.id_number == new_number,
+                Person.person_id != person_id,
+            )
+        )).scalar_one_or_none()
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"La identificación {new_number} ya está registrada "
+                    f"a nombre de {duplicate.name}."
+                ),
+            )
+
+        person.id_type = new_type
+        person.id_number = new_number
 
     if body.name is not None:
         person.name = body.name
@@ -175,4 +244,9 @@ async def update_person(
         person.yalobox_wallet = body.yalobox_wallet
 
     await db.commit()
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "person_id": person.person_id,
+        "id_type": person.id_type,
+        "id_number": person.id_number,
+    }

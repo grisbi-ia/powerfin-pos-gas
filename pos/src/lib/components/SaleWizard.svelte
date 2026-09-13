@@ -9,6 +9,7 @@
 	import type { PendingOrder } from '$lib/stores/pendingOrders';
 	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge';
+	import { normalizeIdNumber, validateIdentification, needsIdentification } from '$lib/utils/id-validation';
 
 	const dispatch = createEventDispatcher();
 
@@ -24,7 +25,7 @@
 
 	type Step =
 		| 'plate' | 'product' | 'billing' | 'incomplete' | 'idLookup'
-		| 'registration' | 'presetType' | 'presetValue' | 'authorizing'
+		| 'registration' | 'captureId' | 'presetType' | 'presetValue' | 'authorizing'
 		| 'summary' | 'payment' | 'printing' | 'done' | 'changeBilling';
 
 	let step: Step = 'plate';
@@ -49,12 +50,18 @@
 	let idType: 'CED' | 'RUC' = 'CED';
 	let idNumber = '';
 	let idLookupError = '';
+	let idLookupWarning = '';  // provider (Sercobaco/SRI) unreachable → not verified
+	let regWarning = '';       // shown on the manual registration form
 	let idLookupFrom: 'plate' | 'billing' = 'plate';  // track where we came from
 	let idLookupMode: 'id' | 'name' = 'id';  // CED/RUC vs name search
 	let nameSearchQuery = '';
-	let nameSearchResults: Array<{ customer_id: string; person_id?: number | null; id_type: string; id_number: string; name: string; address?: string | null; email: string | null; phone: string | null; price_list: string; price_list_name: string; credit_active: boolean; credit_balance: number; plates: string[] }> = [];
+	let nameSearchResults: Customer[] = [];
 
-	$: idValid = idType === 'CED' ? idNumber.length === 10 : idNumber.length === 13;
+	// Check-digit validation (mirror of pos_backend/app/services/id_validation.py).
+	// Length alone is not enough: Key49 rejects cédulas with a bad check digit
+	// ("Invalid identification for type 05") after the fuel is dispensed.
+	$: idError = idNumber.length > 0 ? validateIdentification(idType, idNumber) : null;
+	$: idValid = idNumber.length > 0 && idError === null;
 
 	// Collection state
 	let paymentMethodId = 0;
@@ -92,7 +99,28 @@
 	let publicCreditMethodId = 0;
 	let pendingCredit = false;
 
-	$: changeBillingValid = changeBillingIdType === 'CED' ? changeBillingIdNumber.length === 10 : changeBillingIdNumber.length === 13;
+	$: changeBillingValid = changeBillingIdNumber.length > 0
+		&& validateIdentification(changeBillingIdType, changeBillingIdNumber) === null;
+
+	// ── Re-capture of an invalid/cleared identification ──
+	// A customer whose recorded cédula/RUC was invalid has id_number = NULL
+	// (or an invalid legacy value). The dispatcher must ask for it again: the
+	// billing step is blocked until a valid number is stored.
+	let captureIdType: 'CED' | 'RUC' = 'CED';
+	let captureIdNumber = '';
+	let captureError = '';
+	let captureSaving = false;
+	let captureTarget: { person_id: number | null; name: string } | null = null;
+	$: captureIdError = captureIdNumber.length > 0 ? validateIdentification(captureIdType, captureIdNumber) : null;
+	$: captureIdValid = captureIdNumber.length > 0 && captureIdError === null;
+
+	// Effective billing person of the current step
+	$: effectiveBillingOwner = billingCustomer
+		?? vehicleResult?.billing_person
+		?? confirmedOwner
+		?? vehicleResult?.owner;
+	$: billingNeedsIdentification = needsIdentification(effectiveBillingOwner);
+	$: billingIsIdentified = !billingNeedsIdentification;
 
 	// Form fields
 	let incompleteEmail = '';
@@ -152,7 +180,7 @@
 		} catch { /* */ }
 	}
 
-	function submitIncomplete() { if (vehicleResult?.owner) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
+	function submitIncomplete() { if (vehicleResult?.owner?.id_number) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
 	function submitRegistration() { if (!regValid) return; handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName.trim(), email: regEmail.trim(), phone: regPhone.trim(), address: regAddress.trim(), plate }); }
 
 	async function selectHose(hose: HoseConfig) {
@@ -247,6 +275,14 @@
 	function handleBillingConfirm() {
 		// Prefer billing_person (persistent) over owner, unless billingCustomer is set (manual override)
 		const owner = billingCustomer ?? (vehicleResult?.billing_person ?? confirmedOwner ?? vehicleResult?.owner);
+
+		// The invoice cannot be issued without a valid identification. Do not let
+		// the dispatcher continue: the only way forward is re-asking the customer.
+		if (needsIdentification(owner)) {
+			startCaptureId();
+			return;
+		}
+
 		if (owner) confirmedOwner = owner;
 
 		// Save as preferential billing person if checkbox is checked
@@ -256,6 +292,63 @@
 		}
 
 		step = 'product';  // confirm customer, now select product
+	}
+
+	// ── Re-capture the identification of an already-registered customer ──
+	function startCaptureId() {
+		const owner = billingCustomer ?? (vehicleResult?.billing_person ?? confirmedOwner ?? vehicleResult?.owner);
+		captureTarget = {
+			person_id: owner?.person_id ?? billingPersonId ?? null,
+			name: owner?.name ?? ''
+		};
+		captureIdType = (owner?.id_type as 'CED' | 'RUC') === 'RUC' ? 'RUC' : 'CED';
+		captureIdNumber = '';
+		captureError = '';
+		step = 'captureId';
+	}
+
+	function cancelCaptureId() {
+		captureError = '';
+		step = 'billing';
+	}
+
+	async function submitCaptureId() {
+		if (!captureIdValid) { captureError = captureIdError ?? 'Identificación inválida'; return; }
+		if (!captureTarget?.person_id) {
+			captureError = 'No se pudo identificar al cliente. Use "Cambiar" para buscarlo de nuevo.';
+			return;
+		}
+
+		captureSaving = true; captureError = '';
+		try {
+			const saved = await powerfin.recaptureIdentification(
+				token(), captureTarget.person_id, captureIdType, normalizeIdNumber(captureIdNumber)
+			);
+			// Reflect the new number locally so billing/price list continue normally
+			if (confirmedOwner && confirmedOwner.person_id === captureTarget.person_id) {
+				confirmedOwner.id_type = saved.id_type;
+				confirmedOwner.id_number = saved.id_number;
+				confirmedOwner.customer_id = saved.id_number;
+			}
+			if (vehicleResult?.owner?.person_id === captureTarget.person_id) {
+				vehicleResult.owner.id_type = saved.id_type;
+				vehicleResult.owner.id_number = saved.id_number;
+				vehicleResult.owner.customer_id = saved.id_number;
+			}
+			if (vehicleResult?.billing_person?.person_id === captureTarget.person_id) {
+				vehicleResult.billing_person.id_type = saved.id_type;
+				vehicleResult.billing_person.id_number = saved.id_number;
+				vehicleResult.billing_person.customer_id = saved.id_number;
+			}
+			if (billingCustomer?.person_id === captureTarget.person_id) {
+				billingCustomer.id_type = saved.id_type;
+				billingCustomer.id_number = saved.id_number;
+				billingCustomer.customer_id = saved.id_number;
+			}
+			step = 'billing';
+		} catch (err: any) {
+			captureError = err?.message || 'No se pudo guardar la identificación';
+		} finally { captureSaving = false; }
 	}
 	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'billing'; saveBillingPreferential = false; }
 
@@ -271,10 +364,11 @@
 	function handleIncompleteCancel() { step = 'plate'; vehicleResult = null; billingCustomer = null; plate = ''; }
 
 	async function handleIdLookup() {
-		if (!idValid) { idLookupError = idType === 'CED' ? 'La cédula debe tener 10 dígitos' : 'El RUC debe tener 13 dígitos'; return; }
-		loading = true; idLookupError = '';
+		if (!idValid) { idLookupError = idError ?? 'Identificación inválida'; return; }
+		loading = true; idLookupError = ''; idLookupWarning = ''; regWarning = '';
 		try {
-			const result = await powerfin.lookupPerson(token(), idType, idNumber);
+			const normalized = normalizeIdNumber(idNumber);
+			const result = await powerfin.lookupPerson(token(), idType, normalized);
 			if (result.found && result.data) {
 				billingPersonId = result.data.person_id ?? null;
 				billingCustomer = {
@@ -293,15 +387,17 @@
 				};
 				step = 'billing';
 			} else {
-				regIdNumber = idNumber;
+				regIdNumber = normalized;
 				regName = '';
 				regEmail = '';
 				regPhone = '';
 				regAddress = '';
+				regWarning = result.warning ?? '';
 				step = 'registration';
 			}
-		} catch { idLookupError = 'Error al buscar'; }
-		finally { loading = false; }
+		} catch (err: any) {
+			idLookupError = err?.message || 'Error al buscar';
+		} finally { loading = false; }
 	}
 
 	async function handleNameSearch() {
@@ -315,7 +411,7 @@
 		finally { loading = false; }
 	}
 
-	function selectNameResult(customer: { customer_id: string; person_id?: number | null; id_type: string; id_number: string; name: string; address?: string | null; email: string | null; phone: string | null; price_list: string; price_list_name: string; credit_active: boolean; credit_balance: number; plates: string[] }) {
+	function selectNameResult(customer: Customer) {
 		billingPersonId = customer.person_id ?? null;
 		billingCustomer = { ...customer };
 		step = 'billing';
@@ -422,7 +518,7 @@
 			const hose = selectedHose!;
 			const pl = vehicleResult?.price_list ?? billingCustomer?.price_list ?? 'STANDARD';
 			const customerName = owner?.name || (plate ? 'Cliente ' + plate : 'Sin nombre');
-			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method_id: isPublicSector ? publicCreditMethodId : 1, customer_id: owner?.customer_id, plate, ...(isPublicSector ? { dispatch_type_code: 'CREDIT', credit_contract_id: publicContractId } : {}) });
+			const orderResult = await powerfin.createDispatch(token(), { dispenser_id: dispenserId, hose_id: hose.hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), unit_price: unitPrice, payment_method_id: isPublicSector ? publicCreditMethodId : 1, customer_id: owner?.customer_id, person_id: owner?.person_id ?? null, plate, ...(isPublicSector ? { dispatch_type_code: 'CREDIT', credit_contract_id: publicContractId } : {}) });
 			orderId = orderResult.order_id;
 			await bridge.authorizeDispatch({ order_id: orderId, dispenser_id: hose.fusion_pump_id, hose_id: hose.fusion_hose_id, side, preset_type: presetType === 'FULL' ? 'VOLUME' : presetType, preset_value: presetType === 'FULL' ? 'FULL' : String(presetValue), payment_method_id: 1, customer_id: owner?.customer_id, plate, unit_price: unitPrice, price_list: pl });
 			const authorizedByUserId = $currentUser?.user_id;
@@ -603,22 +699,23 @@
 		try {
 			const result = await powerfin.lookupPerson(token(), changeBillingIdType, changeBillingIdNumber);
 			if (result.found && result.data) {
-				await applyBillingChange(result.data.id_number, result.data.name);
+				await applyBillingChange(result.data.id_number, result.data.name, result.data.person_id ?? null);
 			} else {
 				changeBillingError = 'Cliente no encontrado';
 			}
-		} catch {
-			changeBillingError = 'Error al buscar';
+		} catch (err: any) {
+			changeBillingError = err?.message || 'Error al buscar';
 		} finally {
 			changeBillingLoading = false;
 		}
 	}
 
-	async function applyBillingChange(customerId: string | undefined, customerName: string) {
+	async function applyBillingChange(customerId: string | null | undefined, customerName: string, personId: number | null = null) {
 		if (!collectOrder) return;
 		try {
 			await powerfin.updateDispatchBilling(token(), collectOrder.orderId, {
 				customer_id: customerId,
+				person_id: personId,
 				customer_name: customerName
 			});
 		} catch {
@@ -673,7 +770,7 @@
 		{#if mode === 'sale'}
 			<div class="flex items-center gap-1 mb-4 text-xs text-gray-400">
 				<span class={step === 'plate' || step === 'idLookup' || step === 'registration' ? 'text-primary font-medium' : ''}>Placa</span><span>→</span>
-				<span class={step === 'billing' || step === 'incomplete' ? 'text-primary font-medium' : ''}>Cliente</span><span>→</span>
+				<span class={step === 'billing' || step === 'incomplete' || step === 'captureId' ? 'text-primary font-medium' : ''}>Cliente</span><span>→</span>
 				<span class={step === 'product' ? 'text-primary font-medium' : ''}>Producto</span><span>→</span>
 				<span class={step === 'presetType' || step === 'presetValue' ? 'text-primary font-medium' : ''}>Monto</span><span>→</span>
 				<span class={step === 'authorizing' || step === 'done' ? 'text-primary font-medium' : ''}>Autorizar</span>
@@ -770,7 +867,19 @@
 							<div class="text-sm text-gray-500">📞 {effectiveOwner?.phone}</div>
 						{/if}
 						<div class="text-sm text-purple-600 font-medium mt-1">Lista: {vehicleResult?.price_list_name ?? billingCustomer?.price_list_name ?? 'STANDARD'}</div>
+						{#if billingNeedsIdentification}
+						<div class="bg-red-50 border border-red-300 rounded-xl p-3 mt-3">
+							<div class="text-red-700 font-semibold text-sm mb-1">⛔ Falta la identificación del cliente</div>
+							<div class="text-xs text-red-600 mb-2">
+								Sin una cédula/RUC válido no se puede emitir la factura. Pídala al cliente e ingrésela aquí.
+							</div>
+							<button class="touch-btn w-full bg-red-600 text-white rounded-xl py-2.5 text-sm font-semibold" on:click={startCaptureId}>
+								🪪 Ingresar identificación
+							</button>
+						</div>
+						{:else}
 						<button class="touch-btn mt-2 w-full bg-gray-100 text-gray-500 rounded-xl py-1.5 text-xs" on:click={startEditCustomer}>✏️ Editar datos</button>
+						{/if}
 					</div>
 
 					<!-- Credit Contract Prompt -->
@@ -813,7 +922,7 @@
 					{/if}
 					<div class="grid grid-cols-2 gap-2">
 						<button class="touch-btn bg-gray-100 text-gray-500 rounded-xl py-3 font-medium" on:click={handleBillingBack}>← Volver</button>
-						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold" on:click={handleBillingConfirm}>✓ Correcto</button>
+						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50" on:click={handleBillingConfirm} disabled={billingNeedsIdentification}>✓ Correcto</button>
 					</div>
 					<div class="mt-2">
 						<button class="touch-btn w-full bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={handleBillingChange}>Cambiar</button>
@@ -850,6 +959,35 @@
 				</div>
 			{/if}
 
+			{#if step === 'captureId'}
+				<div class="card p-4 mb-4">
+					<h3 class="text-sm font-semibold text-gray-700 mb-1">🪪 Ingresar identificación</h3>
+					<p class="text-xs text-gray-400 mb-3">
+						Pida al cliente{captureTarget?.name ? ' ' + captureTarget.name : ''} la cédula o el RUC y escríbala aquí. El número se valida antes de guardarlo.
+					</p>
+
+					<div class="flex gap-2 mb-3">
+						<button class="flex-1 py-2 rounded-lg text-sm font-medium {captureIdType === 'CED' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => { captureIdType = 'CED'; captureIdNumber = ''; captureError = ''; }}>Cédula</button>
+						<button class="flex-1 py-2 rounded-lg text-sm font-medium {captureIdType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => { captureIdType = 'RUC'; captureIdNumber = ''; captureError = ''; }}>RUC</button>
+					</div>
+
+					<input type="text" inputmode="numeric" bind:value={captureIdNumber} maxlength={captureIdType === 'CED' ? 10 : 13}
+						placeholder={captureIdType === 'CED' ? '0912345678' : '1790012345001'}
+						class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none"
+						on:keydown={(e) => e.key === 'Enter' && submitCaptureId()} />
+
+					{#if captureIdError}<div class="text-red-500 text-xs text-center mb-3">{captureIdError}</div>{/if}
+					{#if captureError}<div class="text-red-500 text-xs text-center mb-3">{captureError}</div>{/if}
+
+					<div class="grid grid-cols-2 gap-2">
+						<button class="touch-btn bg-gray-100 text-gray-700 rounded-xl py-3 font-medium" on:click={cancelCaptureId}>Cancelar</button>
+						<button class="touch-btn bg-primary text-white rounded-xl py-3 font-semibold disabled:opacity-50" on:click={submitCaptureId} disabled={captureSaving || !captureIdValid}>
+							{captureSaving ? 'Guardando...' : 'Guardar'}
+						</button>
+					</div>
+				</div>
+			{/if}
+
 			{#if step === 'idLookup'}
 				<div class="card p-4 mb-4">
 					<h3 class="text-sm font-semibold text-gray-700 mb-1">{!vehicleResult?.vehicle_found ? '❌ Vehículo no encontrado' : 'Datos de facturación diferentes'}</h3>
@@ -872,8 +1010,11 @@
 						</div>
 						<input type="text" inputmode="numeric" bind:value={idNumber} maxlength={idType === 'CED' ? 10 : 13}
 							placeholder={idType === 'CED' ? '0912345678' : '1790012345001'}
-							class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-3 focus:border-primary focus:outline-none"
+							class="w-full rounded-xl border border-gray-200 px-4 py-3 focus:border-primary focus:outline-none {idError ? 'border-red-300' : ''}"
 							on:keydown={(e) => e.key === 'Enter' && handleIdLookup()} />
+						{#if idError}
+							<div class="text-red-500 text-xs mt-2 mb-3">{idError}</div>
+						{/if}
 					{:else}
 						<!-- Name search mode (local DB only) -->
 						<div class="flex gap-2 mb-3">
@@ -896,6 +1037,7 @@
 						{/if}
 					{/if}
 
+					{#if idLookupWarning}<div class="text-amber-600 text-xs text-center mb-3">⚠ {idLookupWarning}</div>{/if}
 					{#if idLookupError}<div class="text-red-500 text-xs text-center mb-3">{idLookupError}</div>{/if}
 
 					<div class="grid grid-cols-2 gap-2">
@@ -915,6 +1057,11 @@
 						<button class="flex-1 py-2 rounded-lg text-sm font-medium {idType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => idType = 'RUC'}>RUC</button>
 					</div>
 					{#if plate}<div class="bg-gray-50 rounded-xl p-3 mb-3 text-center"><span class="text-xs text-gray-500">Placa: </span><span class="font-mono font-bold text-gray-700">{plate}</span></div>{/if}
+					{#if regWarning}
+						<div class="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-3 text-xs text-amber-700">
+							⚠ {regWarning}
+						</div>
+					{/if}
 					<input type="text" bind:value={regIdNumber} placeholder="Número de identificación" readonly class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 bg-gray-50 text-gray-600 focus:outline-none text-sm" />
 					<input type="text" bind:value={regName} placeholder="Nombre completo *" required class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />
 					<input type="email" bind:value={regEmail} placeholder="Correo electrónico *" required class="w-full rounded-xl border border-gray-200 px-4 py-3 mb-2 focus:border-primary focus:outline-none text-sm" />

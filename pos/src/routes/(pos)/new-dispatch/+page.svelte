@@ -11,6 +11,7 @@
 	import type { VehicleResult, CustomerFormData, Customer, HoseConfig } from '$lib/api/types';
 	import * as powerfin from '$lib/api/powerfin';
 	import * as bridge from '$lib/api/bridge';
+	import { normalizeIdNumber, validateIdentification } from '$lib/utils/id-validation';
 	import { auth } from '$lib/stores/auth';
 	import { pendingOrders } from '$lib/stores/pendingOrders';
 
@@ -41,10 +42,14 @@
 	let error = '';
 	let unitPrice = 1.500;
 	let idLookupError = '';
+	let idLookupWarning = '';
 	let idType: 'CED' | 'RUC' = 'CED';
 	let idNumber = '';
 
-	$: idValid = idType === 'CED' ? idNumber.length === 10 : idNumber.length === 13;
+	// Check-digit validation (see $lib/utils/id-validation). Length alone is not
+	// enough: Key49 rejects cédulas with a bad check digit after the sale.
+	$: idError = idNumber.length > 0 ? validateIdentification(idType, idNumber) : null;
+	$: idValid = idNumber.length > 0 && idError === null;
 
 	function selectHose(hose: HoseConfig) {
 		selectedHoseId = hose.hose_id;
@@ -88,11 +93,13 @@
 	}
 
 	async function handleIdLookup() {
-		if (!idValid) { idLookupError = idType === 'CED' ? 'La cédula debe tener 10 dígitos' : 'El RUC debe tener 13 dígitos'; return; }
+		if (!idValid) { idLookupError = idError ?? 'Identificación inválida'; return; }
 		loading = true;
 		idLookupError = '';
+		idLookupWarning = '';
 		try {
-			const result = await powerfin.lookupPerson(get(auth).token || '', idType, idNumber);
+			const normalized = normalizeIdNumber(idNumber);
+			const result = await powerfin.lookupPerson(get(auth).token || '', idType, normalized);
 			if (result.found && result.data) {
 				billingCustomer = {
 					person_id: result.data.person_id,
@@ -111,6 +118,7 @@
 				unitPrice = result.data.price_list === 'VIP' ? 1.100 : 1.500;
 				currentStep = 'billing';
 			} else {
+				idNumber = normalized;
 				vehicleResult = {
 					vehicle_id: 0,
 					plate: plate,
@@ -121,10 +129,11 @@
 					price_list: 'STANDARD',
 					price_list_name: 'Precio Normal'
 				};
+				idLookupWarning = result.warning ?? '';
 				currentStep = 'form';
 			}
-		} catch {
-			idLookupError = 'Error al buscar';
+		} catch (err: any) {
+			idLookupError = err?.message || 'Error al buscar';
 		} finally {
 			loading = false;
 		}
@@ -192,6 +201,7 @@
 				unit_price: 3.103,
 				payment_method_id: 1,
 				customer_id: dispatchOwner?.customer_id,
+				person_id: dispatchOwner?.person_id ?? null,
 				plate: plate
 			});
 
@@ -362,8 +372,14 @@
 						focus:border-primary focus:outline-none"
 					placeholder={idType === 'CED' ? '0912345678' : '1790012345001'}
 				/>
+				{#if idError}
+					<div class="text-red-500 text-xs mt-1">{idError}</div>
+				{/if}
 			</div>
 
+			{#if idLookupWarning}
+				<div class="text-amber-600 text-xs text-center mb-3">⚠ {idLookupWarning}</div>
+			{/if}
 			{#if idLookupError}
 				<div class="text-red-500 text-xs text-center mb-3">{idLookupError}</div>
 			{/if}

@@ -1,6 +1,82 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-09-12) — v0.37.3
+## Estado actual (2026-09-13) — v0.38.0
+
+### ✅ Validación de cédula/RUC + el POS obliga a re-pedir la identificación
+
+**Incidente que lo motivó:** el 2026-09-13 se perdieron **7 facturas** ($76.45) con
+`Key49 HTTP 400 VALIDATION_ERROR — Invalid identification for type 05`, **después**
+de haber despachado y cobrado. Los 6 clientes tenían cédula con dígito verificador
+inválido. Causa raíz en 3 capas:
+
+1. **Sercobaco caído** (`No existe un contrato activo...`, desde el 09-12) → el POS
+   no puede verificar ninguna cédula.
+2. `GET /api/pos/persons/lookup` se tragaba el error y devolvía `found:false` → el
+   despachador caía al registro manual **sin ningún aviso** y escribía lo que le decían.
+3. **Nadie validaba el dígito verificador.** El POS solo validaba **longitud**
+   (`SaleWizard.svelte`, `idValid = length === 10/13`) y el backend nada. Además ya
+   había **198 clientes activos con ID inválido**, así que al buscarlos devolvía
+   `found:true` y la venta seguía.
+
+**Reglas derivadas con datos reales (no de teoría):**
+
+| Tipo | Regla | ¿Bloqueante? |
+|---|---|---|
+| Cédula | módulo 10 (provincia 01-24 y 30) | **Sí** — es exactamente lo que aplica Key49. 3.743 IDs ya aceptados por el SRI → **0 falsos negativos** |
+| RUC persona natural (3er dígito 0-5) | cédula módulo 10 + `001` | **Sí** — 637/637 RUC naturales aceptados por el SRI la cumplen |
+| RUC jurídica (9) / pública (6) | **solo estructura** | **No** — el módulo 11 **no es confiable**: el registro del SRI tiene RUC que lo fallan (CLICK SOLUCIONES 1793200847001 factura normal) y el sistema lineal sobre 90 RUC confirmados es **inconsistente**. Bloquear con él rechazaría clientes reales |
+| Existencia en el registro | broker del SRI | **Sí** — es la autoridad para RUC |
+
+**Cambios (pos_backend):**
+- **Nuevo** `app/services/id_validation.py` — fuente única de la regla + tests
+  (`tests/test_id_validation.py`, 57 casos: IDs reales aceptados y los 6 rechazados del 09-13).
+- **Nuevo** `tests/test_api_identification_guard.py` (16 tests) — cubre toda la barrera.
+- `POST /api/pos/customers`, `GET /api/pos/persons/lookup`, `GET /api/pos/customers/by-id`
+  → **422** con mensaje accionable. El número inválido **nunca se guarda**.
+- `POST /api/pos/dispatches` y `POST .../collect` → **422** si el cliente no tiene
+  identificación (`id_number IS NULL`) o es inválida. También en `POST .../billing`.
+- **`persons.id_number` ahora es nulable** (migración `5c6d7e8f9a01`): `NULL` es el
+  estado explícito “identificación no verificada”. El `UNIQUE (id_type, id_number)`
+  se mantiene (Postgres permite varios NULL). `downgrade` falla ruidosamente si
+  todavía hay NULL.
+- `PUT /api/pos/persons/{id}` acepta `id_type`/`id_number` → es el endpoint de
+  **re-captura**; valida el dígito, detecta duplicados con **409**.
+- `identity_service.py`: se separó **`IdentityNotFoundError`** (el registro responde
+  “no existe” → **bloquea**, 422) de **`IdentityProviderError`** (proveedor caído →
+  sigue al registro manual **con aviso visible**). Antes ambos eran lo mismo y un RUC
+  inexistente podía registrarse a mano.
+- `CreateDispatchRequest`/`BillingRequest` aceptan `person_id` (el POS lo conoce desde
+  el lookup; necesario cuando `id_number` es NULL, porque `customer_id` ya no existe).
+- `emitir_factura_global` (sector público) falla explícito si el cliente no tiene ID.
+
+**Cambios (POS):**
+- **Nuevo** `src/lib/utils/id-validation.ts` (espejo del backend) + 36 tests.
+  `SaleWizard` y `new-dispatch` ahora validan **checksum con mensaje en pantalla**,
+  antes de buscar.
+- **Paso Cliente bloqueado**: si el dueño/preferencial/cliente cargado no tiene
+  identificación válida, se muestra banner rojo y **“✓ Correcto” queda deshabilitado**;
+  el único camino es **“🪪 Ingresar identificación”** (nuevo paso `captureId`), que
+  vuelve a pedir el número y hace `PUT /api/pos/persons/{id}`.
+- `lookupPerson`, `registerCustomer`, `updatePerson`, `updateDispatchBilling` ahora
+  muestran el **`detail` real del backend** (antes un mensaje genérico).
+- Aviso visible cuando el proveedor está caído (“no se pudo verificar…”).
+
+**Limpieza de datos:** `scripts/limpiar_ids_invalidos.py` — dry-run por defecto;
+`--apply` escribe y primero respalda en `persons_invalid_id_backup`.
+Detecta **198 clientes** (182 cédulas inválidas + 16 RUC inexistentes en el SRI).
+⚠️ **NO ejecutado**: pendiente de aprobación.
+
+**Tests:** pos_backend **536 passed** (era 461). POS: **77 passed** (era 41) +
+`svelte-check` 0 errores.
+
+### ⏳ Pendientes inmediatos (v0.38.0)
+- Ejecutar `scripts/limpiar_ids_invalidos.py --apply` (198 clientes) — requiere visto bueno.
+- Re-emitir las **7 facturas del 09-13** y el backlog (~165 FAILED) tras corregir el cliente.
+- **Sercobaco caído**: escalar el contrato (`No existe un contrato activo`).
+
+---
+
+## Estado anterior (2026-09-12) — v0.37.3
 
 ### ✅ Fix: ventas anónimas — se exige cliente y no se pierde la placa (v0.37.3)
 - **Problema:** 9 despachos `SALE` se crearon sin `person_id` **ni** `vehicle_id` y
@@ -32,10 +108,10 @@
   y por cliente: `/tmp/clientes_facturas_con_problema_2026-09-12.xlsx`.
 - **9 facturas sin cliente** (Fernando Calle) — irrecuperables desde datos; solo
   ticket físico. Con este fix no vuelve a pasar.
+- ~~**228 clientes activos con ID inválido** → falta validar el dígito verificador
+  módulo 10/11 al crear/editar cliente~~ → **RESUELTO en v0.38.0** (validación +
+  nulabilidad + script de limpieza con respaldo).
 - **Sercobaco (cédulas) caído**: `"No existe un contrato activo"` → escalar contrato.
-- **228 clientes activos con ID inválido** (188 CED + 40 RUC) → falta validar el
-  dígito verificador módulo 10/11 al crear/editar cliente (prevención pendiente).
-- **GAD PAUTE**: contrato `is_active=false` y factura global nunca emitida.
 
 ---
 

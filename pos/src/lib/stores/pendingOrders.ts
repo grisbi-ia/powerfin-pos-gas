@@ -8,7 +8,7 @@ export interface PendingOrder {
 	fusionHoseId: number;
 	hoseId: number;
 	side: 'A' | 'B';
-	customerId?: string;
+	customerId?: string | null;
 	customerName: string;
 	plate: string;
 	presetType: 'MONEY' | 'VOLUME';
@@ -144,9 +144,9 @@ function createPendingOrdersStore() {
 		},
 
 		/** Update billing info on an existing order (post-dispatch). */
-		updateOrderBilling(orderId: string, customerName: string, plate: string, customerId?: string) {
+		updateOrderBilling(orderId: string, customerName: string, plate: string, customerId?: string | null) {
 			const updates: Partial<PendingOrder> = { customerName, plate };
-			if (customerId !== undefined) updates.customerId = customerId;
+			if (customerId) updates.customerId = customerId;
 			this.updateOrder(orderId, updates);
 		},
 

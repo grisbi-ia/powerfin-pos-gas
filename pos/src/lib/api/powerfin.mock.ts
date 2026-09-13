@@ -212,7 +212,7 @@ export async function searchCustomers(_token: string, query: string): Promise<Cu
 	const q = query.toLowerCase();
 	return MOCK_CUSTOMERS.filter(c =>
 		c.name.toLowerCase().includes(q) ||
-		c.id_number.includes(q) ||
+		(c.id_number ?? '').includes(q) ||
 		c.plates.some(p => p.toLowerCase().includes(q))
 	);
 }
@@ -386,7 +386,7 @@ export async function updateDispatchBilling(
 	await delay(200);
 	const order = mockOrders.find(o => o.order_id === orderId);
 	if (order) {
-		if (data.customer_id !== undefined) order.customer_id = data.customer_id;
+		if (data.customer_id) order.customer_id = data.customer_id;
 		if (data.customer_name !== undefined) order.customer_name = data.customer_name;
 		if (data.plate !== undefined) order.plate = data.plate;
 		saveMockOrders();
@@ -424,13 +424,13 @@ export async function setVehicleBillingPerson(
 	await delay(200);
 	// Mock: use ABC1234 as the only vehicle for testing
 	if (personId !== null) {
-		const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id) === personId);
+		const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id ?? '') === personId);
 		if (person) {
 			_mockVehicleBilling['ABC1234'] = {
 				person_id: personId,
 				customer_id: person.customer_id,
 				id_type: person.id_type,
-				id_number: person.id_number,
+				id_number: person.id_number ?? '',
 				name: person.name,
 				address: null,
 				email: person.email,
@@ -463,7 +463,7 @@ export async function updatePerson(
 	data: { name?: string; email?: string; phone?: string; address?: string }
 ): Promise<void> {
 	await delay(200);
-	const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id) === personId);
+	const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id ?? '') === personId);
 	if (person) {
 		if (data.name) person.name = data.name;
 		if (data.email) person.email = data.email;
@@ -494,10 +494,10 @@ export async function lookupPerson(
 			local: true,
 			source: 'database',
 			data: {
-				person_id: parseInt(person.customer_id) || 0,
+				person_id: parseInt(person.customer_id ?? '') || 0,
 				name: person.name,
 				id_type: person.id_type,
-				id_number: person.id_number,
+				id_number: person.id_number ?? '',
 				address: null,
 				email: person.email,
 				phone: person.phone,

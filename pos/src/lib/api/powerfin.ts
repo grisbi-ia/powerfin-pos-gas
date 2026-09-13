@@ -12,6 +12,25 @@ function powerfinUrl(path: string): string {
 	return path;
 }
 
+/**
+ * Read the backend's real error message (`detail`) instead of hiding it behind
+ * a generic string. The POS shows it verbatim: validation errors (invalid
+ * cédula, missing customer, …) must be visible to the dispatcher.
+ */
+async function errorDetail(res: Response, fallback: string): Promise<string> {
+	try {
+		const body = await res.json();
+		if (typeof body?.detail === 'string' && body.detail) return body.detail;
+		if (Array.isArray(body?.detail) && body.detail.length > 0) {
+			const first = body.detail[0];
+			return typeof first?.msg === 'string' ? first.msg : fallback;
+		}
+	} catch {
+		/* fall through to the fallback message */
+	}
+	return fallback;
+}
+
 // ── Auth ─────────────────────────────────────────────────────
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
@@ -230,7 +249,27 @@ export async function updatePerson(
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(data)
 	});
-	if (!res.ok) throw new Error('Error actualizando persona');
+	if (!res.ok) throw new Error(await errorDetail(res, 'Error actualizando persona'));
+}
+
+/**
+ * Re-capture a customer's identification after the dispatcher asked for it
+ * again. Used when the recorded cédula/RUC was cleared because it was invalid:
+ * the backend validates the check digit and refuses an invalid number (422).
+ */
+export async function recaptureIdentification(
+	token: string,
+	personId: number,
+	idType: 'CED' | 'RUC',
+	idNumber: string
+): Promise<{ id_type: string; id_number: string }> {
+	const res = await fetch(powerfinUrl(`/api/pos/persons/${personId}`), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+		body: JSON.stringify({ id_type: idType, id_number: idNumber })
+	});
+	if (!res.ok) throw new Error(await errorDetail(res, 'Error guardando la identificación'));
+	return res.json();
 }
 
 // ── Customer by ID ──────────────────────────────────────────
@@ -257,7 +296,7 @@ export async function lookupPerson(
 		powerfinUrl(`/api/pos/persons/lookup?id_type=${encodeURIComponent(idType)}&id_number=${encodeURIComponent(idNumber)}`),
 		{ headers: { Authorization: `Bearer ${token}` } }
 	);
-	if (!res.ok) throw new Error('Error buscando persona');
+	if (!res.ok) throw new Error(await errorDetail(res, 'Error buscando persona'));
 	return res.json();
 }
 
@@ -273,7 +312,7 @@ export async function registerCustomer(
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(data)
 	});
-	if (!res.ok) throw new Error('Error registrando cliente');
+	if (!res.ok) throw new Error(await errorDetail(res, 'Error registrando cliente'));
 	return res.json();
 }
 
@@ -316,7 +355,7 @@ export async function updateDispatchBilling(
 		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
 		body: JSON.stringify(data)
 	});
-	if (!res.ok) throw new Error('Error actualizando facturación');
+	if (!res.ok) throw new Error(await errorDetail(res, 'Error actualizando facturación'));
 }
 
 // ── Cash Management ──────────────────────────────────────────

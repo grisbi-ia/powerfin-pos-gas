@@ -102,10 +102,12 @@ export interface PriceListConfig {
 }
 
 export interface Customer {
-	customer_id: string;
+	/** Identification number. null = cleared because the recorded one was
+	 * invalid; the POS must re-capture it before billing. */
+	customer_id: string | null;
 	person_id?: number | null;
 	id_type: string;
-	id_number: string;
+	id_number: string | null;
 	name: string;
 	address?: string | null;
 	email: string | null;
@@ -117,32 +119,26 @@ export interface Customer {
 	plates: string[];
 }
 
+/** Owner / billing person as returned by the vehicle lookup. */
+export interface VehiclePerson {
+	person_id: number | null;
+	customer_id: string | null;
+	id_type: string;
+	id_number: string | null;
+	name: string;
+	address: string | null;
+	email: string | null;
+	phone: string | null;
+}
+
 export interface VehicleResult {
 	vehicle_id: number;
 	plate: string;
 	vehicle_found: boolean;
 	incomplete_fields: string[];
-	owner: {
-		person_id: number | null;
-		customer_id: string;
-		id_type: string;
-		id_number: string;
-		name: string;
-		address: string | null;
-		email: string | null;
-		phone: string | null;
-	} | null;
+	owner: VehiclePerson | null;
 	/** Preferred billing person (set via PUT /vehicles/{id}/billing-person). Null = use owner. */
-	billing_person: {
-		person_id: number | null;
-		customer_id: string;
-		id_type: string;
-		id_number: string;
-		name: string;
-		address: string | null;
-		email: string | null;
-		phone: string | null;
-	} | null;
+	billing_person: VehiclePerson | null;
 	price_list: string;
 	price_list_name: string;
 }
@@ -182,6 +178,10 @@ export interface PersonLookupResult {
 	local: boolean;
 	source: string | null;
 	data: PersonLookupData | null;
+	/** True when the external provider (Sercobaco/SRI) could not be reached:
+	 * the identification is locally valid but the name was NOT verified. */
+	external_lookup_failed?: boolean;
+	warning?: string;
 }
 
 export interface RegisterCustomerResponse {
@@ -319,7 +319,9 @@ export interface CreateDispatchRequest {
 	preset_value: string;
 	unit_price: number;
 	payment_method_id: number;
-	customer_id?: string;
+	customer_id?: string | null;
+	/** Preferred customer link — required when the identification was cleared. */
+	person_id?: number | null;
 	plate?: string;
 	dispatch_type_code?: string;
 	credit_contract_id?: number;
@@ -351,9 +353,11 @@ export interface CollectDispatchRequest {
 }
 
 export interface UpdateDispatchBillingRequest {
-	customer_id?: string;
+	customer_id?: string | null;
 	customer_name?: string;
 	plate?: string;
+	/** Preferred link — required when the customer's identification was cleared. */
+	person_id?: number | null;
 }
 
 export interface CollectDispatchResponse {
@@ -380,7 +384,7 @@ export interface AuthorizeData {
 	preset_type: 'MONEY' | 'VOLUME';
 	preset_value: string;
 	payment_method_id: number;
-	customer_id?: string;
+	customer_id?: string | null;
 	plate?: string;
 	unit_price: number;
 	price_list?: string;

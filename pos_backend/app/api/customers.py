@@ -14,6 +14,7 @@ from app.schemas import (
     CreateCustomerResponse,
     CustomerResponse,
 )
+from app.services.id_validation import normalize_id_number, validate_identification
 
 router = APIRouter(prefix="/api/pos/customers", tags=["customers"])
 
@@ -108,6 +109,13 @@ async def get_customer_by_id(
     _user: User = Depends(get_current_user),
 ):
     """Look up a customer by identification type and number."""
+    id_type = (id_type or "").strip().upper()
+    id_number = normalize_id_number(id_number)
+
+    error = validate_identification(id_type, id_number)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
+
     result = await db.execute(
         select(Person).where(
             Person.id_type == id_type,
@@ -158,7 +166,20 @@ async def create_customer(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Register a new customer and optionally link a vehicle plate."""
+    """Register a new customer and optionally link a vehicle plate.
+
+    The identification is validated first (cédula module-10 / RUC structure).
+    An invalid number is refused with 422 and **never stored** — this is the
+    gate that stops the recurring "Invalid identification for type 05"
+    rejections from Key49.
+    """
+    body.id_type = (body.id_type or "").strip().upper()
+    body.id_number = normalize_id_number(body.id_number)
+
+    error = validate_identification(body.id_type, body.id_number)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
+
     # Check if already exists
     existing = (await db.execute(
         select(Person).where(

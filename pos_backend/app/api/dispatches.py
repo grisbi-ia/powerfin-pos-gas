@@ -40,12 +40,51 @@ from app.schemas import (
     PendingBulkDispatchItem,
 )
 from app.services.credit_service import validate_credit_dispatch
+from app.services.id_validation import validate_identification
 from app.services.sequential_service import consume_sequential
 from app.services.access_key_service import generate_access_key
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pos/dispatches", tags=["dispatches"])
+
+
+async def _assert_identification_ready(db: AsyncSession, person_id: int | None) -> None:
+    """Block the dispatch when the customer's identification is missing or invalid.
+
+    This is the gate that forces the dispatcher to ask the customer for the
+    number again. Key49 rejects cédulas with a bad check digit
+    ("Invalid identification for type 05") *after* the fuel is dispensed, so the
+    invoice is lost; failing here makes the problem visible while the customer
+    is still at the pump.
+
+    A person with `id_number = NULL` is the explicit "identification not
+    verified yet" state (see app/services/id_validation.py).
+    """
+    if person_id is None:
+        return
+
+    person = (await db.execute(
+        select(Person).where(Person.person_id == person_id)
+    )).scalar_one_or_none()
+    if person is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    if not person.id_number:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"El cliente {person.name} no tiene identificación registrada. "
+                "Pida la cédula (o RUC) al cliente y regístrela antes de continuar."
+            ),
+        )
+
+    error = validate_identification(person.id_type, person.id_number)
+    if error:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Identificación inválida de {person.name}: {error}",
+        )
 
 
 async def _key49_background(dispatch_id: int):
@@ -222,11 +261,29 @@ async def create_dispatch(
                         if tax_obj:
                             tax_rate = tax_obj.rate
 
-    # Resolve customer_id (id_number) → person_id.
+    # Resolve the customer → person_id.
+    # `person_id` wins when present (the POS knows it from the lookup; required
+    # when the identification was cleared). Otherwise `customer_id` (the
+    # identification number) is used.
     # No silent fallback: if the POS sent an identification we cannot resolve,
     # fail loudly instead of creating an anonymous dispatch.
     person_id = None
-    if body.customer_id:
+    if body.person_id:
+        person = (await db.execute(
+            select(Person).where(Person.person_id == body.person_id)
+        )).scalar_one_or_none()
+        if not person:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Cliente no encontrado: person_id={body.person_id}",
+            )
+        if not person.is_active:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cliente inactivo: {person.name}",
+            )
+        person_id = person.person_id
+    elif body.customer_id:
         person = (await db.execute(
             select(Person).where(Person.id_number == body.customer_id)
         )).scalar_one_or_none()
@@ -279,6 +336,11 @@ async def create_dispatch(
                 "identificación o busque una placa con dueño."
             ),
         )
+
+    # The customer must have a *valid* identification before the fuel flows:
+    # an invalid cédula is rejected by Key49 after the sale (invoice lost).
+    if dispatch_type.requires_customer:
+        await _assert_identification_ready(db, person_id)
 
     dispatch = Dispatch(
         order_id=order_id,
@@ -693,6 +755,13 @@ async def collect_dispatch(
                    "No se puede cobrar \$0.00. Regrese al inicio y reintente."
         )
 
+    # Guard 3: the identification may have been cleared/corrected after the
+    # dispatch was created (a customer's bad cédula is blanked so it must be
+    # re-captured). Never invoice without a valid identification — Key49 would
+    # reject the document and the invoice would be lost after collecting.
+    if dispatch.credit_status != "PENDING_BULK_INVOICE":
+        await _assert_identification_ready(db, dispatch.person_id)
+
     dispatch.status = "COLLECTED"
     dispatch.shift_id = body.collected_by_shift_id  # cash belongs to collector's shift
 
@@ -1102,7 +1171,24 @@ async def change_billing(
     if not dispatch:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
 
-    if body.customer_id:
+    if body.person_id:
+        person = (await db.execute(
+            select(Person).where(Person.person_id == body.person_id)
+        )).scalar_one_or_none()
+        if not person:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Persona no encontrada: person_id={body.person_id}",
+            )
+        if not person.is_active:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cliente inactivo: {person.name}",
+            )
+        # The new recipient must be billable before the sale continues.
+        await _assert_identification_ready(db, person.person_id)
+        dispatch.person_id = person.person_id
+    elif body.customer_id:
         person = (await db.execute(
             select(Person).where(
                 Person.id_number == body.customer_id,
@@ -1114,6 +1200,7 @@ async def change_billing(
                 status_code=404,
                 detail=f"Persona no encontrada: {body.customer_id}",
             )
+        await _assert_identification_ready(db, person.person_id)
         dispatch.person_id = person.person_id
 
     await db.commit()

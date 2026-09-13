@@ -223,7 +223,7 @@ describe('Phase 4 — Complete Sales Flow', () => {
 			const { searchCustomers, getCustomerPrice } = await import('$lib/api/powerfin.mock');
 			const customers = await searchCustomers(auth.access_token, 'Pérez');
 			expect(customers.length).toBeGreaterThan(0);
-			const price = await getCustomerPrice(auth.access_token, customers[0].customer_id, 'SUPER');
+			const price = await getCustomerPrice(auth.access_token, customers[0].customer_id ?? '', 'SUPER');
 			expect(price.unit_price).toBe(3.103);
 
 			// 4. Create dispatch (with side and hose)

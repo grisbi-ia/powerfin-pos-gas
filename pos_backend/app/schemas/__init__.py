@@ -133,9 +133,12 @@ class StationInfoResponse(BaseModel):
 
 class VehicleOwner(BaseModel):
     person_id: Optional[int] = None
-    customer_id: str
+    # Both nullable: a person may exist without a validated identification
+    # (it gets cleared when the recorded one is invalid) — see
+    # app/services/id_validation.py. The POS must re-capture it before billing.
+    customer_id: Optional[str] = None
     id_type: str
-    id_number: str
+    id_number: Optional[str] = None
     name: str
     address: Optional[str] = None
     email: Optional[str] = None
@@ -168,9 +171,9 @@ class PredefinedVehicleResponse(BaseModel):
 # ── Customers / Persons ──────────────────────────────────────────
 
 class CustomerResponse(BaseModel):
-    customer_id: str
+    customer_id: Optional[str] = None
     id_type: str
-    id_number: str
+    id_number: Optional[str] = None
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -203,6 +206,10 @@ class UpdatePersonRequest(BaseModel):
     email: Optional[str] = None
     price_list_id: Optional[int] = None
     yalobox_wallet: Optional[str] = None
+    # Re-capturing the identification from the POS (dispatcher asked the
+    # customer again). Validated server-side; never stored when invalid.
+    id_type: Optional[str] = None
+    id_number: Optional[str] = None
 
 
 # ── Prices ───────────────────────────────────────────────────────
@@ -286,6 +293,11 @@ class CreateDispatchRequest(BaseModel):
     unit_price: Decimal
     payment_method_id: int = 1
     customer_id: Optional[str] = None
+    # Preferred link to the customer. Needed when the identification has been
+    # cleared (invalid number awaiting re-capture): `customer_id` cannot find
+    # a person whose id_number is NULL, so the POS sends the person_id it got
+    # from the lookup/preferred-billing response.
+    person_id: Optional[int] = None
     customer_name: Optional[str] = None
     plate: Optional[str] = None
     authorized_by: Optional[str] = None
@@ -395,6 +407,9 @@ class CollectDispatchResponse(BaseModel):
 class BillingRequest(BaseModel):
     customer_id: Optional[str] = None
     customer_name: Optional[str] = None
+    # Preferred link (see CreateDispatchRequest.person_id): required when the
+    # customer's identification has been cleared and must be re-captured.
+    person_id: Optional[int] = None
 
 
 class InvoiceRequest(BaseModel):

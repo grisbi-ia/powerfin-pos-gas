@@ -838,3 +838,5 @@ y puesta en producción.
 | Fase 17      | `v1.0.0` | Producción GASOLINERA — Admin + Cloudflare Tunnel                     |
 | Fase 18      | `v0.33.0` | Dashboard Diario — 3 modos (diario/mensual/anual)                     |
 | Fase 19      | `v0.34.0` | Crédito sector público + Cleanup huérfanos + Ticket firma             |
+| Post-17      | `v0.37.3` | Cliente obligatorio + plate_raw · Monitor/reconciler SRI              |
+| Post-17      | `v0.38.0` | Validación cédula/RUC + el POS obliga a re-pedir la identificación    |

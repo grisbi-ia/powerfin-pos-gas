@@ -586,6 +586,15 @@ async def emitir_factura_global(
     )).scalar_one_or_none()
     if not person:
         return {"errors": ["Person not found"]}
+    if not person.id_number:
+        # Explicit failure: the recipient's identification was cleared (invalid
+        # number) and must be re-captured before the global invoice is emitted.
+        return {
+            "errors": [
+                f"El cliente {person.name} no tiene identificación registrada. "
+                "Registre la cédula/RUC antes de facturar."
+            ]
+        }
 
     # Build items: one per dispatch
     items = []

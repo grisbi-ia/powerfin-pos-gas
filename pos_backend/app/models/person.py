@@ -11,7 +11,9 @@ class Person(Base):
 
     person_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     id_type: Mapped[str] = mapped_column(String(5), nullable=False)
-    id_number: Mapped[str] = mapped_column(String(13), nullable=False)
+    # NULL = cleared because the recorded number was invalid; the POS must
+    # re-capture it before the next sale (see app/services/id_validation.py).
+    id_number: Mapped[str | None] = mapped_column(String(13), nullable=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str | None] = mapped_column(String(300))
     phone: Mapped[str | None] = mapped_column(String(20))

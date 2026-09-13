@@ -14,6 +14,22 @@ class IdentityLookupError(Exception):
     """Raised when the identity API fails or returns no data."""
 
 
+class IdentityNotFoundError(IdentityLookupError):
+    """The registry answered: this identification does NOT exist.
+
+    Key49 rejects these documents ("Invalid identification for type 04/05"), so
+    the numbers must never be accepted — the dispatcher has to ask again.
+    """
+
+
+class IdentityProviderError(IdentityLookupError):
+    """The provider itself is unavailable (network, contract, timeout).
+
+    It says nothing about the identification: it must not be treated as
+    "does not exist", and the failure has to stay visible to the user.
+    """
+
+
 class PersonData:
     """Normalized person data from identity APIs."""
 
@@ -72,14 +88,30 @@ async def lookup_person(id_type: str, id_number: str) -> PersonData:
             )
             response.raise_for_status()
             data = response.json()
+        except httpx.HTTPStatusError as e:
+            # 404 = the identity API answers "not in the registry". Any other
+            # status is a provider problem, not a verdict on the number.
+            if e.response.status_code == 404:
+                raise IdentityNotFoundError(
+                    f"No existe en el registro: {id_number}"
+                ) from e
+            raise IdentityProviderError(
+                f"Servicio de identidad no disponible (HTTP {e.response.status_code})"
+            ) from e
         except httpx.HTTPError as e:
-            raise IdentityLookupError(f"Error de conexión al servicio de identidad: {e}")
+            raise IdentityProviderError(
+                f"Error de conexión al servicio de identidad: {e}"
+            ) from e
         except Exception as e:
-            raise IdentityLookupError(f"Error inesperado: {e}")
+            raise IdentityProviderError(f"Error inesperado: {e}") from e
 
     if not data.get("successful"):
         msg = data.get("message", "Error desconocido")
-        raise IdentityLookupError(f"Consulta fallida: {msg}")
+        # "no encontrado" is a verdict; anything else (contract expired, token,
+        # 5xx, malformed upstream body) is a provider failure — never a verdict.
+        if "no encontrado" in msg.lower() or "not found" in msg.lower():
+            raise IdentityNotFoundError(f"No existe en el registro: {msg}")
+        raise IdentityProviderError(f"Consulta fallida: {msg}")
 
     if id_type == "CED":
         return _parse_ced_data(data, id_number)
@@ -101,7 +133,10 @@ def _parse_ced_data(data: dict, cedula: str) -> PersonData:
         name = datos.get("d_razon", "")
 
     if not name:
-        raise IdentityLookupError("No se encontraron datos para esta cédula")
+        # Cannot distinguish "unknown cédula" from a provider hiccup here:
+        # Sercobaco answers empty for both. Treat it as a provider failure so a
+        # locally valid cédula is never blocked (module-10 already validated it).
+        raise IdentityProviderError("No se encontraron datos para esta cédula")
 
     # Extract email — format: "email1||email2" → take first
     email = None
@@ -138,7 +173,7 @@ def _parse_ruc_data(data: dict, ruc: str) -> PersonData:
 
     name = contrib.get("razonSocial", "")
     if not name:
-        raise IdentityLookupError("No se encontraron datos para este RUC")
+        raise IdentityNotFoundError("El SRI no devolvió datos para este RUC")
 
     # Get first establishment address (prefer MATRIZ)
     establecimientos = inner.get("establecimientos", [])
