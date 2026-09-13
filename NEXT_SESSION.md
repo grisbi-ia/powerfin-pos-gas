@@ -1,6 +1,51 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-09-11) — v0.36.0
+## Estado actual (2026-09-12) — v0.37.2
+
+### 🔴 Incidente Key49 (ambiente PRUEBAS) — DIAGNOSTICADO Y RESUELTO
+- **Síntoma:** en Key49 aparecía el error SRI 35 `ARCHIVO NO CUMPLE ESTRUCTURA XML`
+  con `additional_info: "El ambiente de la solicitud PRODUCCIÓN no coincide con el
+  de ejecución PRUEBAS"`. Ejemplo: factura `003-501-000004663` (dispatch `20705`).
+- **Causa raíz:** el **tenant de Key49 estuvo en ambiente PRUEBAS** en ventanas del
+  09-11 (~22:43–23:15) y 09-12 (~01:24–07:54) (+2 casos aislados el 09-11). Nuestro
+  lado siempre envió correctamente (`company_info.sri_environment=2`, todas las
+  access keys con dígito de ambiente `2`). El ambiente lo define el **tenant** de
+  Key49, no el API key. Se corrigió solo desde 09-12 ~08:00. **No era bug nuestro.**
+- **Evidencia clave:** Key49 **no expone `sri_messages` por API** para estos
+  rechazos (llega `[]`), aunque su UI sí muestra el motivo; los docs en `RETRY`
+  (retry_count 4-5) sí se reintentan y terminan `NOTIFIED`; el error 35 no.
+- **Recuperación:**
+  1. Sync de 29 docs stale (27 → `NOTIFIED`, 2 → `REJECTED`).
+  2. Key49 reprocesó los rechazados desde su UI.
+  3. Re-sync de 39 docs (34 `REJECTED` + 4 `FAILED` + 1 `RECEIVED`) → **todos
+     `NOTIFIED`**. Verificado: 0 docs con `key49_invoice_id` en estado no-final.
+
+### ✅ Fix: reconciler SRI cubre TODOS los estados no-finales (v0.37.2)
+- **Problema:** `sri_sync_service.py` (cada 120s, `sri_sync_enabled=true`) solo
+  tomaba `sri_status='PENDING'`. Cuando Key49 pasaba a `NOTIFIED` estando local en
+  `RETRY`/`RECEIVED`/`FAILED`, **nunca se sincronizaba** → 27 docs quedaron stale.
+- **Fix:** ahora reconcilia cualquier estado no-final con `key49_invoice_id`
+  (incluye `REJECTED`/`FAILED`, para captar un reproceso de Key49).
+- **Seguridad:**
+  - Sigue siendo **solo lectura** sobre Key49 y **nunca reemite** (no llama a
+    `emitir_factura`). No toca el flujo de venta.
+  - Cooldown en memoria (`STALLED_RECHECK_SECONDS=3600`): los `REJECTED`/`FAILED`
+    se re-consultan máximo 1 vez por hora (evita martillar el rate limit de Key49).
+  - Omite el commit si el estado no cambió.
+- **Tests:** `tests/test_sri_sync_service.py` 11 tests (era 4). Suite completa:
+  **456 passed**. Verificado contra prod: el reconciler **no tiene filas que tocar** hoy.
+
+### ⏳ Pendientes (NUEVOS, separados del incidente)
+- **183 despachos `FAILED`** históricos por `Invalid identification for type 04/05`
+  (cédula/RUC inválido) + algunos `Datos insuficientes`. Requieren corregir el dato
+  del cliente y reemitir. 8 son ≥ 09-10.
+- **23 `PENDING` sin `key49_invoice_id`** (15 de 2026-06, 8 de 2026-07) — backlog viejo.
+- Mejora opcional: usar `updated_at` de Key49 como `sri_authorization_date` para los
+  sincronizados (hoy queda con la hora del sync → infla el KPI "tiempo a autorización").
+
+---
+
+## Estado anterior (2026-09-11) — v0.36.0
 
 ### ✨ Nuevo: Módulo Monitoreo SRI/Key49 en Admin (Fase 1 — solo lectura)
 - Sección **"Facturación SRI"** (`/sri`) en Admin, con pestañas **Resumen** y

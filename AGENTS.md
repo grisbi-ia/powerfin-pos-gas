@@ -284,6 +284,13 @@ Ready for production integration with POS frontend.
 - [x] v0.35.4: fix gráficas mensuales (comparación por día del mes)
 - [x] v0.35.5: fix rebote cobro (estado `collecting`), reconciliación SRI, medidores mecánicos
 - [x] v0.35.6: reimpresión respeta fecha/hora original del despacho · deploy dual IP
+- [x] v0.36.0: Módulo Monitoreo SRI/Key49 en Admin (Fase 1, solo lectura, feature flag
+      `sri_monitor_enabled` off por defecto) — ver docs/admin/SRI_MONITOR.md
+- [x] v0.37.0/v0.37.1: reconciler SRI de fondo (`sri_sync_service`), export Excel de
+      despachos sin factura, monitor SRI distingue "En Key49" vs "no llegaron"
+- [x] v0.37.2: incidente Key49 (tenant en ambiente PRUEBAS → error SRI 35) diagnosticado
+      y recuperado por sync; reconciler ahora cubre **todos** los estados no-finales
+      (con cooldown para `REJECTED`/`FAILED`). No toca el flujo de venta.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP
