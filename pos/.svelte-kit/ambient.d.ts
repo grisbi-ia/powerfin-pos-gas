@@ -42,6 +42,7 @@ declare module '$env/static/private' {
 	export const VITE_USE_MOCKS_BRIDGE: string;
 	export const LESSOPEN: string;
 	export const ORCA_WORKSPACE_ID: string;
+	export const AI_AGENT: string;
 	export const LANGUAGE: string;
 	export const PI_SESSION_FILE: string;
 	export const PI_PROVIDER: string;
@@ -139,6 +140,7 @@ declare module '$env/static/private' {
 	export const ORCA_APP_VERSION: string;
 	export const SHELL: string;
 	export const LC_NAME: string;
+	export const ORCAROUTER_API_KEY: string;
 	export const GIT_TERMINAL_PROMPT: string;
 	export const npm_package_version: string;
 	export const npm_lifecycle_event: string;
@@ -148,6 +150,7 @@ declare module '$env/static/private' {
 	export const LESSCLOSE: string;
 	export const GIT_CONFIG_KEY_1: string;
 	export const LC_MEASUREMENT: string;
+	export const ORCA_PI_TITLE_MARKER_OWNED: string;
 	export const LC_IDENTIFICATION: string;
 	export const ORCA_AGENT_HOOK_PORT: string;
 	export const PYSPARK_PYTHON: string;
@@ -157,6 +160,7 @@ declare module '$env/static/private' {
 	export const npm_config_init_module: string;
 	export const JAVA_HOME: string;
 	export const PWD: string;
+	export const ORCA_AGENT_HOOK_TRANSPORT: string;
 	export const LC_ALL: string;
 	export const npm_execpath: string;
 	export const XDG_CONFIG_DIRS: string;
@@ -172,8 +176,8 @@ declare module '$env/static/private' {
 	export const npm_command: string;
 	export const LC_PAPER: string;
 	export const ORCA_TAB_ID: string;
+	export const PNPM_HOME: string;
 	export const BRAVE_API_KEY: string;
-	export const ORCA_SHELL_READY_MARKER: string;
 	export const SPARK_HOME: string;
 	export const INIT_CWD: string;
 	export const EDITOR: string;
@@ -267,6 +271,7 @@ declare module '$env/dynamic/private' {
 		VITE_USE_MOCKS_BRIDGE: string;
 		LESSOPEN: string;
 		ORCA_WORKSPACE_ID: string;
+		AI_AGENT: string;
 		LANGUAGE: string;
 		PI_SESSION_FILE: string;
 		PI_PROVIDER: string;
@@ -364,6 +369,7 @@ declare module '$env/dynamic/private' {
 		ORCA_APP_VERSION: string;
 		SHELL: string;
 		LC_NAME: string;
+		ORCAROUTER_API_KEY: string;
 		GIT_TERMINAL_PROMPT: string;
 		npm_package_version: string;
 		npm_lifecycle_event: string;
@@ -373,6 +379,7 @@ declare module '$env/dynamic/private' {
 		LESSCLOSE: string;
 		GIT_CONFIG_KEY_1: string;
 		LC_MEASUREMENT: string;
+		ORCA_PI_TITLE_MARKER_OWNED: string;
 		LC_IDENTIFICATION: string;
 		ORCA_AGENT_HOOK_PORT: string;
 		PYSPARK_PYTHON: string;
@@ -382,6 +389,7 @@ declare module '$env/dynamic/private' {
 		npm_config_init_module: string;
 		JAVA_HOME: string;
 		PWD: string;
+		ORCA_AGENT_HOOK_TRANSPORT: string;
 		LC_ALL: string;
 		npm_execpath: string;
 		XDG_CONFIG_DIRS: string;
@@ -397,8 +405,8 @@ declare module '$env/dynamic/private' {
 		npm_command: string;
 		LC_PAPER: string;
 		ORCA_TAB_ID: string;
+		PNPM_HOME: string;
 		BRAVE_API_KEY: string;
-		ORCA_SHELL_READY_MARKER: string;
 		SPARK_HOME: string;
 		INIT_CWD: string;
 		EDITOR: string;

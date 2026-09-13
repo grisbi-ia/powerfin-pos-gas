@@ -1,6 +1,45 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## Estado actual (2026-09-12) — v0.37.2
+## Estado actual (2026-09-12) — v0.37.3
+
+### ✅ Fix: ventas anónimas — se exige cliente y no se pierde la placa (v0.37.3)
+- **Problema:** 9 despachos `SALE` se crearon sin `person_id` **ni** `vehicle_id` y
+  luego fallaron con `Datos insuficientes para factura electrónica`.
+- **Causa raíz (2 bugs):**
+  1. `dispatch_types.requires_customer = true` para `SALE`, pero el backend **nunca
+     lo validaba** en `POST /api/pos/dispatches`.
+  2. Si llegaba una `plate` cuyo vehículo no existía y no había `customer_id`, la
+     placa **se descartaba en silencio** (`dispatches.py`).
+- **Fix:**
+  1. **Se valida `requires_customer`.** Si falta el cliente → `422` con mensaje
+     claro. Si el `customer_id` no existe → `404`. Si el cliente está inactivo →
+     `422` (se usa 422 y no 409 porque el POS mapea todo 409 al mensaje de
+     "dispensador en curso").
+  2. **Nueva columna `dispatches.plate_raw`** (migración `4b5c6d7e8f90`): la placa
+     se guarda **siempre**, aunque no exista el vehículo. Se usa como fallback en
+     ticket/recibo, despachos activos, historial y `_get_plate` de Key49.
+- **POS:** `new-dispatch` ahora muestra el mensaje real del backend (antes era
+  genérico), consistente con `SaleWizard`.
+- **Tests:** pos_backend **461 passed** (+5 nuevos: sin cliente, cliente
+  inexistente, cliente inactivo, `plate_raw` con vehículo desconocido, CALIBRATION
+  anónimo con placa). POS: `npm run check` 0 errores + 41/41 tests.
+- **Migración verificada**: `alembic upgrade head` + `downgrade`/`upgrade` OK en dev.
+- **Ojo al desplegar:** el deploy corre Alembic (columna aditiva, nullable).
+
+### ⏳ Pendientes (del análisis B)
+- **183 `FAILED`** históricos por cédula/RUC inválido (0 auto-recuperables).
+  Excel de trabajo para completar datos: `/tmp/backlog_facturas_failed_2026-09-12.xlsx`
+  y por cliente: `/tmp/clientes_facturas_con_problema_2026-09-12.xlsx`.
+- **9 facturas sin cliente** (Fernando Calle) — irrecuperables desde datos; solo
+  ticket físico. Con este fix no vuelve a pasar.
+- **Sercobaco (cédulas) caído**: `"No existe un contrato activo"` → escalar contrato.
+- **228 clientes activos con ID inválido** (188 CED + 40 RUC) → falta validar el
+  dígito verificador módulo 10/11 al crear/editar cliente (prevención pendiente).
+- **GAD PAUTE**: contrato `is_active=false` y factura global nunca emitida.
+
+---
+
+## Estado anterior (2026-09-12) — v0.37.2
 
 ### 🔴 Incidente Key49 (ambiente PRUEBAS) — DIAGNOSTICADO Y RESUELTO
 - **Síntoma:** en Key49 aparecía el error SRI 35 `ARCHIVO NO CUMPLE ESTRUCTURA XML`

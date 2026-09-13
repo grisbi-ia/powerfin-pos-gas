@@ -273,6 +273,9 @@ async def _get_plate(db: AsyncSession, dispatch: Dispatch) -> str:
         )).scalar_one_or_none()
         if v and v.plate:
             return v.plate
+    # Fall back to the plate typed at dispatch time (vehicle not registered)
+    if dispatch.plate_raw:
+        return dispatch.plate_raw
     return "SIN PLACA"
 
 

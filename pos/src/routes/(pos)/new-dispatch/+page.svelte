@@ -231,12 +231,12 @@
 			});
 
 			goto(`/fueling?order=${orderId}&dispenser=${dispenserId}&hose=${selectedHoseId}&side=${side}&amount=${amount}&price=${unitPrice}&customerName=${encodeURIComponent(dispatchOwner?.name ?? '')}&priceList=${vehicleResult?.price_list ?? 'STANDARD'}&plate=${encodeURIComponent(plate)}`);
-		} catch {
+		} catch (err: any) {
 			// Rollback: if dispatch was created but preset failed, cancel the dispatch
 			if (orderId) {
 				try { await powerfin.cancelDispatch(get(auth).token || '', orderId); } catch { /* reconciliation will clean up */ }
 			}
-			error = 'Error al autorizar el despacho';
+			error = err?.message || 'Error al autorizar el despacho';
 		} finally {
 			loading = false;
 		}

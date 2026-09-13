@@ -291,6 +291,9 @@ Ready for production integration with POS frontend.
 - [x] v0.37.2: incidente Key49 (tenant en ambiente PRUEBAS → error SRI 35) diagnosticado
       y recuperado por sync; reconciler ahora cubre **todos** los estados no-finales
       (con cooldown para `REJECTED`/`FAILED`). No toca el flujo de venta.
+- [x] v0.37.3: se exige cliente en `SALE` (`requires_customer` ahora se valida) y se
+      persiste `dispatches.plate_raw` para no perder la placa cuando el vehículo no
+      está registrado. Errores explícitos (422/404), sin fallbacks silenciosos.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP

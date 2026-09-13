@@ -61,6 +61,10 @@ class Dispatch(Base):
     credit_contract_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("credit_contracts.contract_id")
     )
+    plate_raw: Mapped[str | None] = mapped_column(
+        String(15),
+        comment="Plate as typed by the dispatcher, kept even when no vehicle matched",
+    )
     credit_status: Mapped[str | None] = mapped_column(String(20))
     subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)

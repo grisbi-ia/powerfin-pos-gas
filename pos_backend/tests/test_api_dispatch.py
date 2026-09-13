@@ -75,6 +75,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
             "unit_price": 3.103, "payment_method_id": 1,
+            "customer_id": "0912345678",
             "dispatch_type_code": "SALE",
             "items": [
                 {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
@@ -95,6 +96,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
             "unit_price": 3.103, "payment_method_id": 1,
+            "customer_id": "0912345678",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -114,6 +116,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "10.00",
             "unit_price": 3.103, "payment_method_id": 1,
+            "customer_id": "0912345678",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -131,6 +134,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "10.00",
             "unit_price": 3.103, "payment_method_id": 1,
+            "customer_id": "0912345678",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}]
         })
@@ -146,6 +150,7 @@ class TestDispatchAPI:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "50.00",
             "unit_price": 50.00, "payment_method_id": 1,
+            "customer_id": "0912345678",
             "dispatch_type_code": "SALE",
             "items": [{"product_id": 1, "quantity": 10, "unit_price": 5.00, "tax_rate": 0}]
         })
@@ -219,6 +224,7 @@ class TestPublicSectorDispatch:
             "dispenser_id": 1, "hose_id": 1, "side": "A",
             "preset_type": "MONEY", "preset_value": "20.00",
             "unit_price": 3.103, "payment_method_id": 1,
+            "customer_id": "0912345678",
             "dispatch_type_code": "SALE",
             "items": [
                 {"product_id": 1, "quantity": 6.44, "unit_price": 3.103, "tax_rate": 0.12}
@@ -268,3 +274,84 @@ class TestPublicSectorDispatch:
             "emission_point_id": 1
         })
         assert r.status_code == 400
+
+
+class TestCreateDispatchCustomerValidation:
+    """`requires_customer` is enforced and the typed plate is never lost.
+
+    Regression: 9 anonymous SALE dispatches (no customer, no vehicle) reached
+    production and later failed invoicing with "Datos insuficientes".
+    """
+
+    async def _open_shift(self, client, auth_headers):
+        await client.post("/api/pos/shifts/open", headers=auth_headers, json={
+            "opening_cash": 0, "user_name": "Carlos Sarmiento"
+        })
+
+    def _body(self, **overrides):
+        body = {
+            "dispenser_id": 1, "hose_id": 1, "side": "A",
+            "preset_type": "MONEY", "preset_value": "10.00",
+            "unit_price": 3.103, "payment_method_id": 1,
+            "dispatch_type_code": "SALE",
+            "items": [{"product_id": 1, "quantity": 1, "unit_price": 3.103, "tax_rate": 0}],
+        }
+        body.update(overrides)
+        return body
+
+    async def test_sale_without_customer_is_rejected(self, client, auth_headers):
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers,
+                              json=self._body())
+        assert r.status_code == 422
+        assert "requiere cliente" in r.json()["detail"]
+
+    async def test_sale_unknown_customer_is_rejected(self, client, auth_headers):
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers,
+                              json=self._body(customer_id="9999999999"))
+        assert r.status_code == 404
+        assert "no encontrado" in r.json()["detail"].lower()
+
+    async def test_sale_inactive_customer_is_rejected(self, client, auth_headers, db):
+        from sqlalchemy import select
+        from app.models.person import Person
+        await self._open_shift(client, auth_headers)
+        person = (await db.execute(select(Person).where(Person.person_id == 1))).scalar_one()
+        person.is_active = False
+        await db.commit()
+
+        r = await client.post("/api/pos/dispatches", headers=auth_headers,
+                              json=self._body(customer_id="0912345678"))
+        assert r.status_code == 422
+        assert "inactivo" in r.json()["detail"].lower()
+
+    async def test_unknown_plate_is_persisted_as_plate_raw(self, client, auth_headers, db):
+        """Customer known + unknown plate → vehicle auto-created AND plate_raw kept."""
+        from sqlalchemy import select
+        from app.models.dispatch import Dispatch
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers,
+                              json=self._body(customer_id="0912345678", plate="ZZZ-9999"))
+        assert r.status_code == 201
+        order_id = r.json()["order_id"]
+        row = (await db.execute(
+            select(Dispatch).where(Dispatch.order_id == order_id)
+        )).scalar_one()
+        assert row.plate_raw == "ZZZ9999"
+
+    async def test_calibration_without_customer_keeps_plate_raw(self, client, auth_headers, db):
+        """requires_customer=false (CALIBRATION) may run anonymous, but keeps the plate."""
+        from sqlalchemy import select
+        from app.models.dispatch import Dispatch
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json=self._body(
+            dispatch_type_code="CALIBRATION", plate="QQQ-1234",
+        ))
+        assert r.status_code == 201
+        order_id = r.json()["order_id"]
+        row = (await db.execute(
+            select(Dispatch).where(Dispatch.order_id == order_id)
+        )).scalar_one()
+        assert row.person_id is None
+        assert row.plate_raw == "QQQ1234"

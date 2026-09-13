@@ -222,27 +222,36 @@ async def create_dispatch(
                         if tax_obj:
                             tax_rate = tax_obj.rate
 
-    # Resolve customer_id (id_number) → person_id
+    # Resolve customer_id (id_number) → person_id.
+    # No silent fallback: if the POS sent an identification we cannot resolve,
+    # fail loudly instead of creating an anonymous dispatch.
     person_id = None
     if body.customer_id:
-        person_result = await db.execute(
-            select(Person).where(
-                Person.id_number == body.customer_id,
-                Person.is_active == True,
+        person = (await db.execute(
+            select(Person).where(Person.id_number == body.customer_id)
+        )).scalar_one_or_none()
+        if not person:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Cliente no encontrado: {body.customer_id}",
             )
-        )
-        person = person_result.scalar_one_or_none()
-        if person:
-            person_id = person.person_id
+        if not person.is_active:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cliente inactivo: {body.customer_id}",
+            )
+        person_id = person.person_id
 
-    # Resolve plate → vehicle_id
+    # Resolve plate → vehicle_id. Always keep the raw plate so it is never lost
+    # when the vehicle is not registered.
     vehicle_id = None
+    plate_raw = None
     if body.plate:
         cleaned_plate = body.plate.upper().replace(" ", "").replace("-", "")
-        vehicle_result = await db.execute(
+        plate_raw = cleaned_plate
+        vehicle = (await db.execute(
             select(Vehicle).where(Vehicle.plate == cleaned_plate)
-        )
-        vehicle = vehicle_result.scalar_one_or_none()
+        )).scalar_one_or_none()
         if vehicle:
             vehicle_id = vehicle.vehicle_id
             # Also link person if not already set
@@ -259,6 +268,18 @@ async def create_dispatch(
             await db.flush()
             vehicle_id = new_vehicle.vehicle_id
 
+    # dispatch_types.requires_customer was never enforced — that is how anonymous
+    # SALE dispatches (no customer, no known vehicle) got through and later
+    # failed invoicing with "Datos insuficientes". Fail loudly instead.
+    if dispatch_type.requires_customer and person_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Este tipo de despacho requiere cliente: registre la "
+                "identificación o busque una placa con dueño."
+            ),
+        )
+
     dispatch = Dispatch(
         order_id=order_id,
         shift_id=shift.shift_id,
@@ -268,6 +289,7 @@ async def create_dispatch(
         dispatch_type_id=dispatch_type.dispatch_type_id,
         person_id=person_id,
         vehicle_id=vehicle_id,
+        plate_raw=plate_raw,
         authorized_by_user_id=current_user.user_id,
         total=0,
         subtotal=0,
@@ -764,15 +786,15 @@ async def _build_receipt_data(db: AsyncSession, dispatch: Dispatch, pay_method_n
         )
         person = person_result.scalar_one_or_none()
 
-    # Vehicle (plate)
-    plate = ""
+    # Vehicle (plate) — fall back to the raw plate typed at dispatch time
+    plate = dispatch.plate_raw or ""
     if dispatch.vehicle_id:
         v_result = await db.execute(
             select(Vehicle).where(Vehicle.vehicle_id == dispatch.vehicle_id)
         )
         v = v_result.scalar_one_or_none()
         if v:
-            plate = v.plate or ""
+            plate = v.plate or plate
 
     # Company info
     company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
@@ -892,13 +914,13 @@ async def get_pending_bulk_dispatches(
         detail = (await db.execute(
             select(DispatchDetail).where(DispatchDetail.dispatch_id == d.dispatch_id)
         )).scalars().first()
-        plate = None
+        plate = d.plate_raw
         if d.vehicle_id:
             v = (await db.execute(
                 select(Vehicle).where(Vehicle.vehicle_id == d.vehicle_id)
             )).scalar_one_or_none()
             if v:
-                plate = v.plate
+                plate = v.plate or plate
 
         from app.models.product import Product
         product = None
@@ -1226,7 +1248,11 @@ async def get_active_dispatches(
             "customer_address": person_map[d.person_id].address if d.person_id and d.person_id in person_map else None,
             "customer_phone": person_map[d.person_id].phone if d.person_id and d.person_id in person_map else None,
             "customer_email": person_map[d.person_id].email if d.person_id and d.person_id in person_map else None,
-            "plate": vehicle_map[d.vehicle_id].plate if d.vehicle_id and d.vehicle_id in vehicle_map else None,
+            "plate": (
+                vehicle_map[d.vehicle_id].plate
+                if d.vehicle_id and d.vehicle_id in vehicle_map
+                else d.plate_raw
+            ),
             "status": d.status,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "shift_id": d.shift_id,
