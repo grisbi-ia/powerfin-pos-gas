@@ -71,8 +71,62 @@ Detecta **198 clientes** (182 cédulas inválidas + 16 RUC inexistentes en el SR
 
 ### ⏳ Pendientes inmediatos (v0.38.0)
 - Ejecutar `scripts/limpiar_ids_invalidos.py --apply` (198 clientes) — requiere visto bueno.
+  ⚠️ **No correrlo con despachos pendientes de cobro de esos clientes** (hoy 0): si se corre con
+  uno pendiente, ese cobro queda bloqueado porque el guard de `collect` revalida la
+  identificación y el paso 4f **no existe** en la pantalla de cobro (a propósito: la
+  regularización va antes de despachar).
 - Re-emitir las **7 facturas del 09-13** y el backlog (~165 FAILED) tras corregir el cliente.
 - **Sercobaco caído**: escalar el contrato (`No existe un contrato activo`).
+
+---
+
+### 🔴 PENDIENTE PRÓXIMA SESIÓN — Extranjeros sin cédula ni RUC (no tienen dónde pasar)
+
+**Descubierto el 2026-09-13 al revisar el caso de los 198 IDs inválidos.** El bloqueo de
+identificación (v0.38.0) deja a un extranjero **sin ningún documento ecuatoriano** sin
+forma de cargar combustible: el POS exige Cédula o RUC y no hay pasaporte.
+
+**Estado actual (verificado):**
+
+| Punto | Hallazgo |
+|---|---|
+| POS | Solo pestañas **Cédula** y **RUC**. Nunca hubo Pasaporte |
+| `persons.id_type` | `varchar(5)` → **no cabe** "PASAPORTE" |
+| `persons.id_number` | `varchar(13)` — un pasaporte puede ser más largo |
+| Datos reales | 9.463 clientes: 7.373 CED + 2.090 RUC, **cero pasaportes** en toda la historia |
+| `id_validation.py` | Rechaza todo lo que no sea CED/RUC: *"Tipo de identificación no soportado"* |
+| `key49_service.ID_TYPE_MAP` | **Ya tiene** `PASAPORTE → 06` (quedó previsto, nunca se cableó) |
+| Puntos de emisión | Solo `doc_type = FACTURA`. **No existe nota de venta** |
+| Key49 (guía del proyecto, línea 195 y 927) | `04=RUC, 05=Cédula, 06=Pasaporte, 07=Consumidor Final`; si `id_type=07` el id debe ser `9999999999999` y **esas facturas no se pueden anular** |
+
+**Qué cambió con v0.38.0:** antes el despachador **inventaba** una cédula (10 dígitos al
+azar) y la venta pasaba perdiendo la factura — de ahí parte de los 198 IDs basura
+(nombres “Mono”, “Rfv”, “Ghv”). Ahora eso se **bloquea en el mostrador** con un mensaje
+claro. Es más honesto, pero el turista se queda sin cargar.
+
+> Matiz: un **residente extranjero con cédula ecuatoriana** funciona normal (tiene dígito
+> verificador). Solo queda fuera quien no tiene **ningún** documento ecuatoriano.
+
+**Opciones (decidir con el dueño antes de codificar):**
+
+- **A) Pasaporte (SRI 06) — recomendada**
+  - Validación: **sin dígito verificador**; solo formato alfanumérico (5–15).
+  - `persons.id_type`: usar código `PAS` (cabe en varchar(5)) **o** ampliar la columna.
+  - `persons.id_number`: ampliar a `varchar(20)`.
+  - UI: tercera pestaña “Pasaporte” en los mismos puntos que Cédula/RUC.
+  - Mapear `PAS → 06` en `ID_TYPE_MAP`.
+  - Migración + tests: ~1,5–2 h.
+  - **Validar antes:** que Key49/SRI acepten pasaporte en una factura de combustible
+    (probar en el ambiente de pruebas de Key49 o con una venta real).
+- **B) Consumidor Final (SRI 07, `id=9999999999999`)** — cubre a cualquier anónimo, ya
+  soportado por Key49 según la guía; **pero** se eliminó a propósito en la Fase 7 y esas
+  facturas **no se pueden anular**. Decisión fiscal, no técnica.
+- **C) Identificación del exterior (SRI 08)** — la guía del proyecto **no** lo lista
+  (solo 04/05/06/07); habría que confirmar con Key49 si lo acepta.
+
+**Antes de codificar:** contar cuántos extranjeros sin documento ecuatoriano se atienden
+por semana. Si es ~0, basta con el bloqueo explícito actual; si es frecuente, urge la
+opción A.
 
 ---
 

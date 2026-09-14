@@ -304,6 +304,8 @@ Ready for production integration with POS frontend.
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [ ] Ejecutar `scripts/limpiar_ids_invalidos.py --apply` (198 clientes con ID inválido)
       y re-emitir las 7 facturas del 09-13 + backlog (~165 FAILED)
+- [ ] **Extranjeros sin cédula ni RUC: no tienen dónde pasar** — el POS solo ofrece Cédula y
+      RUC; evaluar tipo Pasaporte (SRI 06) o Consumidor Final (SRI 07). Detalle en NEXT_SESSION.md
 - [ ] Sercobaco (broker de cédulas) caído: `No existe un contrato activo` → escalar contrato
 - [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP
       FusionBridge, 🔴 #2 secuencial fiscal perdido en silencio, 🔴 #4 credenciales
