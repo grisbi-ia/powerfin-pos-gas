@@ -2,6 +2,25 @@
 
 ## Estado actual (2026-09-13) — v0.38.0
 
+### 📌 Acciones ejecutadas en PRODUCCIÓN hoy (2026-09-13)
+
+| # | Acción | Resultado |
+|---|---|---|
+| 1 | **Deploy** backend + frontend (`deploy-backend` → `deploy-frontend`) | Migración `5c6d7e8f9a01` aplicada; FusionBridge y Admin **no** tocados. Verificado: `:5173` 200, `:5174` 200, `:8090/health` UP con `fusionConnected:true`, backend vivo tras Nginx |
+| 2 | **Factura `003-501-000004859`** (dispatch 21031, nunca enviada, 7 h en `PENDING`) | Reemitida con `recover_pending_invoices.py --dispatch-id 21031 --min-age-hours 0 --execute` → **`NOTIFIED`** (`key49_invoice_id 92bc97d0-…`), autorizada 19:48 |
+| 3 | **7 facturas fallidas del día** ($76.45) — titular reasignado y emitidas | **AURACORE SOLUCIONES SAS** (`person_id 10472`, RUC `0195160252001`, **creada**; $56.45) y **VALAREZO PATRICIO** (`person_id 3750`, $20.00) → **7/7 autorizadas**, 6 `NOTIFIED` + 1 `AUTHORIZED`. Respaldo previo: `/tmp/reasignacion_antes.tsv` |
+| 4 | **Limpieza de IDs inválidos** (`limpiar_ids_invalidos.py --apply`) | **198 clientes** con `id_number = NULL` (182 cédulas + 16 RUC inexistentes). Respaldo CSV: `/tmp/ids_invalidos_backup_20260914_023929.csv`. Ningún titular de contrato de crédito activo afectado |
+| 5 | **Día fiscal 2026-09-13** | **266 facturas, $3.721,05 — 0 fallidas, 0 pendientes de envío** |
+
+**Pendiente inmediato del dueño:** avisar a los despachadores que, para los clientes limpiados,
+ el POS pedirá la cédula (paso 🪪) — y que **ROMUALDO ONCE (4483)** y **CARLOS CARDENAS (5338)
+no tienen vehículo**, así que solo se encuentran con la pestaña **“Por Nombre”**.
+
+**Nota de entorno:** `agent_llm` tiene **lectura/escritura de datos pero NO `CREATE`** en el
+schema `public` (por eso el respaldo de la limpieza va a CSV). Tampoco hay SSH desde la máquina
+de desarrollo al servidor: los scripts de recuperación se corren contra la BD de producción
+(golpean la API de Key49 directamente).
+
 ### ✅ Validación de cédula/RUC + el POS obliga a re-pedir la identificación
 
 **Incidente que lo motivó:** el 2026-09-13 se perdieron **7 facturas** ($76.45) con

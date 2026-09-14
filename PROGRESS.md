@@ -1,6 +1,106 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-08-20** · Rama: `main` · HEAD: `v0.35.6`
+> Última actualización: **2026-09-13** · Rama: `main` · HEAD: `v0.38.0`
+
+---
+
+## v0.38.0 (2026-09-13) — Validación de cédula/RUC + el POS obliga a re-pedir la identificación
+
+### Incidente que lo motivó
+- El 2026-09-13 se perdieron **7 facturas** ($76.45): `Key49 HTTP 400 — Invalid
+  identification for type 05`, **después** de haber despachado y cobrado. Los 6 clientes
+  tenían cédula con **dígito verificador inválido**.
+- Causa raíz en 3 capas: (1) **Sercobaco caído** (`No existe un contrato activo` desde el
+  09-12) → el POS no podía verificar ninguna cédula; (2) `GET /api/pos/persons/lookup` se
+  tragaba el error y caía al **registro manual sin aviso**; (3) **nadie validaba el dígito
+  verificador** — el POS solo miraba la longitud y el backend nada. Además ya había 198
+  clientes con ID inválido registrado, que al buscarse devolvían `found:true`.
+
+### Reglas derivadas con datos reales (no de teoría)
+| Tipo | Regla | ¿Bloquea? |
+|---|---|---|
+| Cédula | módulo 10 (provincia 01-24 y 30) | **Sí** — es exactamente lo que aplica Key49. 3.743 IDs ya aceptados por el SRI → **0 falsos negativos** |
+| RUC natural (3er dígito 0-5) | cédula módulo 10 + `001` | **Sí** — 637/637 RUC naturales aceptados lo cumplen |
+| RUC jurídica (9) / pública (6) | **solo estructura** | **No** — el módulo 11 del RUC **no es confiable**: el registro del SRI tiene RUC que lo fallan y facturan normal (CLICK SOLUCIONES `1793200847001`), y el sistema lineal sobre 90 RUC confirmados es **inconsistente** |
+| Existencia | broker del SRI | **Sí** — `NOT_FOUND` bloquea; proveedor caído solo avisa |
+
+### Backend
+- **Nuevo** `app/services/id_validation.py` — fuente única de la regla.
+- **422** con mensaje accionable en `POST /customers`, `GET /persons/lookup`,
+  `GET /customers/by-id`; el número inválido **nunca se guarda**.
+- **422** en `create_dispatch`, `collect` y `billing` si el cliente no tiene identificación
+  (`id_number IS NULL`) o es inválida — también vía el dueño de la placa.
+- `persons.id_number` **nulable** (migración `5c6d7e8f9a01`): `NULL` = “no verificada”.
+- `PUT /api/pos/persons/{id}` acepta `id_type`/`id_number` → endpoint de **re-captura**
+  (409 si el número ya está a nombre de otra persona).
+- `identity_service`: se separó **`IdentityNotFoundError`** (el registro dice “no existe” →
+  **bloquea**) de **`IdentityProviderError`** (proveedor caído → sigue con **aviso visible**).
+- `person_id` aceptado en `CreateDispatchRequest`/`BillingRequest` (necesario cuando
+  `customer_id` ya no existe porque el número se borró).
+- `emitir_factura_global` falla explícito si el receptor no tiene identificación.
+
+### Powerfin POS
+- **Nuevo** `src/lib/utils/id-validation.ts` (espejo del backend) + 36 tests.
+- Validación de dígito **en pantalla** en `SaleWizard` y `new-dispatch`, antes de buscar.
+- **Paso Cliente bloqueado**: si el cliente no tiene identificación válida → banner rojo,
+  `✓ Correcto` deshabilitado y único camino **“🪪 Ingresar identificación”** (paso `captureId`)
+  → `PUT /api/pos/persons/{id}` → vuelve a la confirmación ya completo.
+- `powerfin.ts`: se muestra el **`detail` real del backend** (antes mensaje genérico).
+
+### Intervenciones manuales en PROD (2026-09-13)
+1. **Deploy**: backend + frontend (`powerfin-gas deploy-backend` → `deploy-frontend`).
+   FusionBridge y Admin **no** se tocaron. Migración aplicada: `alembic_version` = `5c6d7e8f9a01`.
+2. **Factura `003-501-000004859`** (nunca enviada, 7 h en PENDING): reemitida con
+   `scripts/recover_pending_invoices.py --dispatch-id 21031 --min-age-hours 0 --execute` → `NOTIFIED`.
+3. **7 facturas fallidas del día** ($76.45): titular reasignado a
+   **AURACORE SOLUCIONES SAS** (`person_id 10472`, RUC `0195160252001`, creado) por $56.45 y
+   **VALAREZO PATRICIO** (`person_id 3750`) por $20.00 → las 7 emitidas y autorizadas.
+   Respaldo del estado original: `/tmp/reasignacion_antes.tsv`.
+4. **Limpieza de IDs inválidos**: `scripts/limpiar_ids_invalidos.py --apply` → **198 clientes**
+   con `id_number = NULL` (182 cédulas + 16 RUC inexistentes). Respaldo:
+   `/tmp/ids_invalidos_backup_20260914_023929.csv`.
+5. Resultado del día fiscal: **266 facturas emitidas, 0 fallidas, 0 pendientes** ($3.721,05).
+
+### Hallazgos operativos documentados
+- **Nada reintenta las facturas “nunca enviadas”** (`PENDING` sin `key49_invoice_id`): el
+  reconciler (120 s) solo lee filas que ya tienen id de Key49, y `retry_pending_invoices`
+  **no tiene scheduler**. Backlog: 23 facturas jun/jul ($418.76), todas con ID **válida**.
+- El SOP afirmaba que `retry-sri` recalcula la clave de acceso: **es falso** → solo sirve el
+  mismo día. Corregido en `docs/SOP_REENVIO_SRI_KEY49.md` (nueva Opción D con el script).
+- **Extranjeros sin cédula ni RUC**: el POS solo ofrece CED/RUC → no tienen dónde pasar.
+- `agent_llm` **no tiene `CREATE`** en `public` → el respaldo de la limpieza va a CSV.
+
+### Archivos modificados
+- Backend: `services/id_validation.py` (nuevo), `services/identity_service.py`,
+  `services/key49_service.py`, `api/persons.py`, `api/customers.py`, `api/dispatches.py`,
+  `models/person.py`, `schemas/__init__.py`, `alembic/versions/5c6d7e8f9a01_*.py` (nueva)
+- POS: `lib/utils/id-validation.ts` (nuevo) + `.test.ts`, `lib/components/SaleWizard.svelte`,
+  `routes/(pos)/new-dispatch/+page.svelte`, `lib/api/powerfin.ts`, `lib/api/types.ts`,
+  `lib/api/powerfin.mock.ts`, `lib/stores/pendingOrders.ts`
+- Scripts: `scripts/limpiar_ids_invalidos.py` (nuevo)
+- Docs: `docs/FLUJOS_VENTA_ESCENARIOS.md` (reescritura v2), `docs/SOP_REENVIO_SRI_KEY49.md`,
+  `AGENTS.md`, `NEXT_SESSION.md`, `PROGRESS.md`
+
+### Validación
+- pos_backend: **536 tests pasando** (era 461). POS: **77 tests** (era 41) y `svelte-check`
+  con **0 errores**.
+
+---
+
+## Versiones anteriores no registradas en este archivo
+
+> Reconstruido desde el historial de git y `NEXT_SESSION.md` (donde está el detalle).
+> El archivo quedó sin entradas entre v0.35.7 y v0.37.3; se registran aquí de forma compacta
+> para no dejar el hueco en silencio.
+
+| Versión | Fecha | Resumen |
+|---|---|---|
+| `v0.37.3` | 2026-09-12 | Se **exige cliente en `SALE`** (`requires_customer` ahora se valida) y se persiste `dispatches.plate_raw` para no perder la placa cuando el vehículo no está registrado. Errores explícitos (422/404) |
+| `v0.37.2` | 2026-09-12 | El **reconciler SRI cubre todos los estados no-finales** (con cooldown para `REJECTED`/`FAILED`). El incidente Key49 (tenant en ambiente PRUEBAS → error SRI 35) se diagnosticó y recuperó con sync masivo |
+| `v0.37.1` | 2026-09-12 | Monitor SRI distingue **“En Key49” vs “no llegaron”**; export Excel de despachos sin factura |
+| `v0.37.0` | 2026-09-11 | **Reconciler SRI de fondo** (`sri_sync_service`) para despachos atascados en `PENDING` |
+| `v0.36.0` | 2026-09-10 | **Módulo Monitoreo SRI/Key49 en Admin** (Fase 1, solo lectura, feature flag off por defecto) |
+| `v0.35.7` | 2026-09-09 | El body de error de Key49 se captura en `sri_messages`; `RUC Proveedor` en `additional_info`; `--shard` en el script de recuperación; script de recuperación de facturas pendientes |
 
 ---
 
