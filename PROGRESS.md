@@ -60,6 +60,24 @@
    con `id_number = NULL` (182 cédulas + 16 RUC inexistentes). Respaldo:
    `/tmp/ids_invalidos_backup_20260914_023929.csv`.
 5. Resultado del día fiscal: **266 facturas emitidas, 0 fallidas, 0 pendientes** ($3.721,05).
+6. **12 facturas `FAILED` de septiembre** ($149.51, fechas 09‑01 a 09‑12), todas rechazadas por
+   Key49 por identificación inválida y **ninguna con `key49_invoice_id`** → reasignadas a
+   **5 titulares** y reemitidas **con fecha de hoy** (indicación del contador: el neteo es
+   mensual, la fecha no es problema). Reparto equilibrado por monto:
+
+   | Titular | person_id | Facturas | Monto |
+   |---|---|---|---|
+   | Justin barahona | `10299` | 3 | $35.00 |
+   | AURACORE SOLUCIONES SAS | `10472` | 3 | $34.00 |
+   | AVILA CEVALLOS GLADYS EUFEMIA | `9321` | 2 | $30.00 |
+   | VALAREZO PATRICIO | `3750` | 2 | $25.50 |
+   | SOLIS NARZON | `5254` | 2 | $25.01 |
+
+   Resultado: **11/12 finales** (10 `NOTIFIED` + 1 `AUTHORIZED`), 1 en `RECEIVED`
+   (dispatch 20500, en proceso en el SRI; lo cierra el reconciler). Verificado contra la API
+   de Key49 que el receptor quedó correcto en cada documento.
+   Respaldo: `/tmp/reasignacion_sept.tsv` · reparto: `/tmp/reparto_sept.sql`.
+   **Septiembre queda con 0 facturas con problema.**
 
 ### Hallazgos operativos documentados
 - **Nada reintenta las facturas “nunca enviadas”** (`PENDING` sin `key49_invoice_id`): el

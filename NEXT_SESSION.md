@@ -11,6 +11,7 @@
 | 3 | **7 facturas fallidas del día** ($76.45) — titular reasignado y emitidas | **AURACORE SOLUCIONES SAS** (`person_id 10472`, RUC `0195160252001`, **creada**; $56.45) y **VALAREZO PATRICIO** (`person_id 3750`, $20.00) → **7/7 autorizadas**, 6 `NOTIFIED` + 1 `AUTHORIZED`. Respaldo previo: `/tmp/reasignacion_antes.tsv` |
 | 4 | **Limpieza de IDs inválidos** (`limpiar_ids_invalidos.py --apply`) | **198 clientes** con `id_number = NULL` (182 cédulas + 16 RUC inexistentes). Respaldo CSV: `/tmp/ids_invalidos_backup_20260914_023929.csv`. Ningún titular de contrato de crédito activo afectado |
 | 5 | **Día fiscal 2026-09-13** | **266 facturas, $3.721,05 — 0 fallidas, 0 pendientes de envío** |
+| 6 | **12 facturas `FAILED` de septiembre** ($149.51) — reasignadas y emitidas con fecha de hoy | Reparto entre **5 titulares** ya existentes: Justin barahona (`10299`, $35.00) · AURACORE (`10472`, $34.00) · AVILA CEVALLOS (`9321`, $30.00) · VALAREZO PATRICIO (`3750`, $25.50) · SOLIS NARZON (`5254`, $25.01). Ninguna tenía `key49_invoice_id` → no hubo que anular nada. **11/12 finales** (10 `NOTIFIED` + 1 `AUTHORIZED`); 1 en `RECEIVED` (dispatch 20500) que el reconciler cierra solo. Respaldo previo: `/tmp/reasignacion_sept.tsv` · reparto: `/tmp/reparto_sept.sql`. **Septiembre queda en 0 problemas.** |
 
 **Pendiente inmediato del dueño:** avisar a los despachadores que, para los clientes limpiados,
  el POS pedirá la cédula (paso 🪪) — y que **ROMUALDO ONCE (4483)** y **CARLOS CARDENAS (5338)
