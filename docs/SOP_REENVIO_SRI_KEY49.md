@@ -277,6 +277,63 @@ Síntoma: `sri_messages` = `"Referencia Key49 inexistente (404) — se reemitir�
 desconoce (típico tras una recuperación). La fila queda marcada "se reemitirá" pero
 **nadie la reemite** → usar la **Opción D** (script), que sí regenera la clave.
 
+### 5.5 ¿Por qué el SRI autoriza una factura con un RUC/cédula inválido?
+
+Es la pregunta que más confunde: una factura puede estar **`NOTIFIED`/`AUTHORIZED`**
+y, aun así, la identificación del comprador ser **matemáticamente inválida**.
+
+**Caso real (2026-09-13):** factura `003-501-000004803` (dispatch `20924`, $10,00,
+cliente *Fabián nieves*, `person_id` 10404). La factura está autorizada por el SRI,
+pero el RUC `0104248314001`:
+
+* embebe la cédula `0104248314`, que **no cumple el módulo 10**;
+* y el registro del SRI responde **`NOT_FOUND` (`RUC no encontrado en SRI`)**.
+
+**La causa es que cada capa valida cosas distintas:**
+
+| Capa | Qué comprueba | Veredicto |
+|------|---------------|-----------|
+| **SRI — autorización online** | Estructura XML (XSD), **firma electrónica**, emisor autorizado, establecimiento/punto de emisión, clave de acceso (módulo 11 del emisor) | ✅ Autoriza |
+| **SRI — dígito del comprador** | El requisito existe ("RUC con dígito verificador correcto, cédula con módulo 10") pero el servicio de recepción **no lo calcula**: es responsabilidad **declarativa** del emisor | ⚠️ No lo verifica |
+| **Key49 (antes del endurecimiento)** | Solo estructura → reenviaba tal cual | ✅ Aceptaba |
+| **Key49 (endurecido)** | Estructura **+ validación semántica** de la identificación | ❌ `Invalid identification for type 04/05` |
+| **POS Backend (v0.38.0)** | Módulo 10 en cédula; RUC = estructura + cédula embebida válida + registro del SRI (`id_validation.py`) | ❌ Detecta y bloquea al capturar |
+
+En resumen: **la autorización del SRI no dice "el RUC del comprador existe"**, solo
+que el XML es correcto y está firmado por un emisor autorizado. Por eso la factura es
+válida para el SRI aunque el número del comprador sea falso. Key49 endureció su
+validación después (fue el origen del backlog `FAILED`), y nosotros validamos en el
+**origen de la captura** para no descubrirlo tras el cobro.
+
+**Riesgo de dejar el dato inválido** (no invalida la factura, pero sí acarrea
+problemas): el SRI puede **observarla/glosarla** en revisión y el comprador **no puede
+usarla como crédito tributario**. Requisito citado en la página oficial del SRI
+(*Validez de comprobantes electrónicos*).
+
+**Comprobar el caso concreto:**
+
+```bash
+# 1) Qué RUC guardó Key49 (fuente de verdad del documento emitido)
+curl -s "https://key49.apx5.com/v1/invoices/<key49_invoice_id>" \
+  -H "Authorization: Bearer <key49_api_key>" | jq '.data.recipient'
+
+# 2) ¿El RUC/cédula es matemáticamente válido?
+cd pos_backend && source venv/bin/activate
+python -c "from app.services.id_validation import ruc_error; print(ruc_error('0104248314001'))"
+
+# 3) ¿El SRI conoce ese RUC?
+curl -s "http://<identity-api>/v1/info/ALL/sri/0104248314001" \
+  -H "Authorization: Bearer <identity_token>" | jq '.httpStatus, .message'
+```
+
+**Consecuencia operativa:** un cliente cuyo `id_number` era inválido se limpia a
+`NULL` (`scripts/limpiar_ids_invalidos.py`) para que el POS lo **vuelva a pedir** en el
+próximo despacho. Las facturas **ya emitidas** con ese número **no se tocan** (existen
+en el SRI); la limpieza es **hacia adelante**, no reescribe el pasado.
+
+> ⚠️ **Lección:** nunca asumir que "el SRI la autorizó" implica "el dato del cliente
+es correcto". Validar la identificación **antes** de despachar (v0.38.0).
+
 ---
 
 ## 6. Configuración de Key49

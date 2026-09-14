@@ -74,6 +74,18 @@ Notas del procedimiento:
 - **Extranjeros sin cédula ni RUC**: decidir Pasaporte (SRI 06) vs Consumidor Final (07).
 - Tabla de auditoría `dispatch_billing_changes` (hoy `person_id` se sobreescribe y el cliente
   original se pierde; el rastro queda en los CSV de respaldo).
+- **RUC TEMPORAL para migración al ERP (limpiar después):** `person_id` **10404**
+  (*Fabián nieves*) tiene `id_number = '0104248314001'` repuesto a mano el 2026-09-14 para
+  que el ERP lea el dato. Ese RUC es **inválido** (módulo 10) → el POS lo bloqueará en el
+  flujo mientras siga puesto. Limpiar con:
+  `UPDATE persons SET id_number = NULL WHERE person_id = 10404;`
+- **Respaldo de la limpieza de IDs perdido:** el CSV `/tmp/ids_invalidos_backup_*.csv` y
+  la tabla `persons_invalid_id_backup` ya no existen (el `/tmp` se limpió y `agent_llm` no
+  tiene `CREATE`). `limpiar_ids_invalidos.py` debe escribir el respaldo a una ruta persistente
+  (no `/tmp`).
+- **¿Por qué el SRI autoriza una factura con RUC/cédula inválido?** Explicado en
+  `docs/SOP_REENVIO_SRI_KEY49.md` §5.5 (el SRI valida la *forma* del comprobante, no la
+  *matemática* del comprador).
 
 ---
 
