@@ -124,9 +124,50 @@ curl -s -X POST "http://localhost:8080/api/pos/dispatches/DP-20260620-001/retry-
 **Qué hace internamente**:
 1. Resetea `sri_status` a `PENDING` (incluso si estaba `FAILED`)
 2. Limpia `sri_messages`
-3. Recalcula clave de acceso SRI (49 dígitos)
-4. Envía a Key49
-5. Actualiza `sri_status` según respuesta
+3. Envía a Key49 **reutilizando la clave de acceso ya guardada** (`dispatches.access_key`)
+4. Actualiza `sri_status` según respuesta
+
+> ⚠️ **Ojo — NO recalcula la clave de acceso.** La implementación
+> (`retry_single_invoice` en `app/api/dispatches.py`) solo resetea el estado y llama a
+> `emitir_factura`, que usa `dispatch.access_key` tal como está guardada.
+> Consecuencia: **solo sirve para reenviar el MISMO día de emisión**, porque la clave
+> lleva la fecha embebida (ddMMyyyy) y `emitir_factura` manda `issue_date = hoy`.
+> Si la fecha no coincide, el SRI rechaza el comprobante.
+> Para facturas de días anteriores usar la **Opción D** (script de recuperación),
+> que sí regenera la clave con la fecha de hoy.
+
+### 3.2b Opción D — Reemitir facturas de días anteriores (regenera la clave)
+
+Único camino para facturas "nunca enviadas" o con referencia fantasma de días
+pasados, porque **regenera la clave de acceso con la fecha de hoy**.
+
+```bash
+cd pos_backend && source venv/bin/activate
+
+# 1. Clasificar (sin llamadas a Key49)
+python scripts/recover_pending_invoices.py --classify-only
+
+# 2. Dry-run de UNA factura (reconcilia contra Key49 por access_key — no duplica)
+DATABASE_HOST=100.97.47.123 DATABASE_PORT=5432 DATABASE_NAME=powerfin_gas \
+DATABASE_USER=agent_llm DATABASE_PASSWORD=... PYTHONPATH=. \
+  python scripts/recover_pending_invoices.py --dispatch-id 21031 --min-age-hours 0 --limit 1
+
+# 3. Ejecutar (agregar --execute)
+DATABASE_HOST=100.97.47.123 DATABASE_PORT=5432 DATABASE_NAME=powerfin_gas \
+DATABASE_USER=agent_llm DATABASE_PASSWORD=... PYTHONPATH=. \
+  python scripts/recover_pending_invoices.py --dispatch-id 21031 --min-age-hours 0 --limit 1 --execute
+```
+
+Parámetros útiles: `--month 2026-06` (por mes), `--limit N`, `--order newest`,
+`--no-reconcile` (omite la verificación en Key49, **no recomendado**).
+El reporte JSON queda en `/tmp/k49_recovery.json`.
+
+**Efecto sobre el ticket del cliente**: la clave impresa deja de coincidir con la
+enviada al SRI (el código numérico es aleatorio). Una **reimpresión** desde historial
+sale con la clave correcta, porque el POS la lee de la BD.
+
+> Nota: `--min-age-hours` por defecto es **24**, o sea que las facturas recientes se
+> omiten. Para una del mismo día hay que pasar `--min-age-hours 0`.
 
 ### 3.3 Opción B — Reenviar TODAS las pendientes (lote)
 
@@ -221,8 +262,20 @@ Procedimiento: conciliar manualmente con el contador para la declaración mensua
 ### 5.3 Key49 está caído (timeout / unreachable)
 
 Las facturas quedan en `PENDING`. Reintentar más tarde con la opción B (lote).
-El sistema no tiene scheduler automático — el reenvío es **siempre manual**
+El sistema **no tiene scheduler automático** — el reenvío es **siempre manual**
 o por llamado al endpoint.
+
+> ⚠️ Esto es un agujero conocido: el reconciler de fondo (cada 120 s) **solo lee**
+> Key49 y **solo** para despachos que **ya tienen** `key49_invoice_id`. Un despacho
+> `PENDING` **sin** `key49_invoice_id` (nunca llegó a Key49) **no lo toca nadie** y se
+> queda pegado indefinidamente. Ver `NEXT_SESSION.md` (reintento automático pendiente).
+
+### 5.4 Referencia fantasma de Key49 (404)
+
+Síntoma: `sri_messages` = `"Referencia Key49 inexistente (404) — se reemitirá"` y
+`key49_invoice_id` en NULL. Ocurre cuando la BD tenía un `key49_invoice_id` que Key49
+desconoce (típico tras una recuperación). La fila queda marcada "se reemitirá" pero
+**nadie la reemite** → usar la **Opción D** (script), que sí regenera la clave.
 
 ---
 

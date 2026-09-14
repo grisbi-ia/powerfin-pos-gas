@@ -306,6 +306,11 @@ Ready for production integration with POS frontend.
       y re-emitir las 7 facturas del 09-13 + backlog (~165 FAILED)
 - [ ] **Extranjeros sin cédula ni RUC: no tienen dónde pasar** — el POS solo ofrece Cédula y
       RUC; evaluar tipo Pasaporte (SRI 06) o Consumidor Final (SRI 07). Detalle en NEXT_SESSION.md
+- [ ] **Nada reintenta las facturas “nunca enviadas”** (`PENDING` sin `key49_invoice_id`):
+      el reconciler solo lee filas que ya tienen id de Key49 y `retry_pending_invoices`
+      no tiene scheduler. Propuesta: llamarlo desde `run_sri_sync_loop`. Backlog: **23
+      facturas, $418.76** (15 jun + 8 jul, todas con ID **válida** — ninguna por cédula).
+      Detalle en NEXT_SESSION.md
 - [ ] Sercobaco (broker de cédulas) caído: `No existe un contrato activo` → escalar contrato
 - [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP
       FusionBridge, 🔴 #2 secuencial fiscal perdido en silencio, 🔴 #4 credenciales
@@ -374,6 +379,73 @@ powerfin-gas status            # servicios + health :8080 :8090 :5173 :5174
 powerfin-gas backup-db         # pg_dump + auto-limpieza
 powerfin-gas migrate-db        # migraciones Alembic manuales si no hay auto
 ```
+
+## Reenviar facturas a Key49 (procedimiento)
+
+> Fuente autoritativa: `docs/SOP_REENVIO_SRI_KEY49.md`. Resumen operativo:
+
+**Diagnóstico previo** (siempre, antes de tocar nada):
+
+```sql
+-- PENDING sin factura = nunca llegó a Key49 (no lo toca el reconciler)
+SELECT d.dispatch_id, d.order_id, d.sequential_number, d.total, d.created_at::date,
+       p.id_type, p.id_number, p.name, d.sri_messages
+FROM dispatches d LEFT JOIN persons p ON p.person_id = d.person_id
+WHERE d.sri_status = 'PENDING' AND d.key49_invoice_id IS NULL
+  AND d.status <> 'CANCELLED'
+  AND d.credit_status IS DISTINCT FROM 'PENDING_BULK_INVOICE'
+ORDER BY d.created_at;
+```
+
+**Ojo**: el reconciler de fondo (cada 120 s) **solo lee** Key49 y **solo** filas que
+ya tienen `key49_invoice_id`. Un `PENDING` sin ese id **no se envía solo**: el reenvío
+es **siempre manual**. Y el `retry-sri` HTTP **no recalcula la clave** → solo sirve el
+mismo día de emisión.
+
+### Factura del mismo día
+
+```bash
+# en el servidor
+TOKEN=$(curl -s -X POST http://localhost:8080/api/admin/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ADMIN","password":"CLAVE"}' | jq -r .access_token)
+
+curl -s -X POST "http://localhost:8080/api/pos/dispatches/<ORDER_ID>/retry-sri" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Factura de días anteriores (o “referencia fantasma” 404) — el método usado el 2026-09-13
+
+Único camino que **regenera la clave de acceso con la fecha de hoy**. Corre **desde la
+máquina de desarrollo** contra la BD de producción (no requiere SSH ni token):
+
+```bash
+cd pos_backend && source venv/bin/activate
+
+# 1. clasificar (sin llamadas a Key49)
+python scripts/recover_pending_invoices.py --classify-only
+
+# 2. dry-run (reconcilia contra Key49 por access_key → no duplica)
+DATABASE_HOST=100.97.47.123 DATABASE_PORT=5432 DATABASE_NAME=powerfin_gas \
+DATABASE_USER=agent_llm DATABASE_PASSWORD=... PYTHONPATH=. \
+  python scripts/recover_pending_invoices.py --dispatch-id <ID> --min-age-hours 0 --limit 1
+
+# 3. ejecutar (agregar --execute)
+DATABASE_HOST=100.97.47.123 DATABASE_PORT=5432 DATABASE_NAME=powerfin_gas \
+DATABASE_USER=agent_llm DATABASE_PASSWORD=... PYTHONPATH=. \
+  python scripts/recover_pending_invoices.py --dispatch-id <ID> --min-age-hours 0 --limit 1 --execute
+```
+
+- `--min-age-hours` por defecto es **24** → una factura del mismo día se omitiría:
+pasar `--min-age-hours 0`.
+- Otras opciones: `--month 2026-06`, `--limit N`, `--sync-existing` (solo refresca
+desde Key49 sin reemitir), `--shard i/N`.
+- Reporte JSON en `/tmp/k49_recovery.json`.
+- **Verificar después**: `sri_status` debe quedar `NOTIFIED` o `AUTHORIZED` y
+`key49_invoice_id` no nulo. Si queda `CREATED/SENT`, el reconciler lo pasa a
+`NOTIFIED` en ~2 min.
+- **Efecto en el ticket**: la clave impresa deja de coincidir (el código numérico se
+regenera). Una **reimpresión** desde historial sale con la clave correcta.
 
 ## Connectivity tests (from server)
 

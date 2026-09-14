@@ -80,6 +80,35 @@ Detecta **198 clientes** (182 cédulas inválidas + 16 RUC inexistentes en el SR
 
 ---
 
+### ⚙️ PENDIENTE — Nada reintenta las facturas “nunca enviadas”
+
+**Detectado el 2026-09-13** al revisar el comprobante `003-501-000004859`
+(orden `OV-20260913124828-174`, dispatch 21031), que estuvo **7 horas pegado** en
+`PENDING` con el mensaje *“Key49 no disponible — se reintentará”*.
+
+**Causa raíz:** el reintento de esas filas existe (`retry_pending_invoices`) pero
+**ningún scheduler lo llama**. El único loop de fondo (`sri_sync_service`, cada 120 s)
+**solo lee** Key49 y **solo** para despachos que **ya tienen** `key49_invoice_id`. Un
+`PENDING` **sin** `key49_invoice_id` no lo toca nadie.
+
+> El docstring de `retry_pending_invoices` dice *“Called periodically by the
+> scheduler”* — **ese scheduler no existe.** Solo es alcanzable por HTTP
+> (`POST /api/pos/dispatches/retry-pending-invoices`, ADMIN/SUPERVISOR).
+
+**Solución propuesta:** que `run_sri_sync_loop` llame también a
+`retry_pending_invoices()` una vez por ciclo (o cada N ciclos), envuelto en
+`try/except` y respetando `key49_enabled`. ~30 min con test.
+
+**Backlog actual (2026-09-13, verificado): 23 facturas nunca enviadas, $418.76**
+(15 de junio + 8 de julio, todas con identificación **válida** — **ninguna fue por
+cédula/RUC**). `sri_messages` de todas: `"Referencia Key49 inexistente (404) — se
+reemitirá"` → quedaron marcadas para reemisión durante la recuperación del 11/12-09 y
+**nadie las reemitió**. Se pueden rescatar con la Opción D del SOP (el script regenera
+la clave con la fecha de hoy), pero **cambia la fecha del comprobante → decisión fiscal**.
+Además hay **140 despachos de GAD PAUTE** que van por **factura global**, no por aquí.
+
+---
+
 ### 🔴 PENDIENTE PRÓXIMA SESIÓN — Extranjeros sin cédula ni RUC (no tienen dónde pasar)
 
 **Descubierto el 2026-09-13 al revisar el caso de los 198 IDs inválidos.** El bloqueo de
