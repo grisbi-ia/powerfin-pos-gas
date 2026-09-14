@@ -64,6 +64,11 @@ Notas del procedimiento:
 
 ### 4. Otros pendientes técnicos (no bloquean lo de mañana)
 
+- **Verificar al arrancar:** `dispatch 20500` (`003-502-000002401`, $10,00, VALAREZO PATRICIO)
+  quedó en **`RECEIVED`** al cierre de hoy (el SRI no la había autorizado). Debe pasar a
+  `NOTIFIED`/`AUTHORIZED` sola por el reconciler; si sigue en `RECEIVED`, revisar su estado en la
+  API de Key49 (`GET /v1/invoices/<id>`) y su `sri_messages`.
+
 - **Reintento automático** de `PENDING` sin `key49_invoice_id` en `run_sri_sync_loop` (~30 min
   con test) → es la causa de raíz de que las facturas “nunca enviadas” se queden pegadas.
 - **Extranjeros sin cédula ni RUC**: decidir Pasaporte (SRI 06) vs Consumidor Final (07).
