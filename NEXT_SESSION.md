@@ -1,5 +1,77 @@
 # NEXT_SESSION.md — Powerfin POS
 
+## 📅 PLAN PARA MAÑANA (2026-09-14)
+
+> El objetivo es **cerrar agosto/2026** con el mismo procedimiento que se usó hoy para
+> septiembre (`v0.38.0`): reasignar el titular de las facturas rechazadas por identificación y
+> reemitirlas **con fecha de hoy** por Key49.
+
+### 1. Facturas de AGOSTO/2026 — pendiente hacer (datos ya medidos)
+
+| Concepto | Valor |
+|---|---|
+| Facturas con problema | **60** |
+| Monto | **$725,24** |
+| Rango | 2026‑08‑01 → 2026‑08‑31 |
+| Clientes distintos involucrados | **29** |
+| ¿Tienen `key49_invoice_id`? | **NO, ninguna (0/60)** → el documento nunca existió en Key49/SRI → **no hace falta anular ni nota de crédito** |
+| Causa | `Invalid identification for type 05` (54 facturas, $604,12) y `type 04` (6, $121,12) |
+| Resto de agosto | 6.275 `NOTIFIED` + 481 `AUTHORIZED` — sin problemas |
+
+**⚠️ Bloqueante para mañana:** se necesita la **lista de titulares** que va a dar el contador
+(los nombres + cédula/RUC). Con la lista se valida que las identificaciones sean válidas
+(`app/services/id_validation.py`) y se arma el reparto.
+
+**Reparto propuesto** (equilibrado por monto, mismo algoritmo LPT que hoy): $725,24 entre los
+5 titulares de hoy ≈ **$145 cada uno**. Si el contador da más titulares, se reparte entre todos.
+
+### 2. Procedimiento a repetir (ya validado dos veces hoy)
+
+```bash
+# 1) respaldo del estado original
+#    (dispatch_id, sequential, total, cliente) → /tmp/reasignacion_agosto.tsv
+
+# 2) validar que los titulares tengan identificación válida
+
+# 3) solo cambios de facturación (person_id + sri_status='PENDING' + sri_messages=NULL)
+#    ⚠️ NO tocar vehículos ni reasignar placas
+
+# 4) emitir (el script regenera la clave con FECHA DE HOY y reconcilia contra Key49)
+cd pos_backend && source venv/bin/activate
+DATABASE_HOST=100.97.47.123 DATABASE_PORT=5432 DATABASE_NAME=powerfin_gas \
+DATABASE_USER=agent_llm DATABASE_PASSWORD=... PYTHONPATH=. \
+  python scripts/recover_pending_invoices.py \
+    --dispatch-id …(x60)… --min-age-hours 0 --limit 70 --execute
+
+# 5) verificar en BD (sri_status + key49_invoice_id) y en la API de Key49
+#    que el receptor quede correcto en cada documento
+```
+
+Notas del procedimiento:
+- `--min-age-hours 0` es **obligatorio** (el default 24 omitiría las facturas de días anteriores).
+- Las que queden en `CREATED/SIGNED/SENT/RECEIVED` las cierra **solo** el reconciler (120 s).
+- Filtro de las candidatas: `sri_status='PENDING'` (por eso hay que ponerlas en PENDING antes),
+  `status <> 'CANCELLED'` y `credit_status IS DISTINCT FROM 'PENDING_BULK_INVOICE'`.
+
+### 3. Junio/Julio — los revisa el contador mañana
+
+- **23 facturas, $418,76** (15 de junio + 8 de julio), todas con identificación **válida**.
+- `sri_messages` idéntico en todas: `"Referencia Key49 inexistente (404) — se reemitirá"`:
+  quedaron marcadas para reemisión en la recuperación del 11/12‑09 y **nadie las reemitió**
+  (el mismo agujero del punto 4).
+- **No se tocan hasta que el contador decida** (cambiaría la fecha del comprobante a la fecha
+  de ejecución).
+
+### 4. Otros pendientes técnicos (no bloquean lo de mañana)
+
+- **Reintento automático** de `PENDING` sin `key49_invoice_id` en `run_sri_sync_loop` (~30 min
+  con test) → es la causa de raíz de que las facturas “nunca enviadas” se queden pegadas.
+- **Extranjeros sin cédula ni RUC**: decidir Pasaporte (SRI 06) vs Consumidor Final (07).
+- Tabla de auditoría `dispatch_billing_changes` (hoy `person_id` se sobreescribe y el cliente
+  original se pierde; el rastro queda en los CSV de respaldo).
+
+---
+
 ## Estado actual (2026-09-13) — v0.38.0
 
 ### 📌 Acciones ejecutadas en PRODUCCIÓN hoy (2026-09-13)
