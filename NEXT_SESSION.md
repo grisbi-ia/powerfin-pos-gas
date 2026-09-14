@@ -70,12 +70,18 @@ Detecta **198 clientes** (182 cédulas inválidas + 16 RUC inexistentes en el SR
 `svelte-check` 0 errores.
 
 ### ⏳ Pendientes inmediatos (v0.38.0)
-- Ejecutar `scripts/limpiar_ids_invalidos.py --apply` (198 clientes) — requiere visto bueno.
-  ⚠️ **No correrlo con despachos pendientes de cobro de esos clientes** (hoy 0): si se corre con
-  uno pendiente, ese cobro queda bloqueado porque el guard de `collect` revalida la
-  identificación y el paso 4f **no existe** en la pantalla de cobro (a propósito: la
-  regularización va antes de despachar).
-- Re-emitir las **7 facturas del 09-13** y el backlog (~165 FAILED) tras corregir el cliente.
+- [x] **Ejecutado 2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` → **198 clientes**
+  quedaron sin identificación (`id_number = NULL`). Respaldo: `/tmp/ids_invalidos_backup_20260914_023929.csv`
+  (198 filas con `person_id, id_type, old_id_number, name, reason`).
+  ⚠️ El respaldo en tabla **no** se pudo hacer: `agent_llm` no tiene `CREATE` en `public` → el
+  script ahora **respalda a CSV siempre** (y avisa si la tabla falla).
+  Consecuencia esperada: en el próximo despacho de esos clientes el POS mostrará ⛔ y pedirá
+  la cédula (paso 4f). 2 de ellos (ROMUALDO ONCE, CARLOS CARDENAS) **no tienen vehículo** →
+  hay que buscarlos con la pestaña **“Por Nombre”**.
+- Re-emitir las **7 facturas del 09-13** → ✅ **HECHO**: reasignadas a AURACORE SOLUCIONES SAS
+  (`person_id 10472`, RUC `0195160252001`) y PATRICIO VALAREZO (`person_id 3750`) y emitidas
+  al SRI (7/7 autorizadas, $76.45). Ver commit de docs y memoria.
+- Queda pendiente el **backlog de 23 facturas** de junio/julio ($418.76) — decisión fiscal.
 - **Sercobaco caído**: escalar el contrato (`No existe un contrato activo`).
 
 ---

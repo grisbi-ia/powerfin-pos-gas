@@ -17,8 +17,12 @@ it again (see `pos_backend/app/services/id_validation.py`).
 Safety
 ------
 * `--dry-run` (default) prints the plan and touches nothing.
-* `--apply` writes, and first copies every affected row into
-  `persons_invalid_id_backup` (created on the fly, one row per run).
+* `--apply` writes, and first writes **every affected row to a CSV backup**
+  (default `/tmp/ids_invalidos_backup_<timestamp>.csv`) — the authoritative
+  restore record. It also tries to copy them into `persons_invalid_id_backup`,
+  but that table needs `CREATE` on schema `public`, which the production
+  read/write user does not have; if it fails it says so and continues, because
+  the CSV is the backup.
 * Idempotent: rows already cleared are skipped.
 * RUC verification uses the SRI registry through the identity API. RUCs that the
   registry confirms are NEVER cleared, even if the module-11 check digit fails
@@ -29,7 +33,7 @@ Usage
     cd pos_backend && source venv/bin/activate
     python ../scripts/limpiar_ids_invalidos.py                 # dry-run (prod)
     python ../scripts/limpiar_ids_invalidos.py --apply
-    python ../scripts/limpiar_ids_invalidos.py --apply --include-ced
+    python ../scripts/limpiar_ids_invalidos.py --apply --no-ced
     python ../scripts/limpiar_ids_invalidos.py --dsn postgresql://...
 
 Environment: DSN defaults to the production read/write user from docs/DB_ACCESS.md.
@@ -39,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import os
 import sys
@@ -142,6 +147,8 @@ async def main() -> int:
                         help="confirm RUCs against the SRI registry (default: true)")
     parser.add_argument("--no-verify-ruc-registry", dest="verify_ruc_registry", action="store_false")
     parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument("--backup-file", default=None,
+                        help="Ruta del CSV de respaldo (default: /tmp/ids_invalidos_backup_<ts>.csv)")
     args = parser.parse_args()
 
     persons, historically_rejected = await _load_persons(args.dsn)
@@ -209,24 +216,43 @@ async def main() -> int:
 
     import asyncpg
 
+    run_at = datetime.now(timezone.utc)
+
+    # ── Backup (SIEMPRE a archivo) ──
+    # The DB-level backup table needs CREATE on schema public, which the
+    # production read/write user (agent_llm) does NOT have. The file is the
+    # authoritative restore record; the table is attempted only as a bonus and
+    # its failure is reported, never hidden.
+    backup_path = args.backup_file or f"/tmp/ids_invalidos_backup_{run_at:%Y%m%d_%H%M%S}.csv"
+    with open(backup_path, "w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["person_id", "id_type", "old_id_number", "name", "reason"])
+        for p in targets:
+            writer.writerow([p["person_id"], p["id_type"], p["id_number"], p["name"], p["_reason"]])
+    print(f"\n✅ Respaldo en archivo: {backup_path}  ({len(targets)} filas)")
+    print("   Para revertir: restaurar id_number desde ese CSV con un UPDATE por person_id.")
+
     conn = await asyncpg.connect(args.dsn)
     try:
-        await conn.execute(BACKUP_DDL)
-        run_at = datetime.now(timezone.utc)
-        for p in targets:
-            await conn.execute(
-                """
-                INSERT INTO persons_invalid_id_backup
-                    (run_at, person_id, id_type, old_id_number, reason, name)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                """,
-                run_at, p["person_id"], p["id_type"], p["id_number"], p["_reason"], p["name"],
-            )
+        try:
+            await conn.execute(BACKUP_DDL)
+            for p in targets:
+                await conn.execute(
+                    """
+                    INSERT INTO persons_invalid_id_backup
+                        (run_at, person_id, id_type, old_id_number, reason, name)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    """,
+                    run_at, p["person_id"], p["id_type"], p["id_number"], p["_reason"], p["name"],
+                )
+            print(f"✅ Respaldo también en la tabla persons_invalid_id_backup (run_at={run_at.isoformat()})")
+        except Exception as exc:
+            print(f"⚠️  No se pudo respaldar en tabla (se sigue con el archivo): {type(exc).__name__}: {exc}")
+
         ids = [p["person_id"] for p in targets]
         cleared = await conn.execute(
             "UPDATE persons SET id_number = NULL WHERE person_id = ANY($1::int[])", ids
         )
-        print(f"\n✅ Respaldo en persons_invalid_id_backup (run_at={run_at.isoformat()})")
         print(f"✅ {cleared} — {len(targets)} personas quedan sin identificación.")
         print("   El POS pedirá la cédula/RUC de nuevo antes de la próxima venta.")
     finally:

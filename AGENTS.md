@@ -302,10 +302,14 @@ Ready for production integration with POS frontend.
       de IDs inválidos con respaldo. Motivo: 7 facturas perdidas el 09-13.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
-- [ ] Ejecutar `scripts/limpiar_ids_invalidos.py --apply` (198 clientes con ID inválido)
-      y re-emitir las 7 facturas del 09-13 + backlog (~165 FAILED)
+- [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**
+      con `id_number = NULL` (respaldo CSV en `/tmp/ids_invalidos_backup_20260914_023929.csv`).
+      El POS ahora pedirá la cédula en su próximo despacho. Backlog de 23 facturas jun/jul
+      ($418.76) pendiente de decisión fiscal.
 - [ ] **Extranjeros sin cédula ni RUC: no tienen dónde pasar** — el POS solo ofrece Cédula y
       RUC; evaluar tipo Pasaporte (SRI 06) o Consumidor Final (SRI 07). Detalle en NEXT_SESSION.md
+- [ ] Auditoría de cambios de facturación: hoy `dispatches.person_id` se sobreescribe al cambiar
+      el titular (se pierde el cliente original). Evaluar tabla `dispatch_billing_changes`
 - [ ] **Nada reintenta las facturas “nunca enviadas”** (`PENDING` sin `key49_invoice_id`):
       el reconciler solo lee filas que ya tienen id de Key49 y `retry_pending_invoices`
       no tiene scheduler. Propuesta: llamarlo desde `run_sri_sync_loop`. Backlog: **23
