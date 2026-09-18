@@ -11,6 +11,7 @@
 | 4 | **Reenvío de las 3 facturas del 17** (`22001`, `22073`, `22074` · $16,79) | **HECHO**: `recover_pending_invoices.py --min-age-hours 0 --execute` → 3/3 finales (1 `AUTHORIZED` + 2 `NOTIFIED`) con clave regenerada a hoy (`18092026…`). Día 17–18 en 0 pendientes |
 | 5 | **Prueba Key49 con fecha original** (dispatch `22073`) | **RECHAZADA**: `HTTP 400 INVALID_ISSUE_DATE — Must be today's date`. Herramienta: `scripts/resend_pending_original_date.py`. Confirma que reenviar sin cambiar la fecha es imposible |
 | 6 | **v0.39.0 — reintento automático de facturas “nunca enviadas”** | **HECHO**: loop `run_sri_retry_loop`, regeneración de clave al cruzar medianoche, cutoff configurable y fix del filtro `credit_status`. Ver “RESUELTO (v0.39.0)” abajo. 7 tests nuevos (543 en total) |
+| 7 | **GAD Paute — 186 despachos marcados como facturados** (facturados en el ERP, no en Key49) | **HECHO**: 181 del lote (`--contract-id 3`) + 5 individuales (`--dispatch-id … --clear-sequential`), todos `credit_status=INVOICED`, `sri_status=AUTHORIZED`, `sri_authorization_date=2026-08-24`, `sri_messages=NULL`. A los 5 se les quitó el `sequential_number` y `access_key` (nunca llegaron a Key49). **0 pendientes y 0 problemas de Paute**; total $11.209,49. Respaldos: `~/.powerfin_backups/facturado_erp_contract3_*.csv` y `…_dispatches5_*.csv`. Script: `scripts/marcar_facturado_erp.py` |
 
 > Verificado con acceso directo a prod (`100.97.47.123:5432`, `agent_llm`, ver `docs/DB_ACCESS.md`) vía Tailscale.
 

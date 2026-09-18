@@ -4,7 +4,7 @@
 > o fallidas en el envío al SRI a través de Key49.
 
 ```
-Última actualización: 2026-06-23
+Última actualización: 2026-09-18 (v0.39.0)
 Relacionado: docs/ROADMAP.md (Phase 11e), docs/SOP_DESPACHOS_CERO.md
 ```
 
@@ -181,19 +181,25 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/admin/auth/login \
 curl -s -X POST "http://localhost:8080/api/pos/dispatches/retry-pending-invoices" \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# Respuesta esperada:
-# {"retried": 5, "expired": 2}
+# Respuesta esperada (v0.39.0):
+# {"retried": 5, "regenerated": 2, "expired": 0, "skipped": 0, "failed": 0}
 ```
 
-**Qué hace internamente**:
-1. Busca todos los despachos con `sri_status = PENDING` (no cancelados)
+**Qué hace internamente** (v0.39.0):
+1. Busca los despachos con `sri_status = PENDING` **sin `key49_invoice_id`** (no
+   cancelados, excluyendo `PENDING_BULK_INVOICE`).
 2. Para cada uno:
-   - Si tiene **<24h** → `emitir_factura()` a Key49
-   - Si tiene **>24h** → marca como `FAILED` con mensaje: "Vencida: más de 24h desde emisión"
-3. Retorna conteo: `{retried: N, expired: M}`
+   - Si la **clave de acceso es de hoy** → `emitir_factura()` a Key49 tal cual.
+   - Si la clave es **de un día anterior** → **regenera la clave con la fecha de hoy**
+     (Key49 rechaza fechas pasadas) y luego emite.
+   - Si el despacho es **más viejo que `sri_retry_max_age_hours`** (default 72 h) →
+     se deja `PENDING` para reemisión manual (ya **no** se marca `FAILED`).
+3. Retorna `{retried, regenerated, expired, skipped, failed}`.
 
-> ⚠️ Las facturas vencidas (>24h) **no se pueden recuperar por esta vía**.
-> Ver sección 5 para opciones alternativas.
+> 💡 **Desde v0.39.0 esto corre solo**: el loop de fondo `run_sri_retry_loop`
+> (cada 300 s) llama a `retry_pending_invoices()`. El endpoint HTTP sirve para
+> forzarlo a mano. Gates: `sri_retry_enabled` (default on) y `key49_enabled`.
+> Serializado con un lock de proceso para no emitir dos veces.
 
 ### 3.4 Opción C — Verificar estado de una factura en Key49
 
@@ -233,17 +239,26 @@ ORDER BY created_at DESC;
 
 ## 5. Casos especiales
 
-### 5.1 Factura vencida (>24h) — no se puede enviar al SRI
+### 5.1 Factura con fecha pasada — Key49 exige `issue_date = hoy`
 
-El SRI rechaza facturas con fecha de emisión pasada. La política automática las
-marca como `FAILED`. Opciones:
+Key49 responde `HTTP 400 VALIDATION_ERROR — {"field":"issue_date","code":"INVALID_ISSUE_DATE","message":"Must be today's date"}`
+si se reenvía con la fecha de emisión original (probado el 2026-09-18 con el
+dispatch 22073: `scripts/resend_pending_original_date.py`). **Reenviar siempre
+implica regenerar la clave de acceso con la fecha de hoy.**
 
-1. **Anular y re-facturar**: Cancelar el despacho original, crear uno nuevo con
-   fecha actual. Solo viable si el despacho no tiene combustible real entregado.
-2. **Nota de crédito**: Emitir nota de crédito electrónica y re-facturar (requiere
-   soporte de Key49 para notas de crédito).
-3. **Conciliación manual**: Documentar la factura como emitida fuera del sistema
-   SRI y reportar en la declaración mensual.
+1. **Automático (v0.39.0)**: el retry regenera la clave por su cuenta para cualquier
+   `PENDING` dentro de `sri_retry_max_age_hours` (default **72 h**, `0` = sin límite).
+   Si la factura falló de noche y se reintenta al día siguiente, sale con la fecha nueva.
+2. **Manual (fuera de la ventana)**: `recover_pending_invoices.py --min-age-hours 0`
+   (Opción D, sección 3.2b) — regenera la clave y emite con fecha de hoy.
+3. **Anular y re-facturar**: cancelar el despacho original y crear uno nuevo con
+   fecha actual. Solo viable si no hay combustible real entregado.
+4. **Conciliación manual**: documentar como emitida fuera del SRI y reportar en la
+   declaración mensual. Si se facturó en el **ERP**, ver 5.6.
+
+> ⚠️ Reemitir **cambia la fecha del comprobante** y el código numérico impreso:
+> la clave del ticket original deja de coincidir. Una **reimpresión** desde el POS
+> sale con la clave correcta.
 
 ### 5.2 Factura con total $0.00 enviada al SRI
 
@@ -336,19 +351,66 @@ es correcto". Validar la identificación **antes** de despachar (v0.38.0).
 
 ---
 
+---
+
+## 5-A. Sector público facturado desde el ERP (NO_INDEFINIDO)
+
+Los contratos `NO_INDEFINIDO` acumulan despachos como `PENDING_BULK_INVOICE` para
+liquidarlos en una factura global. Cuando esa factura **se emite directamente en
+Powerfin ERP** (no por el POS Backend), los despachos locales se quedan pendientes
+y aparecen como problemas SRI (`NEVER_SENT` / `INVALID_DATA`). Para reconciliarlos:
+
+```bash
+cd pos_backend && source venv/bin/activate
+
+# Lote de un contrato (dry-run por defecto)
+python ../scripts/marcar_facturado_erp.py --contract-id <ID> --auth-date YYYY-MM-DD
+python ../scripts/marcar_facturado_erp.py --contract-id <ID> --auth-date YYYY-MM-DD --apply
+
+# Casos que se intentaron como factura individual pero terminaron en el lote del ERP
+python ../scripts/marcar_facturado_erp.py --dispatch-id N --dispatch-id M \
+    --auth-date YYYY-MM-DD --clear-sequential --apply
+```
+
+Qué escribe:
+- `credit_status = 'INVOICED'` → lo saca de la cola de liquidación.
+- `sri_status = 'AUTHORIZED'` → `FINAL_OK` en el monitor SRI y los reportes.
+- `sri_authorization_date = <--auth-date>` y `sri_messages = NULL`.
+- La clave/secuencial se dejan como están: con **varias** facturas del ERP no hay un
+  documento único que referenciar.
+- `--clear-sequential` además pone `sequential_number` y `access_key` en `NULL`
+  (solo para despachos que nunca llegaron a Key49; el script **aborta** si alguna
+  fila tiene `key49_invoice_id`).
+
+> Idempotente, dry-run por defecto, y respalda cada fila afectada en
+> `~/.powerfin_backups/*.csv` (fuera de `/tmp`).
+
+**Caso real (2026-09-18)**: GAD de Paute (contrato 3, `person_id 9044`) → **186
+ despachos, $11.209,49** reconciliados a `INVOICED / AUTHORIZED / 2026-08-24`.
+ `persons.id_number` de 9044 sigue `NULL`: para volver a facturar en el ERP hay que
+ reponerlo (y el contrato está `is_active=false`).
+
+---
+
 ## 6. Configuración de Key49
 
 ```sql
 -- Verificar configuración actual
-SELECT key, value FROM system_config WHERE key LIKE 'key49%';
+SELECT key, value FROM system_config WHERE key LIKE 'key49%' OR key LIKE 'sri_%';
 ```
 
-| Key | Descripción | Ejemplo |
+| Key | Descripción | Default |
 |-----|------------|---------|
-| `key49_enabled` | Habilitar facturación electrónica | `true` / `false` |
-| `key49_api_url` | URL base de la API Key49 | `https://api.key49.com/v1` |
-| `key49_api_key` | Token de autenticación | `sk-xxxxxxxx` |
-| `key49_ambiente` | Ambiente SRI | `PRUEBAS` / `PRODUCCION` |
+| `key49_enabled` | Habilitar emisión/reintento contra Key49 | `true` / `false` |
+| `key49_base_url` | URL base de la API Key49 | `https://key49.apx5.com/v1` |
+| `key49_api_key` | Token de autenticación | `k49_…` |
+| `sri_sync_enabled` | Reconciler de solo lectura (estados no-finales) | `false` (activar) |
+| `sri_retry_enabled` | Reintento automático de `PENDING` sin factura (v0.39.0) | `true` (si no existe) |
+| `sri_retry_max_age_hours` | Ventana de reemisión automática; `0` = sin límite (v0.39.0) | `72` |
+| `sri_monitor_enabled` | Módulo de monitoreo SRI en el Admin | `false` (activar) |
+
+> El **ambiente SRI** (`1=PRUEBAS`, `2=PRODUCCIÓN`) no es una key de `system_config`:
+> vive en `company_info.sri_environment`, y quien lo aplica es el **tenant de Key49**.
 
 Si `key49_enabled = false`, el sistema **nunca** intenta enviar facturas al SRI
 (todas quedan `PENDING`). Esto es útil en fase de pruebas.
@@ -388,7 +450,10 @@ fi
 
 ## Referencias
 
-- `pos_backend/app/services/key49_service.py` — Lógica de emisión y retry
-- `pos_backend/app/api/dispatches.py` — Endpoints `/retry-sri` y `/retry-pending-invoices`
+- `pos_backend/app/services/key49_service.py` — Emisión, retry y `run_sri_retry_loop`
+- `pos_backend/app/services/sri_sync_service.py` — Reconciler de solo lectura
+- `pos_backend/app/api/dispatches.py` — Endpoints `/retry-sri`, `/retry-pending-invoices`, `/bulk-invoice`
 - `pos_backend/app/models/dispatch.py` — Columnas `sri_status`, `key49_access_key`, `sri_messages`
+- `scripts/recover_pending_invoices.py` — Reemisión de días anteriores (regenera la clave)
+- `scripts/marcar_facturado_erp.py` — Reconciliar despachos facturados en el ERP
 - `docs/SOP_DESPACHOS_CERO.md` — Diagnóstico de despachos con monto $0.00
