@@ -8,6 +8,10 @@
 | 2 | **Verificar `dispatch 20500`** (`003-502-000002401`, $10,00, VALAREZO PATRICIO) | **RESUELTO**: el reconciler la cerró → `sri_status = NOTIFIED`, `sri_authorization_date = 2026-09-13 22:28:45`, `key49_invoice_id fb801e60-d789-4b7f-a7cd-ae44d72d1f22`. No requiere intervención |
 | 3 | **Limpiar RUC temporal de `person_id 10404`** (*Fabián nieves*) | **HECHO**: `UPDATE persons SET id_number = NULL WHERE person_id = 10404` (valor anterior `0104248314001`, RUC inválido). Sin contratos de crédito ni duplicados. El POS pedirá la identificación en su próximo despacho |
 
+| 4 | **Reenvío de las 3 facturas del 17** (`22001`, `22073`, `22074` · $16,79) | **HECHO**: `recover_pending_invoices.py --min-age-hours 0 --execute` → 3/3 finales (1 `AUTHORIZED` + 2 `NOTIFIED`) con clave regenerada a hoy (`18092026…`). Día 17–18 en 0 pendientes |
+| 5 | **Prueba Key49 con fecha original** (dispatch `22073`) | **RECHAZADA**: `HTTP 400 INVALID_ISSUE_DATE — Must be today's date`. Herramienta: `scripts/resend_pending_original_date.py`. Confirma que reenviar sin cambiar la fecha es imposible |
+| 6 | **v0.39.0 — reintento automático de facturas “nunca enviadas”** | **HECHO**: loop `run_sri_retry_loop`, regeneración de clave al cruzar medianoche, cutoff configurable y fix del filtro `credit_status`. Ver “RESUELTO (v0.39.0)” abajo. 7 tests nuevos (543 en total) |
+
 > Verificado con acceso directo a prod (`100.97.47.123:5432`, `agent_llm`, ver `docs/DB_ACCESS.md`) vía Tailscale.
 
 ---
@@ -80,8 +84,8 @@ Notas del procedimiento:
   quedó en `NOTIFIED` con `key49_invoice_id fb801e60-…` y `sri_authorization_date`
   2026-09-13 22:28:45. El reconciler la cerró solo (no requirió intervención).
 
-- **Reintento automático** de `PENDING` sin `key49_invoice_id` en `run_sri_sync_loop` (~30 min
-  con test) → es la causa de raíz de que las facturas “nunca enviadas” se queden pegadas.
+- ~~**Reintento automático** de `PENDING` sin `key49_invoice_id` ...~~ → ✅ **RESUELTO (v0.39.0)**:
+  loop `run_sri_retry_loop` + regeneración de clave al cruzar medianoche + cutoff configurable.
 - **Extranjeros sin cédula ni RUC**: decidir Pasaporte (SRI 06) vs Consumidor Final (07).
 - Tabla de auditoría `dispatch_billing_changes` (hoy `person_id` se sobreescribe y el cliente
   original se pierde; el rastro queda en los CSV de respaldo).
@@ -205,7 +209,7 @@ Detecta **198 clientes** (182 cédulas inválidas + 16 RUC inexistentes en el SR
 
 ---
 
-### ⚙️ PENDIENTE — Nada reintenta las facturas “nunca enviadas”
+### ✅ RESUELTO (v0.39.0, 2026-09-18) — Reintento automático de facturas “nunca enviadas”
 
 **Detectado el 2026-09-13** al revisar el comprobante `003-501-000004859`
 (orden `OV-20260913124828-174`, dispatch 21031), que estuvo **7 horas pegado** en
@@ -220,9 +224,23 @@ Detecta **198 clientes** (182 cédulas inválidas + 16 RUC inexistentes en el SR
 > scheduler”* — **ese scheduler no existe.** Solo es alcanzable por HTTP
 > (`POST /api/pos/dispatches/retry-pending-invoices`, ADMIN/SUPERVISOR).
 
-**Solución propuesta:** que `run_sri_sync_loop` llame también a
-`retry_pending_invoices()` una vez por ciclo (o cada N ciclos), envuelto en
-`try/except` y respetando `key49_enabled`. ~30 min con test.
+**Solución implementada (v0.39.0):** nuevo loop de fondo `run_sri_retry_loop`
+(`key49_service.py`, cada 300 s) que llama a `retry_pending_invoices()`. Además se
+corrigieron tres bugs que lo hacían inútil:
+
+1. **No había scheduler** — el loop no existía.
+2. **El filtro `credit_status != 'PENDING_BULK_INVOICE'` descartaba las ventas normales**:
+   en SQL, `NULL != 'x'` es `NULL` (no verdadero), así que toda venta con `credit_status`
+   nulo quedaba fuera. Ahora usa `IS DISTINCT FROM` (igual que el script de recuperación).
+3. **Cruce de medianoche**: reenviar ayer con la clave de ayer es imposible —
+   Key49 responde `HTTP 400 INVALID_ISSUE_DATE` (probado). Ahora el reintento **regenera
+   la clave de acceso con la fecha de hoy** cuando la guardada no es de hoy (mismo secuencial).
+4. **Cutoff**: antes marcaba `FAILED "Vencida"` a las >24 h (las perdía). Ahora las deja
+   `PENDING` para reemisión manual, con ventana configurable
+   (`sri_retry_max_age_hours`, default 72 h; 0 = sin límite).
+
+**Gates**: `sri_retry_enabled` (default on) y `key49_enabled`. Serializado con un lock de
+proceso para que el loop y el endpoint HTTP no emitan dos veces.
 
 **Backlog actual (2026-09-13, verificado): 23 facturas nunca enviadas, $418.76**
 (15 de junio + 8 de julio, todas con identificación **válida** — **ninguna fue por

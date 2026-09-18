@@ -1,6 +1,56 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-09-13** · Rama: `main` · HEAD: `v0.38.0`
+> Última actualización: **2026-09-18** · Rama: `main` · HEAD: `v0.39.0`
+
+---
+
+## v0.39.0 (2026-09-18) — Reintento automático de facturas “nunca enviadas”
+
+### Problema que lo motivó
+- El 2026-09-17 quedaron **3 facturas `PENDING` sin `key49_invoice_id`** ($16,79),
+  todas cobradas, con el mensaje `"Key49 no disponible — se reintentará"`.
+- **Motivo real**: error de red transitorio al POSTear a Key49 (`TerminalOutOfService`:
+  `ConnectError`/`TimeoutException`/`RemoteProtocolError`/`ReadError`). Aislado: las
+  ventas de segundos antes/después sí se enviaron. No fue caída de Key49 ni dato inválido.
+- **Nadie las reintentaba** y, además, el reintento existente estaba roto (ver abajo).
+
+### Prueba que fijó la regla
+- Reenvío del dispatch **22073** con su `access_key` original (`17092026…`, 17-09) y
+  `issue_date` forzado a 2026-09-17 → Key49 responde:
+  `HTTP 400 VALIDATION_ERROR — {"field":"issue_date","message":"Must be today's date (2026-09-18)","code":"INVALID_ISSUE_DATE"}`.
+- **Conclusión**: reenviar sin cambiar la fecha es imposible; hay que regenerar la clave.
+  Herramienta de verificación: `scripts/resend_pending_original_date.py` (dry-run por defecto).
+
+### Cambios en `pos_backend`
+- **Nuevo loop de fondo** `run_sri_retry_loop()` (`app/services/key49_service.py`, cada 300 s),
+  arrancado desde `main.py` (no en tests) y apagado en shutdown. Separado del reconciler
+  de solo lectura (`sri_sync_service`).
+- **`retry_pending_invoices()` reescrito**:
+  - **Regenera la clave de acceso con la fecha de hoy** cuando la guardada no es de hoy
+    (mismo secuencial; la factura nunca fue aceptada). Helper `access_key_is_for_today()`.
+  - **Cutoff configurable** `sri_retry_max_age_hours` (default 72 h; 0 = sin límite). Las
+    más viejas se dejan `PENDING` para reemisión manual — antes se marcaban
+    `FAILED "Vencida"` y se perdían.
+  - **Bug de filtro corregido**: `credit_status != 'PENDING_BULK_INVOICE'` descartaba en
+    SQL toda fila con `credit_status NULL` (todas las ventas normales) → ahora
+    `IS DISTINCT FROM`, igual que el script de recuperación y el monitor.
+  - **Lock de proceso** (`asyncio.Lock`) para que el loop y el endpoint HTTP no emitan
+    la misma factura dos veces.
+  - Devuelve `{retried, regenerated, expired, skipped, failed}`.
+- **Gates**: `sri_retry_enabled` (default on) y `key49_enabled`.
+
+### Intervención en PROD (2026-09-18)
+- Reenvío de las **3 facturas del 17** con `recover_pending_invoices.py --min-age-hours 0
+  --execute` → 3/3 finales (1 `AUTHORIZED` + 2 `NOTIFIED`), claves regeneradas a hoy
+  (`18092026…`). Día 17–18: **0 pendientes**.
+- **Verificado** `dispatch 20500` → `NOTIFIED` (el reconciler lo cerró el 09-13 22:28).
+- **Limpiado** el RUC temporal de `person_id 10404` (`id_number = NULL`).
+
+### Tests
+- Nuevo `tests/test_retry_pending_invoices.py` (7 tests): clave del mismo día sin
+  regenerar, cruce de medianoche regenera, >72 h se deja `PENDING`, fallo de
+  regeneración visible, filas con id de Key49 se omiten, gates desactivados.
+- **543 passed** (era 536). Sin cambios en `pos/`, `admin/` ni `fusion-bridge/`.
 
 ---
 

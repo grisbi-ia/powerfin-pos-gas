@@ -97,6 +97,7 @@ async def lifespan(app: FastAPI):
     import os
     cleanup_task = None
     sri_sync_task = None
+    sri_retry_task = None
     if not os.environ.get("TESTING"):
         cleanup_task = asyncio.create_task(run_cleanup_loop())
         # SRI/Key49 reconciler — reconciles dispatches stuck in PENDING after
@@ -104,9 +105,15 @@ async def lifespan(app: FastAPI):
         # off), so it is inert unless explicitly enabled. Never re-emits.
         from app.services.sri_sync_service import run_sri_sync_loop
         sri_sync_task = asyncio.create_task(run_sri_sync_loop())
+        # SRI retry — sends PENDING invoices that never reached Key49
+        # (no key49_invoice_id). Gated by system_config['sri_retry_enabled']
+        # (default on) and ['key49_enabled']. Regenerates the access key when
+        # the retry crosses midnight (Key49 rejects past issue dates).
+        from app.services.key49_service import run_sri_retry_loop
+        sri_retry_task = asyncio.create_task(run_sri_retry_loop())
     yield
     # ── Shutdown ───────────────────────────────────────────
-    for task in (cleanup_task, sri_sync_task):
+    for task in (cleanup_task, sri_sync_task, sri_retry_task):
         if task is not None:
             task.cancel()
             try:

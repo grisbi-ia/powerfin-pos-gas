@@ -147,6 +147,7 @@ declare module '$env/static/private' {
 	export const QT_ACCESSIBILITY: string;
 	export const GDMSESSION: string;
 	export const GIT_CONFIG_KEY_0: string;
+	export const ORCA_HISTFILE: string;
 	export const LESSCLOSE: string;
 	export const GIT_CONFIG_KEY_1: string;
 	export const LC_MEASUREMENT: string;
@@ -175,6 +176,7 @@ declare module '$env/static/private' {
 	export const npm_config_allow_scripts: string;
 	export const npm_command: string;
 	export const LC_PAPER: string;
+	export const HISTFILE: string;
 	export const ORCA_TAB_ID: string;
 	export const PNPM_HOME: string;
 	export const BRAVE_API_KEY: string;
@@ -376,6 +378,7 @@ declare module '$env/dynamic/private' {
 		QT_ACCESSIBILITY: string;
 		GDMSESSION: string;
 		GIT_CONFIG_KEY_0: string;
+		ORCA_HISTFILE: string;
 		LESSCLOSE: string;
 		GIT_CONFIG_KEY_1: string;
 		LC_MEASUREMENT: string;
@@ -404,6 +407,7 @@ declare module '$env/dynamic/private' {
 		npm_config_allow_scripts: string;
 		npm_command: string;
 		LC_PAPER: string;
+		HISTFILE: string;
 		ORCA_TAB_ID: string;
 		PNPM_HOME: string;
 		BRAVE_API_KEY: string;

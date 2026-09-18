@@ -840,3 +840,4 @@ y puesta en producción.
 | Fase 19      | `v0.34.0` | Crédito sector público + Cleanup huérfanos + Ticket firma             |
 | Post-17      | `v0.37.3` | Cliente obligatorio + plate_raw · Monitor/reconciler SRI              |
 | Post-17      | `v0.38.0` | Validación cédula/RUC + el POS obliga a re-pedir la identificación    |
+| Post-17      | `v0.39.0` | Reintento automático de facturas “nunca enviadas” + clave al cruzar medianoche |

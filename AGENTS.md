@@ -300,6 +300,10 @@ Ready for production integration with POS frontend.
       lookup/registro/despacho/cobro/facturación, paso de re-captura en el POS,
       “no existe en el registro” separado de “proveedor caído”, y script de limpieza
       de IDs inválidos con respaldo. Motivo: 7 facturas perdidas el 09-13.
+- [x] v0.39.0: reintento automático de facturas PENDING sin `key49_invoice_id`
+      (`run_sri_retry_loop`), regeneración de la clave de acceso al cruzar medianoche,
+      cutoff configurable `sri_retry_max_age_hours` (default 72 h) y fix del filtro
+      `credit_status` con `IS DISTINCT FROM`.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**
@@ -310,11 +314,12 @@ Ready for production integration with POS frontend.
       RUC; evaluar tipo Pasaporte (SRI 06) o Consumidor Final (SRI 07). Detalle en NEXT_SESSION.md
 - [ ] Auditoría de cambios de facturación: hoy `dispatches.person_id` se sobreescribe al cambiar
       el titular (se pierde el cliente original). Evaluar tabla `dispatch_billing_changes`
-- [ ] **Nada reintenta las facturas “nunca enviadas”** (`PENDING` sin `key49_invoice_id`):
-      el reconciler solo lee filas que ya tienen id de Key49 y `retry_pending_invoices`
-      no tiene scheduler. Propuesta: llamarlo desde `run_sri_sync_loop`. Backlog: **23
-      facturas, $418.76** (15 jun + 8 jul, todas con ID **válida** — ninguna por cédula).
-      Detalle en NEXT_SESSION.md
+- [x] **Reintento automático de facturas “nunca enviadas”** (v0.39.0): loop de fondo
+      `run_sri_retry_loop` + regeneración de la clave de acceso al cruzar medianoche
+      (Key49 exige `issue_date = hoy`) + cutoff configurable (`sri_retry_max_age_hours`,
+      default 72 h). Corregido además el filtro SQL que descartaba ventas con
+      `credit_status NULL`. Queda el backlog de **23 facturas jun/jul, $418.76** para
+      decisión fiscal (fuera de la ventana de 72 h). Detalle en NEXT_SESSION.md
 - [ ] Sercobaco (broker de cédulas) caído: `No existe un contrato activo` → escalar contrato
 - [ ] Resolver CODE_REVIEW_FINDINGS.md (26 hallazgos; 🔴 #1 doble conexión TCP
       FusionBridge, 🔴 #2 secuencial fiscal perdido en silencio, 🔴 #4 credenciales

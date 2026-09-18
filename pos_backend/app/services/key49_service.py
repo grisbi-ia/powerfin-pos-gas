@@ -14,6 +14,7 @@ All HTTP calls have 10s timeout. Errors are logged, never raised to user.
 
 import asyncio
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -24,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ECUADOR_TZ
 from app.models.dispatch import Dispatch
+
+logger = logging.getLogger("pos.key49")
 
 # ── Mapping tables ──────────────────────────────────────────
 
@@ -496,54 +499,194 @@ async def consultar_estado(
     }
 
 
-async def retry_pending_invoices(db: AsyncSession) -> dict:
-    """Retry all dispatches with sri_status = PENDING.
-    Called periodically by the scheduler.
-    
-    Respects key49_enabled flag. Skips invoices older than 24h.
-    Returns {retried: N, expired: N}.
-    """
-    # Check if Key49 is enabled
-    from app.models.company import SystemConfig
-    cfg_result = await db.execute(
-        select(SystemConfig).where(SystemConfig.key == "key49_enabled")
-    )
-    cfg = cfg_result.scalar_one_or_none()
-    if cfg and cfg.value.lower() == "false":
-        return {"retried": 0, "expired": 0}
+# ── PENDING retry ──────────────────────────────────────────
 
-    result = await db.execute(
+# Serializes retries inside the single uvicorn worker so the background loop
+# and the HTTP endpoint never emit the same invoice twice.
+_retry_lock = asyncio.Lock()
+
+RETRY_INTERVAL_SECONDS = 300        # Background retry cadence
+RETRY_BATCH_LIMIT = 50              # Max invoices per cycle
+RETRY_MAX_AGE_DEFAULT_HOURS = 72.0  # Auto re-date window; older rows need manual re-emission
+RETRY_ENABLED_KEY = "sri_retry_enabled"
+RETRY_MAX_AGE_KEY = "sri_retry_max_age_hours"
+
+
+def _access_key_emission_date(access_key: str | None) -> str | None:
+    """First 8 digits of the SRI access key: DDMMAAAA of the emission date."""
+    if not access_key or len(access_key) < 8:
+        return None
+    head = access_key[:8]
+    return head if head.isdigit() else None
+
+
+def access_key_is_for_today(access_key: str | None) -> bool:
+    """True when the key was generated with today's date (Ecuador)."""
+    return (
+        _access_key_emission_date(access_key)
+        == datetime.now(ECUADOR_TZ).strftime("%d%m%Y")
+    )
+
+
+async def _refresh_access_key_for_today(db: AsyncSession, dispatch: Dispatch) -> bool:
+    """Regenerate the access key with today's date.
+
+    Key49/SRI reject any invoice whose access key encodes a past date
+    (HTTP 400 INVALID_ISSUE_DATE), so a retry that crosses midnight MUST get
+    a fresh key. The sequential number is kept — the document was never
+    accepted, so no number is burned twice.
+    """
+    from app.models.company import CompanyInfo
+    from app.models.tributary import EmissionPoint
+    from app.services.access_key_service import generate_access_key
+
+    if not dispatch.sequential_number:
+        return False
+    ep = None
+    if dispatch.emission_point_id:
+        ep = (await db.execute(
+            select(EmissionPoint).where(
+                EmissionPoint.emission_point_id == dispatch.emission_point_id
+            )
+        )).scalar_one_or_none()
+    company = (await db.execute(select(CompanyInfo).limit(1))).scalar_one_or_none()
+    if not ep or not company or not company.ruc or not company.sri_environment:
+        return False
+    parts = dispatch.sequential_number.split("-")
+    try:
+        seq = int(parts[-1]) if len(parts) >= 3 else int(dispatch.sequential_number)
+    except (ValueError, TypeError):
+        return False
+    dispatch.access_key = generate_access_key(
+        emission_date=datetime.now(ECUADOR_TZ).date(),
+        doc_type=ep.doc_type or "FACTURA",
+        ruc=company.ruc,
+        sri_environment=company.sri_environment,
+        establishment=ep.establishment,
+        emission_point=ep.emission_point,
+        sequential=seq,
+        emission_type=company.emission_type or 1,
+    )
+    return True
+
+
+async def retry_pending_invoices(db: AsyncSession) -> dict:
+    """Send every PENDING invoice that has no Key49 reference yet.
+
+    Runs from the background loop (``run_sri_retry_loop``) and from the HTTP
+    endpoint. Serialized by a process-wide lock so the two never race.
+
+    Rules (explicit gates, nothing swallowed):
+      - ``key49_enabled=false``     → no-op.
+      - ``sri_retry_enabled=false`` → no-op.
+      - Same-day access key         → resend as-is.
+      - Key from a previous day     → regenerate the key with today's date.
+      - Older than ``sri_retry_max_age_hours`` (default 72; 0 = unlimited) →
+        left PENDING for manual re-emission; never silently marked FAILED.
+
+    Returns {retried, regenerated, expired, skipped, failed}.
+    """
+    if _retry_lock.locked():
+        # Another retry is in flight (loop or HTTP) — do not double-emit.
+        return {"retried": 0, "regenerated": 0, "expired": 0, "skipped": 0, "failed": 0}
+
+    async with _retry_lock:
+        return await _retry_pending_invoices_locked(db)
+
+
+async def _retry_pending_invoices_locked(db: AsyncSession) -> dict:
+    from app.models.company import SystemConfig
+
+    configs = {
+        c.key: (c.value or "")
+        for c in (await db.execute(
+            select(SystemConfig).where(
+                SystemConfig.key.in_(
+                    ["key49_enabled", RETRY_ENABLED_KEY, RETRY_MAX_AGE_KEY]
+                )
+            )
+        )).scalars().all()
+    }
+    if configs.get("key49_enabled", "true").lower() == "false":
+        return {"retried": 0, "regenerated": 0, "expired": 0, "skipped": 0, "failed": 0}
+    if configs.get(RETRY_ENABLED_KEY, "true").lower() == "false":
+        return {"retried": 0, "regenerated": 0, "expired": 0, "skipped": 0, "failed": 0}
+
+    try:
+        max_age_hours = float(configs.get(RETRY_MAX_AGE_KEY) or RETRY_MAX_AGE_DEFAULT_HOURS)
+    except (TypeError, ValueError):
+        max_age_hours = RETRY_MAX_AGE_DEFAULT_HOURS
+    cutoff = datetime.now(ECUADOR_TZ) - timedelta(hours=max_age_hours)
+
+    pending = (await db.execute(
         select(Dispatch).where(
             Dispatch.sri_status == "PENDING",
             Dispatch.status != "CANCELLED",
-            Dispatch.credit_status != "PENDING_BULK_INVOICE"
-        )
-    )
-    pending = result.scalars().all()
-    
-    retried = 0
-    expired = 0
-    ecuador_now = datetime.now(ECUADOR_TZ)
-    cutoff = ecuador_now - timedelta(hours=24)
-    
+            # IS DISTINCT FROM (not !=): plain != drops rows where
+            # credit_status IS NULL, which is every normal sale.
+            Dispatch.credit_status.is_distinct_from("PENDING_BULK_INVOICE"),
+            Dispatch.key49_invoice_id.is_(None),
+        ).order_by(Dispatch.created_at.asc()).limit(RETRY_BATCH_LIMIT)
+    )).scalars().all()
+
+    retried = regenerated = expired = skipped = failed = 0
     for d in pending:
-        # Skip invoices older than 24h — SRI rejects past-date
-        # d.created_at comes from DB with Ecuador offset (-05); compare directly
-        if d.created_at and d.created_at < cutoff:
-            d.sri_status = "FAILED"
-            d.sri_messages = json.dumps(["Vencida: más de 24h desde emisión. SRI rechaza fecha pasada."])
+        if max_age_hours > 0 and d.created_at and d.created_at < cutoff:
+            # Too old to auto re-date — manual re-emission (docs/SOP_REENVIO_SRI_KEY49.md).
             expired += 1
             continue
-        
-        success = await emitir_factura(db, d.dispatch_id)
-        if success:
+        if not access_key_is_for_today(d.access_key):
+            if not await _refresh_access_key_for_today(db, d):
+                d.sri_messages = json.dumps([
+                    "No se pudo regenerar la clave de acceso con la fecha de hoy "
+                    "(revisar punto de emisión y datos de empresa). Reemisión manual."
+                ])
+                skipped += 1
+                continue
+            regenerated += 1
+        if await emitir_factura(db, d.dispatch_id):
             retried += 1
-    
-    
-    if expired > 0 or retried > 0:
+        else:
+            failed += 1
+
+    if regenerated or skipped or failed:
         await db.commit()
-    
-    return {"retried": retried, "expired": expired}
+
+    if expired:
+        logger.warning(
+            "sri_retry: %d PENDING invoice(s) older than %.0fh need manual "
+            "re-emission (recover_pending_invoices.py)",
+            expired, max_age_hours,
+        )
+
+    return {
+        "retried": retried,
+        "regenerated": regenerated,
+        "expired": expired,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
+async def run_sri_retry_loop() -> None:
+    """Background loop that sends PENDING invoices with no Key49 reference.
+
+    Kept separate from the read-only reconciler (``sri_sync_service``), which
+    never re-emits. Self-gated by ``sri_retry_enabled`` / ``key49_enabled``.
+    ``sri_retry_max_age_hours`` bounds automatic re-dating.
+    """
+    from app.database import async_session
+
+    logger.info("sri_retry: loop started (interval=%ds)", RETRY_INTERVAL_SECONDS)
+    while True:
+        try:
+            async with async_session() as db:
+                result = await retry_pending_invoices(db)
+            if result["retried"] or result["regenerated"] or result["failed"]:
+                logger.info("sri_retry: %s", result)
+        except Exception:  # noqa: BLE001 — must never break the loop
+            logger.exception("sri_retry: unexpected loop error")
+        await asyncio.sleep(RETRY_INTERVAL_SECONDS)
 
 
 async def emitir_factura_global(
