@@ -13,7 +13,7 @@
 | 6 | **v0.39.0 — reintento automático de facturas “nunca enviadas”** | **HECHO**: loop `run_sri_retry_loop`, regeneración de clave al cruzar medianoche, cutoff configurable y fix del filtro `credit_status`. Ver “RESUELTO (v0.39.0)” abajo. 7 tests nuevos (543 en total) |
 | 7 | **GAD Paute — 186 despachos marcados como facturados** (facturados en el ERP, no en Key49) | **HECHO**: 181 del lote (`--contract-id 3`) + 5 individuales (`--dispatch-id … --clear-sequential`), todos `credit_status=INVOICED`, `sri_status=AUTHORIZED`, `sri_authorization_date=2026-08-24`, `sri_messages=NULL`. A los 5 se les quitó el `sequential_number` y `access_key` (nunca llegaron a Key49). **0 pendientes y 0 problemas de Paute**; total $11.209,49. Respaldos: `~/.powerfin_backups/facturado_erp_contract3_*.csv` y `…_dispatches5_*.csv`. Script: `scripts/marcar_facturado_erp.py` |
 
-| 8 | **Incidente v0.39.0 (tras el deploy) — el retry facturaba ventas en curso** | **DETECTADO Y MITIGADO**: un despacho recién `AUTHORIZED` nace con `sri_status='PENDING'`, y el retry no exigía `COLLECTED`. Kill switch `sri_retry_enabled=false` en prod. **Sin daño** (0 `AUTHORIZED` con factura). Fix **v0.39.1**: exige `status='COLLECTED'` + edad mínima 120 s. ⚠️ Pendiente: redesplegar y volver a poner el flag en `true` |
+| 8 | **Incidente v0.39.0 (tras el deploy) — el retry facturaba ventas en curso** | **DETECTADO Y MITIGADO**: un despacho recién `AUTHORIZED` nace con `sri_status='PENDING'`, y el retry no exigía `COLLECTED`. Kill switch `sri_retry_enabled=false` en prod. **Sin daño** (0 `AUTHORIZED` con factura). Fix **v0.39.1**: exige `status='COLLECTED'` + edad mínima 120 s. ✅ **v0.39.1 desplegada y `sri_retry_enabled=true`**; loop verificado en prod (log: `23 PENDING invoice(s) older than 72h` omitidas) |
 
 | 9 | **Monitor SRI — solo `COLLECTED` (v0.39.2)** | **HECHO**: el monitor ya no cuenta ventas en curso (`AUTHORIZED` con `sri_status='PENDING'`) ni `CANCELLED` como problemas. 2 tests nuevos (547 en total) |
 
@@ -629,11 +629,8 @@ facturas de ventas de días anteriores quedarían emitidas con fecha de hoy).
    · Prioridad #6: SaleWizard.svelte con lógica de negocio (refactorizar)
    · Ver documento completo: CODE_REVIEW_FINDINGS.md
 
-🔴 ☐ 1. DEPLOY — Subir v0.35.5 a PROD
-   · ./scripts/deploy-to-server.sh frontend  (fix rebote cobro)
-   · ./scripts/deploy-to-server.sh all        (medidores mecánicos + resto)
-   · ssh app@192.168.1.25 'powerfin-gas deploy-all'
-   · powerfin-gas status
+✅ 1. DEPLOY — al día en **v0.39.2** (frontend + backend). Ver docs/DEPLOY_QUICK.md.
+   · Pendiente real de infra: Nginx rate limiting en login + prueba E2E admin → POS.
 
 ☐ 2. POS — Mejorar UI del flujo de crédito
    · Pantalla de búsqueda: simplificar botones (muchos causan confusión)
