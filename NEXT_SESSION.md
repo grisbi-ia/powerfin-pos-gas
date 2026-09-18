@@ -1,5 +1,17 @@
 # NEXT_SESSION.md — Powerfin POS
 
+## ✅ Acciones ejecutadas (2026-09-18)
+
+| # | Acción | Resultado |
+|---|---|---|
+| 1 | **Push a `origin/main`** | Commit `c6cef87` (docs: por qué el SRI autoriza con ID inválido) publicado. `main` == `origin/main` |
+| 2 | **Verificar `dispatch 20500`** (`003-502-000002401`, $10,00, VALAREZO PATRICIO) | **RESUELTO**: el reconciler la cerró → `sri_status = NOTIFIED`, `sri_authorization_date = 2026-09-13 22:28:45`, `key49_invoice_id fb801e60-d789-4b7f-a7cd-ae44d72d1f22`. No requiere intervención |
+| 3 | **Limpiar RUC temporal de `person_id 10404`** (*Fabián nieves*) | **HECHO**: `UPDATE persons SET id_number = NULL WHERE person_id = 10404` (valor anterior `0104248314001`, RUC inválido). Sin contratos de crédito ni duplicados. El POS pedirá la identificación en su próximo despacho |
+
+> Verificado con acceso directo a prod (`100.97.47.123:5432`, `agent_llm`, ver `docs/DB_ACCESS.md`) vía Tailscale.
+
+---
+
 ## 📅 PLAN PARA MAÑANA (2026-09-14)
 
 > El objetivo es **cerrar agosto/2026** con el mismo procedimiento que se usó hoy para
@@ -64,21 +76,19 @@ Notas del procedimiento:
 
 ### 4. Otros pendientes técnicos (no bloquean lo de mañana)
 
-- **Verificar al arrancar:** `dispatch 20500` (`003-502-000002401`, $10,00, VALAREZO PATRICIO)
-  quedó en **`RECEIVED`** al cierre de hoy (el SRI no la había autorizado). Debe pasar a
-  `NOTIFIED`/`AUTHORIZED` sola por el reconciler; si sigue en `RECEIVED`, revisar su estado en la
-  API de Key49 (`GET /v1/invoices/<id>`) y su `sri_messages`.
+- ~~**Verificar al arrancar:** `dispatch 20500` ... `RECEIVED`~~ → ✅ **RESUELTO 2026-09-18**:
+  quedó en `NOTIFIED` con `key49_invoice_id fb801e60-…` y `sri_authorization_date`
+  2026-09-13 22:28:45. El reconciler la cerró solo (no requirió intervención).
 
 - **Reintento automático** de `PENDING` sin `key49_invoice_id` en `run_sri_sync_loop` (~30 min
   con test) → es la causa de raíz de que las facturas “nunca enviadas” se queden pegadas.
 - **Extranjeros sin cédula ni RUC**: decidir Pasaporte (SRI 06) vs Consumidor Final (07).
 - Tabla de auditoría `dispatch_billing_changes` (hoy `person_id` se sobreescribe y el cliente
   original se pierde; el rastro queda en los CSV de respaldo).
-- **RUC TEMPORAL para migración al ERP (limpiar después):** `person_id` **10404**
-  (*Fabián nieves*) tiene `id_number = '0104248314001'` repuesto a mano el 2026-09-14 para
-  que el ERP lea el dato. Ese RUC es **inválido** (módulo 10) → el POS lo bloqueará en el
-  flujo mientras siga puesto. Limpiar con:
-  `UPDATE persons SET id_number = NULL WHERE person_id = 10404;`
+- ~~**RUC TEMPORAL para migración al ERP (limpiar después):** `person_id` **10404** ...~~ →
+  ✅ **LIMPIEZA EJECUTADA 2026-09-18**: `UPDATE persons SET id_number = NULL WHERE person_id = 10404;`
+  (valor previo `0104248314001`, RUC inválido). `persons.id_type` sigue en `RUC`; el POS pedirá
+  la identificación en el próximo despacho de ese cliente.
 - **Respaldo de la limpieza de IDs perdido:** el CSV `/tmp/ids_invalidos_backup_*.csv` y
   la tabla `persons_invalid_id_backup` ya no existen (el `/tmp` se limpió y `agent_llm` no
   tiene `CREATE`). `limpiar_ids_invalidos.py` debe escribir el respaldo a una ruta persistente
