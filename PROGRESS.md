@@ -1,6 +1,20 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-09-18** · Rama: `main` · HEAD: `v0.39.1`
+> Última actualización: **2026-09-18** · Rama: `main` · HEAD: `v0.39.2`
+
+---
+
+## v0.39.2 (2026-09-18) — Monitor SRI: solo despachos `COLLECTED`
+
+- **Problema**: el monitor contaba despachos `AUTHORIZED` (ventas en curso) con
+  `sri_status='PENDING'` como `NEVER_SENT`, y también algún `CANCELLED` con PENDING.
+- **Fix**: `sri_monitor_service._base_conditions()` (antes `_date_conditions`) exige
+  `status='COLLECTED'`; mismo filtro en el query de salud de Key49 (últimas 24 h).
+- **Impacto medido (30 días)**: 1 `CANCELLED` fantasma + los `AUTHORIZED` transitorios.
+  El ruido grande (“75 problemas” vs 4 reales en Key49) era el lote de **GAD Paute**
+  (`COLLECTED` + `PENDING`), ya reconciliado a `AUTHORIZED`.
+- **Tests**: +2 en `tests/test_admin_sri.py` (`AUTHORIZED` no cuenta en métricas ni
+  documentos). Suite backend **547 passed** (era 545).
 
 ---
 

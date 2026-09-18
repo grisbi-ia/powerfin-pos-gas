@@ -15,6 +15,8 @@
 
 | 8 | **Incidente v0.39.0 (tras el deploy) — el retry facturaba ventas en curso** | **DETECTADO Y MITIGADO**: un despacho recién `AUTHORIZED` nace con `sri_status='PENDING'`, y el retry no exigía `COLLECTED`. Kill switch `sri_retry_enabled=false` en prod. **Sin daño** (0 `AUTHORIZED` con factura). Fix **v0.39.1**: exige `status='COLLECTED'` + edad mínima 120 s. ⚠️ Pendiente: redesplegar y volver a poner el flag en `true` |
 
+| 9 | **Monitor SRI — solo `COLLECTED` (v0.39.2)** | **HECHO**: el monitor ya no cuenta ventas en curso (`AUTHORIZED` con `sri_status='PENDING'`) ni `CANCELLED` como problemas. 2 tests nuevos (547 en total) |
+
 > Verificado con acceso directo a prod (`100.97.47.123:5432`, `agent_llm`, ver `docs/DB_ACCESS.md`) vía Tailscale.
 
 ---

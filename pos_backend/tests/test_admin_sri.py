@@ -64,6 +64,63 @@ class TestFeatureFlagGate:
         assert r.status_code == 403
 
 
+async def _mk_dispatch(db, *, status, sri_status, order):
+    from datetime import datetime
+    from decimal import Decimal
+
+    from app.config import ECUADOR_TZ
+    from app.models.dispatch import Dispatch
+    from app.models.shift import Shift
+
+    shift = Shift(user_id=1, opening_cash=Decimal("0.00"), status="OPEN")
+    db.add(shift)
+    await db.flush()
+    d = Dispatch(
+        order_id=order,
+        shift_id=shift.shift_id,
+        dispenser_id=1,
+        emission_point_id=1,
+        dispatch_type_id=1,
+        person_id=1,
+        status=status,
+        sri_status=sri_status,
+        total=Decimal("10.00"),
+        created_at=datetime.now(ECUADOR_TZ),
+    )
+    db.add(d)
+    await db.flush()
+    return d
+
+
+class TestCollectedOnly:
+    """In-progress sales (AUTHORIZED, sri_status=PENDING) must not appear."""
+
+    async def test_in_progress_not_counted(self, client, db):
+        await _enable_monitor(db)
+        await _mk_dispatch(db, status="AUTHORIZED", sri_status="PENDING", order="INPROG-1")
+        await _mk_dispatch(db, status="COLLECTED", sri_status="PENDING", order="COLL-1")
+        await db.commit()
+
+        r = await client.get("/api/admin/sri/metrics", headers=_admin_headers())
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["total"] == 1
+        assert data["problems"]["never_sent"] == 1
+
+    async def test_in_progress_absent_from_documents(self, client, db):
+        await _enable_monitor(db)
+        await _mk_dispatch(db, status="AUTHORIZED", sri_status="PENDING", order="INPROG-2")
+        await _mk_dispatch(db, status="COLLECTED", sri_status="PENDING", order="COLL-2")
+        await db.commit()
+
+        r = await client.get("/api/admin/sri/documents?page=1&page_size=50",
+                             headers=_admin_headers())
+        assert r.status_code == 200, r.text
+        orders = {i["order_id"] for i in r.json()["items"]}
+        assert "COLL-2" in orders
+        assert "INPROG-2" not in orders
+
+
 class TestEnabled:
     async def test_metrics_shape(self, client, db):
         await _enable_monitor(db)
@@ -73,7 +130,7 @@ class TestEnabled:
         for key in ("total", "authorized", "in_progress", "problems_total",
                     "success_rate", "by_status", "problems", "by_day"):
             assert key in data
-        assert data["problems_total"] >= 0
+        assert data["problems_total"] == 0  # seed has no COLLECTED dispatches
 
     async def test_documents_paginated(self, client, db):
         await _enable_monitor(db)

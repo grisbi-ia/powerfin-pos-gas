@@ -306,8 +306,10 @@ Ready for production integration with POS frontend.
       `credit_status` con `IS DISTINCT FROM`.
 - [x] v0.39.1: el retry exige `status='COLLECTED'` (antes podía facturar ventas en
       curso: un despacho recién `AUTHORIZED` nace con `sri_status='PENDING'`) y una edad
-      mínima de 120 s. Kill switch `sri_retry_enabled` (prod quedó en `false` hasta
-      redesplegar).
+      mínima de 120 s. Kill switch `sri_retry_enabled`.
+- [x] v0.39.2: el monitor SRI (`sri_monitor_service`) también exige `COLLECTED` —
+      las ventas en curso (`AUTHORIZED` con `sri_status='PENDING'`) y los `CANCELLED`
+      ya no se cuentan como problemas.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**

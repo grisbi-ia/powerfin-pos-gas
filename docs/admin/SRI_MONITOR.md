@@ -34,6 +34,10 @@ Para desactivarlo, `value=false`.
 
 Admin → **Facturación SRI** (`/sri`). Dos pestañas:
 
+> **Alcance (v0.39.2)**: el monitor cuenta solo despachos `status='COLLECTED'`.
+> Un despacho en curso (`AUTHORIZED`) nace con `sri_status='PENDING'` y **no** debe
+> aparecer como “nunca enviado”; los `CANCELLED` tampoco.
+
 ### Resumen
 - KPIs: Total emitidos · Autorizados (+% éxito) · En proceso · Con problemas ·
   Tiempo promedio a autorización.

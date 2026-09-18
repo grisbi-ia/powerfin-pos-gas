@@ -68,8 +68,15 @@ def classify_problem(sri_status: str | None, has_key49_id: bool) -> str:
     return "OTHER"
 
 
-def _date_conditions(date_from: date | None, date_to: date | None, emission_point_id: int | None):
-    conds = [Dispatch.sri_status.isnot(None)]
+def _base_conditions(date_from: date | None, date_to: date | None, emission_point_id: int | None):
+    """Base WHERE for every monitor query.
+
+    Only COLLECTED dispatches are invoiceable. A freshly created dispatch is
+    AUTHORIZED with the model-default ``sri_status='PENDING'`` (create_dispatch
+    never sets it), so without this filter every in-progress sale would show up
+    as a NEVER_SENT problem and inflate the monitor's counts.
+    """
+    conds = [Dispatch.sri_status.isnot(None), Dispatch.status == "COLLECTED"]
     if date_from is not None:
         conds.append(func.date(Dispatch.created_at) >= date_from)
     if date_to is not None:
@@ -86,7 +93,7 @@ async def get_metrics(
     emission_point_id: int | None = None,
 ) -> dict:
     """Aggregate SRI pipeline metrics for a date range."""
-    conds = _date_conditions(date_from, date_to, emission_point_id)
+    conds = _base_conditions(date_from, date_to, emission_point_id)
 
     # Counts grouped by status, split by presence of a Key49 reference.
     agg = (await db.execute(
@@ -172,7 +179,7 @@ def _document_conditions(
     key49_filter: str | None = None,
 ) -> list:
     """Shared WHERE conditions for the documents list, summary and export."""
-    conds = _date_conditions(date_from, date_to, None)
+    conds = _base_conditions(date_from, date_to, None)
 
     if status_filter:
         conds.append(Dispatch.sri_status == status_filter.upper())
@@ -390,6 +397,7 @@ async def get_health(db: AsyncSession, probe: bool = False) -> dict:
     err_rows = (await db.execute(
         select(Dispatch.sri_status, Dispatch.sri_messages)
         .where(Dispatch.sri_status.in_(("PENDING", "FAILED")),
+               Dispatch.status == "COLLECTED",
                Dispatch.created_at >= since)
     )).all()
     plan_expired = unavailable = http_402 = 0
