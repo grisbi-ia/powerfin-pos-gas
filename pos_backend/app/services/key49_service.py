@@ -506,6 +506,7 @@ async def consultar_estado(
 _retry_lock = asyncio.Lock()
 
 RETRY_INTERVAL_SECONDS = 300        # Background retry cadence
+RETRY_MIN_AGE_SECONDS = 120         # Let the live post-collect emission run first
 RETRY_BATCH_LIMIT = 50              # Max invoices per cycle
 RETRY_MAX_AGE_DEFAULT_HOURS = 72.0  # Auto re-date window; older rows need manual re-emission
 RETRY_ENABLED_KEY = "sri_retry_enabled"
@@ -616,16 +617,24 @@ async def _retry_pending_invoices_locked(db: AsyncSession) -> dict:
         max_age_hours = float(configs.get(RETRY_MAX_AGE_KEY) or RETRY_MAX_AGE_DEFAULT_HOURS)
     except (TypeError, ValueError):
         max_age_hours = RETRY_MAX_AGE_DEFAULT_HOURS
-    cutoff = datetime.now(ECUADOR_TZ) - timedelta(hours=max_age_hours)
+    now = datetime.now(ECUADOR_TZ)
+    cutoff = now - timedelta(hours=max_age_hours)
+    min_age_cutoff = now - timedelta(seconds=RETRY_MIN_AGE_SECONDS)
 
     pending = (await db.execute(
         select(Dispatch).where(
             Dispatch.sri_status == "PENDING",
-            Dispatch.status != "CANCELLED",
+            # CRITICAL: only COLLECTED sales are invoiceable. A freshly created
+            # dispatch is AUTHORIZED with the model default sri_status='PENDING'
+            # (create_dispatch never sets it) — invoicing it before the fuel is
+            # dispensed and paid would emit a bogus $0.00 invoice.
+            Dispatch.status == "COLLECTED",
             # IS DISTINCT FROM (not !=): plain != drops rows where
             # credit_status IS NULL, which is every normal sale.
             Dispatch.credit_status.is_distinct_from("PENDING_BULK_INVOICE"),
             Dispatch.key49_invoice_id.is_(None),
+            # Give the live post-collect emission a head start.
+            Dispatch.created_at <= min_age_cutoff,
         ).order_by(Dispatch.created_at.asc()).limit(RETRY_BATCH_LIMIT)
     )).scalars().all()
 

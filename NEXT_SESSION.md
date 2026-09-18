@@ -13,6 +13,8 @@
 | 6 | **v0.39.0 — reintento automático de facturas “nunca enviadas”** | **HECHO**: loop `run_sri_retry_loop`, regeneración de clave al cruzar medianoche, cutoff configurable y fix del filtro `credit_status`. Ver “RESUELTO (v0.39.0)” abajo. 7 tests nuevos (543 en total) |
 | 7 | **GAD Paute — 186 despachos marcados como facturados** (facturados en el ERP, no en Key49) | **HECHO**: 181 del lote (`--contract-id 3`) + 5 individuales (`--dispatch-id … --clear-sequential`), todos `credit_status=INVOICED`, `sri_status=AUTHORIZED`, `sri_authorization_date=2026-08-24`, `sri_messages=NULL`. A los 5 se les quitó el `sequential_number` y `access_key` (nunca llegaron a Key49). **0 pendientes y 0 problemas de Paute**; total $11.209,49. Respaldos: `~/.powerfin_backups/facturado_erp_contract3_*.csv` y `…_dispatches5_*.csv`. Script: `scripts/marcar_facturado_erp.py` |
 
+| 8 | **Incidente v0.39.0 (tras el deploy) — el retry facturaba ventas en curso** | **DETECTADO Y MITIGADO**: un despacho recién `AUTHORIZED` nace con `sri_status='PENDING'`, y el retry no exigía `COLLECTED`. Kill switch `sri_retry_enabled=false` en prod. **Sin daño** (0 `AUTHORIZED` con factura). Fix **v0.39.1**: exige `status='COLLECTED'` + edad mínima 120 s. ⚠️ Pendiente: redesplegar y volver a poner el flag en `true` |
+
 > Verificado con acceso directo a prod (`100.97.47.123:5432`, `agent_llm`, ver `docs/DB_ACCESS.md`) vía Tailscale.
 
 ---

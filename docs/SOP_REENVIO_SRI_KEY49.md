@@ -4,7 +4,7 @@
 > o fallidas en el envío al SRI a través de Key49.
 
 ```
-Última actualización: 2026-09-18 (v0.39.0)
+Última actualización: 2026-09-18 (v0.39.1)
 Relacionado: docs/ROADMAP.md (Phase 11e), docs/SOP_DESPACHOS_CERO.md
 ```
 
@@ -185,9 +185,12 @@ curl -s -X POST "http://localhost:8080/api/pos/dispatches/retry-pending-invoices
 # {"retried": 5, "regenerated": 2, "expired": 0, "skipped": 0, "failed": 0}
 ```
 
-**Qué hace internamente** (v0.39.0):
-1. Busca los despachos con `sri_status = PENDING` **sin `key49_invoice_id`** (no
-   cancelados, excluyendo `PENDING_BULK_INVOICE`).
+**Qué hace internamente** (v0.39.1):
+1. Busca los despachos **`status='COLLECTED'`** con `sri_status = PENDING` **sin
+   `key49_invoice_id`**, excluyendo `PENDING_BULK_INVOICE` y con al menos 120 s de
+   antigüedad (para no competir con la emisión viva post-cobro).
+   ⚠️ Solo ventas **cobradas**: un despacho recién `AUTHORIZED` nace con
+   `sri_status='PENDING'` (default del modelo) y **no** debe facturarse.
 2. Para cada uno:
    - Si la **clave de acceso es de hoy** → `emitir_factura()` a Key49 tal cual.
    - Si la clave es **de un día anterior** → **regenera la clave con la fecha de hoy**

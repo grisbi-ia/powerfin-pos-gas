@@ -1,6 +1,36 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-09-18** · Rama: `main` · HEAD: `v0.39.0`
+> Última actualización: **2026-09-18** · Rama: `main` · HEAD: `v0.39.1`
+
+---
+
+## v0.39.1 (2026-09-18) — Fix: el retry facturaba ventas en curso (solo `COLLECTED`)
+
+### Incidente detectado tras desplegar v0.39.0
+- Al revisar el deploy apareció el dispatch **22295**: recién creado, `status=AUTHORIZED`
+  (venta **en curso**, aún sin despachar ni cobrar), `total=0.00`, pero `sri_status=PENDING`.
+- **Causa**: `create_dispatch` nunca setea `sri_status`, así que el default del modelo
+  (`PENDING`) aplica desde que se autoriza el despacho. El retry de v0.39.0 filtraba
+  `status != 'CANCELLED'` → habría facturado esa venta en curso (incluso $0.00).
+- **Sin daño**: 0 despachos `AUTHORIZED` con `key49_invoice_id`; todas las facturas del
+  día eran `COLLECTED`.
+
+### Mitigación inmediata (prod)
+- Kill switch `system_config['sri_retry_enabled'] = 'false'` → el loop queda inerte.
+
+### Fix (v0.39.1)
+- `retry_pending_invoices()` ahora exige **`status == 'COLLECTED'`** (solo ventas
+  cobradas son facturables) y una **edad mínima** `RETRY_MIN_AGE_SECONDS = 120` para no
+  competir con la emisión viva post-cobro.
+- Mismo guard en `scripts/recover_pending_invoices.py` (reemisión manual).
+
+### Tests
+- `tests/test_retry_pending_invoices.py`: 9 (2 nuevos: `AUTHORIZED` no se reintenta;
+  `COLLECTED` demasiado joven se omite). Suite backend **545 passed** (era 543).
+
+### Post-deploy
+- Volver a habilitar el reintento: `UPDATE system_config SET value='true' WHERE key='sri_retry_enabled';`
+  (o borrar la key para usar el default on).
 
 ---
 

@@ -257,7 +257,9 @@ async def main(argv: list[str]) -> int:
         rows = (await db.execute(
             select(Dispatch).where(
                 Dispatch.sri_status == "PENDING",
-                Dispatch.status != "CANCELLED",
+                # Only COLLECTED sales: a freshly created dispatch is AUTHORIZED
+                # with sri_status defaulting to PENDING — never re-emit it.
+                Dispatch.status == "COLLECTED",
                 Dispatch.credit_status.is_distinct_from("PENDING_BULK_INVOICE"),
             )
         )).scalars().all()

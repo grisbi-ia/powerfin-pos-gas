@@ -35,7 +35,8 @@ def _key_on(date_str: str, sequential: int = 123) -> str:
     return f"{date_str}" + "0" * 32 + str(sequential).zfill(9)
 
 
-async def _mk_pending(db, *, created_at, access_key, order="RETRY-1", key49_id=None):
+async def _mk_pending(db, *, created_at, access_key, order="RETRY-1", key49_id=None,
+                      status="COLLECTED"):
     shift = Shift(user_id=1, opening_cash=Decimal("0.00"), status="OPEN")
     db.add(shift)
     await db.flush()
@@ -46,7 +47,7 @@ async def _mk_pending(db, *, created_at, access_key, order="RETRY-1", key49_id=N
         emission_point_id=1,
         dispatch_type_id=1,
         person_id=1,
-        status="COLLECTED",
+        status=status,
         sri_status="PENDING",
         key49_invoice_id=key49_id,
         access_key=access_key,
@@ -177,6 +178,41 @@ async def test_regeneration_failure_is_visible_and_skipped(db, fake_emit, compan
     row = await _reload(db, d.dispatch_id)
     assert row.sri_status == "PENDING"
     assert "regenerar la clave" in row.sri_messages
+
+
+@pytest.mark.asyncio
+async def test_in_progress_authorized_is_not_retried(db, fake_emit):
+    # A freshly created dispatch is AUTHORIZED with sri_status defaulting to
+    # PENDING (create_dispatch never sets it). It must NOT be invoiced before
+    # the fuel is dispensed and paid.
+    await _mk_pending(
+        db,
+        status="AUTHORIZED",
+        created_at=datetime.now(ECUADOR_TZ) - timedelta(minutes=30),
+        access_key=_key_on(TODAY),
+    )
+    await db.commit()
+
+    result = await retry_pending_invoices(db)
+
+    assert result["retried"] == 0
+    assert fake_emit == []
+
+
+@pytest.mark.asyncio
+async def test_too_young_collected_is_skipped(db, fake_emit):
+    # The live post-collect emission gets a head start (RETRY_MIN_AGE_SECONDS).
+    await _mk_pending(
+        db,
+        created_at=datetime.now(ECUADOR_TZ) - timedelta(seconds=30),
+        access_key=_key_on(TODAY),
+    )
+    await db.commit()
+
+    result = await retry_pending_invoices(db)
+
+    assert result["retried"] == 0
+    assert fake_emit == []
 
 
 @pytest.mark.asyncio
