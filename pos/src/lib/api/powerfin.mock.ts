@@ -460,7 +460,14 @@ export async function getNextPredefinedVehicle(_token: string): Promise<Predefin
 export async function updatePerson(
 	_token: string,
 	personId: number,
-	data: { name?: string; email?: string; phone?: string; address?: string }
+	data: {
+		name?: string;
+		email?: string;
+		phone?: string;
+		address?: string;
+		id_type?: 'CED' | 'RUC';
+		id_number?: string;
+	}
 ): Promise<void> {
 	await delay(200);
 	const person = MOCK_CUSTOMERS.find(c => parseInt(c.customer_id ?? '') === personId);
@@ -468,6 +475,11 @@ export async function updatePerson(
 		if (data.name) person.name = data.name;
 		if (data.email) person.email = data.email;
 		if (data.phone) person.phone = data.phone;
+		if (data.id_number) {
+			person.id_number = data.id_number;
+			person.customer_id = data.id_number;
+		}
+		if (data.id_type) person.id_type = data.id_type;
 	}
 }
 

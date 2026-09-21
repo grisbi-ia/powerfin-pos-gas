@@ -241,7 +241,15 @@ export async function setVehicleBillingPerson(
 export async function updatePerson(
 	token: string,
 	personId: number,
-	data: { name?: string; email?: string; phone?: string; address?: string }
+	data: {
+		name?: string;
+		email?: string;
+		phone?: string;
+		address?: string;
+		/** Only used to re-capture an identification that was cleared (NULL). */
+		id_type?: 'CED' | 'RUC';
+		id_number?: string;
+	}
 ): Promise<void> {
 	if (USE_MOCKS_POWERFIN) return mock.updatePerson(token, personId, data);
 	const res = await fetch(powerfinUrl(`/api/pos/persons/${personId}`), {

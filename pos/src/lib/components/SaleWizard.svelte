@@ -132,6 +132,14 @@
 	let regPhone = '';
 	let regAddress = '';
 
+	// Identification re-capture inside the "incomplete data" step: the recorded
+	// value was cleared (NULL) because it was invalid, so the dispatcher must be
+	// able to type it here. When a valid value already exists it stays read-only.
+	let incompleteIdType: 'CED' | 'RUC' = 'CED';
+	let incompleteIdNumber = '';
+	$: incompleteIdError = incompleteIdNumber.length > 0 ? validateIdentification(incompleteIdType, incompleteIdNumber) : null;
+	$: incompleteIdValid = incompleteIdNumber.length > 0 && incompleteIdError === null;
+
 	$: regValid = regIdNumber.length > 0 && regName.trim().length > 0 && regEmail.trim().length > 0;
 
 	$: paymentMethods = $config?.payment_methods ?? [];
@@ -180,7 +188,26 @@
 		} catch { /* */ }
 	}
 
-	function submitIncomplete() { if (vehicleResult?.owner?.id_number) { handleIncompleteSubmit({ id_type: vehicleResult.owner.id_type as "CED" | "RUC", id_number: vehicleResult.owner.id_number, name: vehicleResult.owner.name, email: incompleteEmail || vehicleResult.owner.email || '', phone: incompletePhone, address: incompleteAddress, plate }); } }
+	function submitIncomplete() {
+		const owner = vehicleResult?.owner;
+		if (!owner) return;
+		// When the recorded identification is NULL it MUST be captured here; an
+		// existing one stays read-only and is not re-sent.
+		if (!owner.id_number && !incompleteIdValid) {
+			error = incompleteIdError ?? 'Ingrese una identificación válida';
+			return;
+		}
+		error = '';
+		handleIncompleteSubmit({
+			id_type: (owner.id_number ? owner.id_type : incompleteIdType) as 'CED' | 'RUC',
+			id_number: owner.id_number ?? normalizeIdNumber(incompleteIdNumber),
+			name: owner.name,
+			email: incompleteEmail || owner.email || '',
+			phone: incompletePhone || owner.phone || '',
+			address: incompleteAddress || owner.address || '',
+			plate
+		});
+	}
 	function submitRegistration() { if (!regValid) return; handleRegistrationSubmit({ id_type: idType, id_number: regIdNumber, name: regName.trim(), email: regEmail.trim(), phone: regPhone.trim(), address: regAddress.trim(), plate }); }
 
 	async function selectHose(hose: HoseConfig) {
@@ -208,7 +235,14 @@
 			vehicleResult = result; plate = result.plate;
 			billingCustomer = null;  // Reset billing override on new plate search
 			if (!result.vehicle_found) { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'plate'; }
-			else if (result.incomplete_fields.length > 0) { step = 'incomplete'; }
+			else if (result.incomplete_fields.length > 0) {
+				incompleteIdType = (result.owner?.id_type as 'CED' | 'RUC') === 'RUC' ? 'RUC' : 'CED';
+				incompleteIdNumber = result.owner?.id_number ?? '';
+				incompleteEmail = result.owner?.email ?? '';
+				incompletePhone = result.owner?.phone ?? '';
+				incompleteAddress = result.owner?.address ?? '';
+				step = 'incomplete';
+			}
 			else { confirmedOwner = result.owner; step = 'billing'; }
 
 			// Check for public sector contract (non-blocking, fire-and-forget)
@@ -353,12 +387,41 @@
 	function handleBillingChange() { step = 'idLookup'; idLookupError = ''; idNumber = ''; idLookupFrom = 'billing'; saveBillingPreferential = false; }
 
 	async function handleIncompleteSubmit(formData: CustomerFormData) {
-		loading = true;
+		loading = true; error = '';
 		try {
-			await powerfin.registerCustomer(token(), formData);
-			if (vehicleResult) { vehicleResult.incomplete_fields = []; if (vehicleResult.owner) vehicleResult.owner.email = formData.email; confirmedOwner = vehicleResult.owner; }
+			const owner = vehicleResult?.owner;
+			const personId = owner?.person_id ?? null;
+			const hadId = !!owner?.id_number;
+			if (personId) {
+				// Update the SAME person (identification + contact fields). Using
+				// POST /customers here would create a duplicate whenever the recorded
+				// identification was NULL.
+				await powerfin.updatePerson(token(), personId, {
+					name: formData.name || undefined,
+					email: formData.email || undefined,
+					phone: formData.phone || undefined,
+					address: formData.address || undefined,
+					...(hadId ? {} : { id_type: formData.id_type, id_number: formData.id_number })
+				});
+			} else {
+				await powerfin.registerCustomer(token(), formData);
+			}
+			if (vehicleResult) {
+				vehicleResult.incomplete_fields = [];
+				if (vehicleResult.owner) {
+					vehicleResult.owner.email = formData.email;
+					vehicleResult.owner.phone = formData.phone || vehicleResult.owner.phone;
+					vehicleResult.owner.address = formData.address || vehicleResult.owner.address;
+					vehicleResult.owner.id_type = formData.id_type;
+					vehicleResult.owner.id_number = formData.id_number;
+					vehicleResult.owner.customer_id = formData.id_number;
+					confirmedOwner = vehicleResult.owner;
+				}
+			}
 			step = 'billing';
-		} catch { error = 'Error al actualizar datos'; }
+		} catch (e: any) {
+			error = e?.message || 'Error al actualizar datos';
+		}
 		finally { loading = false; }
 	}
 	function handleIncompleteCancel() { step = 'plate'; vehicleResult = null; billingCustomer = null; plate = ''; }
@@ -936,7 +999,25 @@
 					<h3 class="text-sm font-semibold text-gray-700 mb-3">⚠️ Datos faltantes</h3>
 					<p class="text-sm text-gray-500 mb-3">Completa los datos del cliente. Falta: {vehicleResult?.incomplete_fields?.join(', ') || 'datos'}</p>
 					{#if vehicleResult?.owner}
-						<div class="bg-gray-50 rounded-xl p-3 mb-3 text-sm text-gray-600">{vehicleResult.owner.name} · {vehicleResult.owner.id_number}</div>
+						<div class="bg-gray-50 rounded-xl p-3 mb-3">
+							<div class="text-sm text-gray-700 font-medium">{vehicleResult.owner.name}</div>
+							{#if vehicleResult.owner.id_number}
+								<div class="text-xs text-gray-500 mt-1">{vehicleResult.owner.id_type}: {vehicleResult.owner.id_number}</div>
+							{:else}
+								<div class="text-xs text-red-600 mt-1 mb-2">Sin identificación registrada: ingrésela para poder facturar.</div>
+								<div class="flex gap-2 mb-2">
+									<button type="button" class="flex-1 py-2 rounded-lg text-sm font-medium {incompleteIdType === 'CED' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => { incompleteIdType = 'CED'; incompleteIdNumber = ''; error = ''; }}>Cédula</button>
+									<button type="button" class="flex-1 py-2 rounded-lg text-sm font-medium {incompleteIdType === 'RUC' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}" on:click={() => { incompleteIdType = 'RUC'; incompleteIdNumber = ''; error = ''; }}>RUC</button>
+								</div>
+								<input type="text" inputmode="numeric" bind:value={incompleteIdNumber} maxlength={incompleteIdType === 'CED' ? 10 : 13}
+									placeholder={incompleteIdType === 'CED' ? '0912345678' : '1790012345001'}
+									class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-primary focus:outline-none {incompleteIdError ? 'border-red-300' : ''}" />
+								{#if incompleteIdError}<div class="text-red-500 text-xs mt-1">{incompleteIdError}</div>{/if}
+							{/if}
+						</div>
+					{/if}
+					{#if error}
+						<div class="bg-red-50 text-red-600 text-sm text-center rounded-xl py-2 mb-3">{error}</div>
 					{/if}
 					{#if vehicleResult?.incomplete_fields?.includes('email')}
 						<input type="email" bind:value={incompleteEmail} placeholder="Correo electrónico"

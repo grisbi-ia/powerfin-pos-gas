@@ -1,6 +1,28 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-09-18** · Rama: `main` · HEAD: `v0.39.2`
+> Última actualización: **2026-09-21** · Rama: `main` · HEAD: `v0.39.3`
+
+---
+
+## v0.39.3 (2026-09-21) — POS: identificación editable (solo si es NULL) en "Datos faltantes"
+
+- **Problema reportado**: tras dejar `persons.id_number = NULL` en 197 clientes para que
+  los despachadores re-ingresaran la cédula, el paso **“⚠️ Datos faltantes”** del POS
+  (`step = 'incomplete'`) mostraba la identificación como **texto fijo (solo lectura)** y
+  `submitIncomplete` era un **no-op silencioso** cuando el id era `NULL` (guard
+  `if (vehicleResult?.owner?.id_number)`). El despachador quedaba atascado: 32 de esos
+  clientes tienen vehículo y les falta teléfono/dirección, por lo que llegan a ese paso.
+- **Fix (`SaleWizard.svelte`)**: en el paso `incomplete`, si `owner.id_number` es `NULL`
+  se muestra un campo **editable** (Cédula/RUC + validación de dígito en vivo); si ya
+  existe un id, se mantiene **de solo lectura** (condición pedida: “si es NULO que permita
+  editar, caso contrario no”). Se guarda sobre la **misma persona** con
+  `PUT /api/pos/persons/{id}` (antes `POST /customers` podía crear un duplicado al no
+  coincidir el id nuevo). Los errores del backend se muestran en pantalla.
+- **`powerfin.ts` / `powerfin.mock.ts`**: `updatePerson` acepta `id_type`/`id_number`
+  opcionales (el backend ya los soportaba).
+- **Tests**: backend **548 passed** (+1: re-captura conjunta id + contacto sobre la misma
+  persona en `test_api_identification_guard.py`). POS: **77 passed** + `svelte-check`
+  0 errores.
 
 ---
 

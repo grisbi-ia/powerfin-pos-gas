@@ -294,3 +294,35 @@ class TestRecaptureIdentification:
                               json={**DISPATCH_BODY, "person_id": person.person_id,
                                     "customer_id": ANOTHER_VALID_CEDULA})
         assert r.status_code == 201
+
+    async def test_recapture_updates_identification_and_contact_together(
+        self, client, auth_headers, db
+    ):
+        """The POS "incomplete data" step sends id + contact fields in one PUT.
+
+        It must update the SAME person (no duplicate) — the old value was NULL.
+        """
+        person = await _get_person(db, 1)
+        person.id_number = None
+        person.phone = None
+        await db.commit()
+        original_person_id = person.person_id
+
+        r = await client.put(
+            f"/api/pos/persons/{original_person_id}",
+            headers=auth_headers,
+            json={
+                "id_type": "CED",
+                "id_number": ANOTHER_VALID_CEDULA,
+                "email": "nuevo@ejemplo.com",
+                "phone": "0999999999",
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["id_number"] == ANOTHER_VALID_CEDULA
+
+        db.expire_all()
+        updated = await _get_person(db, original_person_id)
+        assert updated.id_number == ANOTHER_VALID_CEDULA
+        assert updated.email == "nuevo@ejemplo.com"
+        assert updated.phone == "0999999999"

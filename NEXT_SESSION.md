@@ -1,5 +1,16 @@
 # NEXT_SESSION.md — Powerfin POS
 
+## ✅ Acciones ejecutadas (2026-09-21) — v0.39.3
+
+| # | Acción | Resultado |
+|---|---|---|
+| 1 | **POS: identificación editable en el paso “⚠️ Datos faltantes”** | **HECHO**: cuando el cliente tiene `id_number = NULL` y le faltan teléfono/dirección, el paso `incomplete` mostraba la identificación como **texto fijo (solo lectura)** y `submitIncomplete` era un **no-op silencioso** si el id era NULL → el despachador quedaba atascado. Ahora, si el id es **NULL** se muestra un campo editable (Cédula/RUC + validación en vivo); si ya existe un id válido, sigue **de solo lectura** (condición pedida). Se guarda con `PUT /api/pos/persons/{id}` sobre la **misma persona** (antes `POST /customers` podía crear un duplicado). Errores del backend visibles. 32 de los 197 clientes sin identificación caen en este paso (tienen vehículo y les falta teléfono/dirección) |
+| 2 | **Tests** | POS: **77 passed** + `svelte-check` 0 errores. Backend: **548 passed** (+1 test de re-captura conjunta id+contacto en `test_api_identification_guard.py`) |
+
+> Nota: el `readonly` que queda en `SaleWizard` es el del formulario **“Registrar nuevo cliente”** (la cédula ya se validó al buscarla); no aplica al flujo de actualización de clientes existentes.
+
+---
+
 ## ✅ Acciones ejecutadas (2026-09-18)
 
 | # | Acción | Resultado |
