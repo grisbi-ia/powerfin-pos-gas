@@ -357,7 +357,9 @@ Ready for production integration with POS frontend.
 - Quarkus annotations: `@ApplicationScoped`, `@RunOnVirtualThread` (I/O), `@Scheduled`, `@ConfigProperty`
 - Logging: `io.quarkus.logging.Log` — never `System.out.println`
 - Rescate de surtidor: `POST /api/dispatch/reauth` → `REQ_PUMP_REAUTH_ID_XXX` es el **único**
-  comando que saca un surtidor de `PAUSED` (ver docs/FUSION_PROTOCOL.md)
+  comando que saca un surtidor de `PAUSED` → `docs/SOP_DESTRABAR_SURTIDOR_PAUSED.md`
+- **Versión**: el string de `/health` debe espejar el tag del proyecto, no es un contador
+  propio (quedó congelado en `0.19.5` durante ~4 meses). Hoy: `0.39.4`
 - Test: `./mvnw test` (71 tests)
 
 ### Powerfin POS (SvelteKit)

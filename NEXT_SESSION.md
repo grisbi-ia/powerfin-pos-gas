@@ -1,5 +1,48 @@
 # NEXT_SESSION.md — Powerfin POS
 
+## 🔴 Pendientes (2026-10-16) — destrabe de surtidores en `PAUSED`
+
+- [x] **v0.39.4 — `REQ_PUMP_REAUTH` para destrabar surtidores `PAUSED`** (commit `192c469`).
+  Causa raíz: **`PresetOverrun`** — el cliente llega al preset de VOLUMEN, el surtidor se
+  sobrepasa y el firmware lo deja en `PAUSED` **sin emitir `EVT_PUMP_NEW_TRANSACTION`**
+  → bomba retenida + venta abierta. Único comando que lo libera: `REAUTH` (el firmware
+  ejecuta `eaClearPause`). Validado contra hardware real (bomba 5: `PAUSED` → `IDLE` en <5 s).
+  **Procedimiento: `docs/SOP_DESTRABAR_SURTIDOR_PAUSED.md`**
+  Endpoint: `POST /api/dispatch/reauth {"dispenser_id": <pump 1-8>}` ← número de **pump** del
+  Fusion, no el del armario (armario 3 = pumps 5 y 6).
+- [ ] **Botón “Destrabar” en el POS/Admin** — verificar que el surtidor esté en `PAUSED` y
+  enviar `REAUTH` desde la UI con confirmación. Hoy solo existe el endpoint crudo (curl)
+- [ ] **Detección automática de `PAUSED`** con un despacho `AUTHORIZED` asociado → alertar al
+  despachador. Cualquier automatismo necesita activación explícita y aprobación (AGENTS.md
+  prohíbe fallbacks silenciosos)
+- [ ] **`POST /api/dispatch/stop` devuelve falso éxito** — responde `{"status":"STOPPED"}`
+  con solo escribir al socket e **ignora** los `RES_GENERIC_ERROR` del Wayne (se loguean como
+  `Unhandled event (new Wayne event type?)`). Debe reportar el resultado real al caller
+- [x] **Incidente 2026-10-16 cerrado**: bomba 5 destrabada con `REAUTH`; despacho `29504`
+  reparado (`12.0620` gal / `$37.36`, coincide con el registro del propio Wayne, Sale Id 28824).
+  El cierre a mano de la venta lo hizo el despachador **porque necesitaba la factura** →
+  documentado en el SOP como prohibido: con `REAUTH` el flujo normal ya funciona
+
+---
+
+## 🔴 Incidente SRI/Key49 (2026-09-25) — facturas del emisor anterior emitidas por NEOGUAYAS
+
+- **Informe completo:** `docs/INCIDENTE_SRI_2026-09-11.md`
+  · **Desglose + acciones:** `docs/incidente_sri_2026-09-11_desglose.csv` (323 filas, columna `accion`).
+- El re-clavado masivo del **11/09** (cierre del PLAN_EXPIRED) emitió **233 facturas del
+  emisor anterior** (RUC `0190379760001`, serie `001-40x`) **con el RUC de NEOGUAYAS**
+  ($2.658,58 base · $398,50 IVA · $3.057,08) → **reversar con nota de crédito**.
+- **NO hay duplicado en el SRI** (verificado con `GET`): un solo documento por número.
+- Efectos: **154** ventas de NEOGUAYAS quedaron **sin factura propia** (reemitir) y
+  **69** ventas del emisor anterior siguen sin facturar. **76** colisiones latentes.
+- Caso **22294 corregido** el 2026-09-25 (secuencial nuevo `003-501-000006802`, factura
+  propia de NEOGUAYAS).
+- **Pendiente:** fix del handler 409 + soporte multi-emisor; payload de `POST /v1/credit-notes`
+  (Key49 sí lo soporta); decisión fiscal + credenciales del tenant anterior.
+- **Sin cambios en BD salvo el 22294 (autorizado).**
+
+---
+
 ## ✅ Acciones ejecutadas (2026-09-21) — v0.39.3
 
 | # | Acción | Resultado |
