@@ -153,6 +153,36 @@ class FusionMessageBuilderTest {
     }
 
     @Test
+    void buildReauth() {
+        String msg = FusionMessageBuilder.buildReauth(5);
+        assertTrue(msg.contains("REQ_PUMP_REAUTH_ID_005"));
+        assertTrue(msg.endsWith("|^"));
+        // REAUTH takes no parameters (FUSION_PROTOCOL.md)
+        assertFalse(msg.contains("HO="), "REAUTH should not carry a hose");
+        assertFalse(msg.contains("PA="), "REAUTH should not carry a stop flag");
+    }
+
+    @Test
+    void buildReauthExactWireFormat() {
+        assertEquals("00035|5|2||POST|REQ_PUMP_REAUTH_ID_005||||^",
+            FusionMessageBuilder.buildReauth(5));
+    }
+
+    @Test
+    void buildReauthPadsPumpIdToThreeDigits() {
+        assertTrue(FusionMessageBuilder.buildReauth(1).contains("REQ_PUMP_REAUTH_ID_001"));
+        assertTrue(FusionMessageBuilder.buildReauth(12).contains("REQ_PUMP_REAUTH_ID_012"));
+    }
+
+    @Test
+    void buildReauthLenFieldIsCorrect() {
+        String msg = FusionMessageBuilder.buildReauth(5);
+        int expectedLen = Integer.parseInt(msg.substring(0, 5));
+        String body = msg.substring(8);
+        assertEquals(expectedLen, body.length());
+    }
+
+    @Test
     void buildWithCustomDestinationAndOrigin() {
         String msg = FusionMessageBuilder.build("REQ_PUMP_STATUS_ID_001", "",
             "192.168.1.100", "FusionBridge");
@@ -175,6 +205,7 @@ class FusionMessageBuilderTest {
         assertTrue(FusionMessageBuilder.buildStopAll().endsWith("^"));
         assertTrue(FusionMessageBuilder.buildClearPreset(1).endsWith("^"));
         assertTrue(FusionMessageBuilder.buildClearStop(1).endsWith("^"));
+        assertTrue(FusionMessageBuilder.buildReauth(5).endsWith("^"));
         assertTrue(FusionMessageBuilder.buildAuth(1, 1).endsWith("^"));
     }
 

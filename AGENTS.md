@@ -356,7 +356,9 @@ Ready for production integration with POS frontend.
 - Java package base: `com.powerfin.pos.bridge.*`
 - Quarkus annotations: `@ApplicationScoped`, `@RunOnVirtualThread` (I/O), `@Scheduled`, `@ConfigProperty`
 - Logging: `io.quarkus.logging.Log` — never `System.out.println`
-- Test: `./mvnw test` (67 tests)
+- Rescate de surtidor: `POST /api/dispatch/reauth` → `REQ_PUMP_REAUTH_ID_XXX` es el **único**
+  comando que saca un surtidor de `PAUSED` (ver docs/FUSION_PROTOCOL.md)
+- Test: `./mvnw test` (71 tests)
 
 ### Powerfin POS (SvelteKit)
 - Svelte components: PascalCase (e.g. `DispenserCard.svelte`), TS files: kebab-case

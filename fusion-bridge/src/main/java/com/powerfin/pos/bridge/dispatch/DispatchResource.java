@@ -203,6 +203,44 @@ public class DispatchResource {
     }
 
     /**
+     * Release a dispenser stuck in PAUSED.
+     *
+     * The Wayne rejects REQ_PUMP_CLOSE while a pump is PAUSED
+     * (SSF_TRANS_ERR_CLOSE_IN_STATE [PAUSED]), and neither REQ_PUMP_STOP
+     * (PA=1) nor REQ_PUMP_CLEAR_STOP clear the pause latch. REAUTH is the
+     * only documented command that can release a paused transaction.
+     *
+     * CAUTION: this re-authorizes the transaction the pump is holding. With the
+     * nozzle still off its holster the pump may resume dispensing, so only call
+     * this with an operator standing at the dispenser.
+     *
+     * Returns REAUTH_SENT, not RESUMED: it reports that the command was written
+     * to the Fusion socket. The real outcome arrives asynchronously as an
+     * EVT_PUMP_STATUS_CHANGE (or a RES_GENERIC_ERROR) on the SSE stream.
+     */
+    @POST
+    @Path("/reauth")
+    public Response reauth(Map<String, Object> request) {
+        if (!tcpClient.isConnected()) {
+            return Response.status(503)
+                .entity(Map.of("error", "No connection to Fusion"))
+                .build();
+        }
+
+        int dispenserId = ((Number) request.getOrDefault("dispenser_id", 1)).intValue();
+        String message = FusionMessageBuilder.buildReauth(dispenserId);
+        boolean sent = tcpClient.sendRaw(message);
+
+        if (sent) {
+            Log.warnf("Reauth sent: dispenser %d — releasing a PAUSED transaction", dispenserId);
+            return Response.ok(Map.of("status", "REAUTH_SENT")).build();
+        }
+        return Response.status(503)
+            .entity(Map.of("error", "Failed to send reauth"))
+            .build();
+    }
+
+    /**
      * Lock a completed sale for payment processing.
      * Keeps the pump from returning to IDLE after dispensing.
      * Called automatically after NEW_TRANSACTION, but can also be called

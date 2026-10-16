@@ -79,6 +79,19 @@ public class FusionMessageBuilder {
         return build("REQ_PUMP_CLEAR_STOP_ID_" + String.format("%03d", pumpId), "");
     }
 
+    /**
+     * Build REQ_PUMP_REAUTH — release a dispenser stuck in PAUSED.
+     *
+     * The Wayne rejects REQ_PUMP_CLOSE while a pump is PAUSED
+     * (SSF_TRANS_ERR_CLOSE_IN_STATE), and neither REQ_PUMP_STOP (PA=1, which
+     * reports "Stop Pump OK With Pause") nor REQ_PUMP_CLEAR_STOP touch the
+     * pause latch — the pump keeps presenting the transaction. REAUTH is the
+     * documented command for resuming a paused dispatch.
+     */
+    public static String buildReauth(int pumpId) {
+        return build("REQ_PUMP_REAUTH_ID_" + String.format("%03d", pumpId), "");
+    }
+
     public static String buildLock(String saleId, String lockId) {
         return build("REQ_PAYMENT_TRANSACTION_LOCK",
             "SA=" + saleId + "|LID=" + lockId + "|TMO=10");

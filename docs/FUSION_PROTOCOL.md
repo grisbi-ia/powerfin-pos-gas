@@ -363,13 +363,56 @@ Solo funciona si el surtidor está en `STARTING` o `FUELLING`.
 
 ---
 
-### REQ_PUMP_REAUTH_ID_XXX — Reanudar despacho pausado
+### REQ_PUMP_REAUTH_ID_XXX — Liberar surtidor retenido en PAUSED
 
 ```
 POST|REQ_PUMP_REAUTH_ID_001||||^
 ```
 
-Solo funciona si el surtidor está en `STOPPED`.
+**Es el único comando que saca al surtidor de `PAUSED`** — validado contra hardware real
+(2026-10-16, bomba 5 de NEOGAS). Traza real del firmware:
+
+```
+Processing Event [REQ_PUMP_REAUTH_ID_005]
+SSFBasePump::eaClearPause - Pump Pause Event processed OK      ← el "Clear_Pause" del diagrama
+SSFPumpStatus::setPumpStatus - from [07][PAUSED] to [08][EOT]
+iaReadPumpLastSale - Volume [12.062] Money [37.360] PPU [3.113]
+sendLastSaleInfo - Sending EVT_PUMP_NEW_TRANSACTION for pump 5
+SSFPumpStatus::setPumpStatus - from [08][EOT] to [02][IDLE]
+```
+
+`REAUTH` ejecuta **`eaClearPause`** en el firmware: es exactamente el **`Clear_Pause`** del
+diagrama de estados. El surtidor pasa por `EOT`, **lee la última venta** (volumen y monto
+reales) y recién ahí emite `EVT_PUMP_NEW_TRANSACTION`.
+
+> ⚠️ La nota anterior ("solo funciona si el surtidor está en `STOPPED`") era **incorrecta**.
+
+### Causa conocida de quedar en `PAUSED`: PresetOverrun
+
+Si el cliente llega al preset de **VOLUMEN** y el surtidor se sobrepasa, el firmware cierra la
+carga con motivo **`Filling completion reason [15][PresetOverrun]`** y deja el surtidor en
+`PAUSED` **sin emitir `EVT_PUMP_NEW_TRANSACTION`**. La venta queda abierta de los dos lados:
+el POS no cobra y el surtidor no libera la pistola. Solo sale con `REAUTH`.
+
+Ejemplo real (bomba 5, 2026-10-16): preset `12.000` gal → entregó **`12.062`** gal por
+`$37.360`, motivo `PresetOverrun`. Quedó **~5 h en `PAUSED`** hasta que se envió `REAUTH`.
+
+**Qué NO sirve para salir de `PAUSED`** (validado en el mismo incidente):
+
+| Intento | Respuesta del Wayne | Efecto |
+| --- | --- | --- |
+| `REQ_PUMP_CLOSE` (botón "Cerrar" de la consola Synergy) | `SSF_TRANS_ERR_CLOSE_IN_STATE [PAUSED]` | ❌ rechazado |
+| `REQ_PUMP_STOP` con `PA=1` | `eaStop - Stop Pump OK With Pause` → `isStopped=1` | ❌ deja el latch de PAUSE puesto |
+| `REQ_PUMP_CLEAR_STOP` | `eaClearStop - CLEAR STOP PUMP OK` → `isStopped=0` | ❌ limpia el STOP, no el PAUSE |
+
+El flag de pausa es un **latch independiente**: `STOP`/`CLEAR_STOP` solo tocan `isStopped`.
+Mientras el surtidor esté en `PAUSED` sigue presentando la transacción
+(`Reading RTM ... Calling Hose READ 1`) y **no emite `EVT_PUMP_NEW_TRANSACTION`**, por lo que
+la venta queda abierta de los dos lados (POS y firmware).
+
+> **Ojo al usarlo:** reautoriza la transacción retenida. Con la pistola fuera del soporte el
+> surtidor puede reanudar el despacho. Llámalo con un operador en la bomba.
+> Implementado como `POST /api/dispatch/reauth` en FusionBridge (v0.19.6).
 
 ---
 
