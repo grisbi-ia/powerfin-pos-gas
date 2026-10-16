@@ -365,6 +365,8 @@ Solo funciona si el surtidor está en `STARTING` o `FUELLING`.
 
 ### REQ_PUMP_REAUTH_ID_XXX — Liberar surtidor retenido en PAUSED
 
+> **Procedimiento operativo completo (para el despachador): `docs/SOP_DESTRABAR_SURTIDOR_PAUSED.md`**
+
 ```
 POST|REQ_PUMP_REAUTH_ID_001||||^
 ```
