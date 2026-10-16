@@ -33,7 +33,7 @@ public class BridgeHealthResource {
         result.put("status", fusionConnected ? "UP" : "DEGRADED");
         result.put("fusionConnected", fusionConnected);
         result.put("service", "FusionBridge");
-        result.put("version", "0.19.6");
+        result.put("version", "0.39.4");
         result.put("printerPolicy", printerConfig.getPolicy().name());
 
         Map<String, Object> dependencies = new LinkedHashMap<>();
