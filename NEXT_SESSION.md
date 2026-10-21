@@ -1,5 +1,103 @@
 # NEXT_SESSION.md — Powerfin POS
 
+## 📅 Reunión comercial — 2026-10-21
+
+- [x] **Hoja de reunión de 1 página A4** — **HECHA** (`comercial/hoja-reunion.html`
+      + `hoja-reunion.pdf`): 4 rubros, 4 modalidades con costo a 5 años, tramos,
+      red, servicios opcionales, qué incluye/no incluye y contacto. A4 vertical,
+      tono claro. Verificado: **1 página**, render revisado, sin cortes; bordes
+      de tablas e importes cuadran con el análisis v4.1.
+- [x] **Guión de la reunión** — **HECHO** (`comercial/GUION_REUNION.md`, interno):
+      45 min con tiempos y frases, apertura con preguntas, recorrido del brochure,
+      **bloque de precios en 5 pasos** (costo del problema → 4 rubros → el número
+      y silencio → elegir modalidad → límites), 6 objeciones con respuesta corta,
+      cierre pidiendo el levantamiento, resguardos (SLA, Key49, movilización,
+      plazos, actualización mayor) y cifras de bolsillo.
+- [x] **Guión en PDF y versión de bolsillo** — **HECHOS**: `GUION_REUNION.pdf`
+      (5 páginas, generado desde el MD con `python3 build-guion.py`) y
+      `guion-bolsillo.pdf` (1 página A4: 5 pasos del precio, 6 objeciones, tabla
+      de números, cierre, “no decir” y resguardos).
+- [ ] **Ensayar el guión en voz alta** con el cotizador abierto (una pasada de
+      15 min) y marcar las frases que suenan a lectura.
+- [x] **Verificar entregables antes de salir** — **HECHO 2026-10-21**:
+      `brochure.pdf` = 12 páginas con p.10 actualizada (y ya en tono claro para
+      impresión); cotizador con defaults v4.1 verificados; hoja de reunión = 1
+      página.
+- [ ] **Tener respuesta o frase de resguardo** para los 5 pendientes que pueden
+      salir en la mesa: tarifa/tope de Key49 (3.000 facturas/mes), SLA con
+      fines de semana, radio de movilización, costo real de soporte y
+      autorización de logos NeoGas/NeoGuayas.
+- [ ] **Modo reunión:** cotizador abierto para editar en vivo + un JSON de
+      respaldo. Si piden otro inicial o tasa, mostrarlo sin tocar los
+      documentos; los cambios del navegador **no** son oficiales.
+- [ ] **Si se aprueba un precio:** aplicarlo en `ANALISIS_PRECIOS.md` (§4.1,
+      §4.2, §5 y §7), `brochure.html` p.10 + PDF regenerado, `DEFAULTS` del
+      cotizador y `README.md`; recalcular la invariante
+      `costo5a(financiado) − costo5a(contado) = interés` y el payback (§10).
+
+---
+
+## 🖨️ Comercial (2026-10-21) — brochure en tono claro para impresión
+
+- Portada, página 12 y las **9 bandas de énfasis** ya no tienen fondo negro:
+  blanco / gris muy claro con acento rojo. PDF regenerado, **12 páginas**.
+- Medición de píxeles oscuros: p.1 **97% → 3,8%**, p.12 **24,9% → 1,9%**,
+  p.2 **7,3% → 1,3%**; promedio del documento **~1,7%**.
+- Regla para el futuro: no volver a fondos oscuros a página completa; ver
+  `comercial/README.md` → “Diseño optimizado para impresión”.
+
+---
+
+## 💼 Comercial (2026-10-20) — precios v4: cuatro rubros
+
+- **Decisión:** reemplazar los “planes” por **cuatro rubros explícitos**:
+  1. Instalación, implementación y capacitación: **$1.200** (único)
+  2. Precio del sistema (ERP + POS + Admin): **$7.500** (único o financiado)
+  3. Soporte mensual y actualizaciones menores: **$175/mes**
+  4. Actualizaciones mayores: **20% del sistema ($1.500)** por versión, opcional
+- **Por qué:** la v3 seguía mezclando el precio del sistema con el soporte, y
+  “Total lista”/“Anticipo” no se entendían sin explicar la fórmula. Además, el
+  soporte implícito variaba con el plazo ($237,50 / $141,67 / $93,75) y el plan
+  de 48 m vendía soporte bajo costo.
+- **Contado:** $8.875 el día 0 (instalación + sistema + primer soporte) y
+  $175/mes. Costo a 5 años: **$19.200** ($320/mes equivalente, dentro del rango
+  de mercado $150–$500/estación/mes).
+- **Financiado (20% inicial + 12% anual):**
+  - 24 m: $3.157 el día 0 y **$457/mes**; total $13.679
+  - 36 m: $3.074 el día 0 y **$374/mes**; total $16.174
+  - 48 m: $3.033 el día 0 y **$333/mes**; total $18.684
+- **Redes:** licencia 2.ª–3.ª al 60%, 4.ª–6.ª al 50%, 7.ª+ al 40%; instalación y
+  soporte por estación.
+- **Benchmark:** SaaS de gasolineras $150–$500/estación/mes; SAP B1 cloud
+  $40–$110/usuario/mes; mantenimiento ERP 18–22% de la licencia; POS de pista
+  internacional $10.000–$20.000+/sitio.
+- **Archivos:** `comercial/ANALISIS_PRECIOS.md` (v4.1), `comercial/brochure.html`
+  (p.10 rediseñada), `comercial/brochure.pdf` (12 páginas, regenerado),
+  `comercial/cotizador.html` (**v5: parametrizable + JSON**) y `comercial/README.md`.
+- **Cotizador v5 (parametrizable, 2026-10-20):** panel “Parámetros de cálculo”
+  con todos los valores editables (rubros, % inicial, tasa, plazos, islas,
+  tramos por pistolas, descuento de red y catálogo de conceptos adicionales);
+  persistencia en `localStorage`; Exportar/Importar JSON por prospecto;
+  Restablecer lista v4.1; aviso “parámetros modificados”; validación visible
+  (no calcula con datos inválidos); comparación de las 4 modalidades y cálculo
+  paso a paso (interno, no se imprime). Sigue siendo un HTML autónomo.
+- **v4.1 (misma fecha) — método y horizonte:** el análisis documenta **cómo se
+  fijó cada precio** (§5: instalación 15–30% de la licencia, sistema 4,3% del
+  margen anual del cliente, soporte 18–22% + hosting + Key49) y separa dato de
+  supuesto (§5.6). Se agregó la columna **Costo a 5 años** en brochure p.10,
+  análisis §4.2, cotizador y README: el contado es el más barato ($19.200 vs
+  $19.979 / $20.374 / $20.784); antes la tabla comparaba 60 meses contra 24/36/48
+  y hacía parecer más barato financiar. El **payback** del anexo quedó corregido:
+  “0,05% de merma” daba 15 meses, no 6; la cifra para pagar en 12 meses es
+  **0,09% del volumen** (~110 gal/mes). Además se acotó “pago mixto” a API (la
+  UI envía un solo medio) y el destrabe `PAUSED` a comando `REAUTH` (botón UI
+  pendiente).
+- **Pendiente:** confirmar tarifa/tope de Key49 (3.000 facturas/mes), SLA con
+  fines de semana, radio de movilización, costo real de soporte y autorización
+  de logos NeoGas/NeoGuayas.
+
+---
+
 ## 🔴 Pendientes (2026-10-16) — destrabe de surtidores en `PAUSED`
 
 - [x] **v0.39.4 — `REQ_PUMP_REAUTH` para destrabar surtidores `PAUSED`** (commit `192c469`).
