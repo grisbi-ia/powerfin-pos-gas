@@ -139,6 +139,7 @@ powerfin_pos_gas/
 ├── fusion-bridge/               ← Quarkus sub-project (Java 21)
 ├── pos/                         ← SvelteKit sub-project — Powerfin POS
 ├── admin/                       ← SvelteKit sub-project — Powerfin Admin (independiente)
+├── comercial/                   ← Propuesta comercial: brochure, precios v4.1, cotizador, hoja y guión de reunión
 └── scripts/                     ← deploy-to-server.sh (frontend/backend/admin/all)
 ```
 
@@ -345,7 +346,7 @@ Ready for production integration with POS frontend.
 - Stack: FastAPI + SQLAlchemy 2.0 (async) + asyncpg + Alembic
 - Virtual env: `pos_backend/venv/`
 - Run: `source venv/bin/activate && uvicorn app.main:app --reload --port 8080`
-- Test: `pytest` (421 tests — endpoints POS + admin /api/admin/*)
+- Test: `pytest` (548 tests — endpoints POS + admin /api/admin/*)
 - DB dev: `localhost:5433/powerfin_gas` (user: postgres, pass: 1234abcd)
 - Test DB: `localhost:5433/powerfin_gas_test`
 - DB prod (lectura): `100.97.47.123:5432` (Tailscale) / `192.168.1.25:5432` (LAN)
@@ -367,7 +368,27 @@ Ready for production integration with POS frontend.
 - No business logic in Svelte components — use `$lib/api/` and stores
 - Print policy config: `PRINTER_POLICY` env var (ALWAYS | ASK | NEVER)
 - ESC/POS library: `escpos-coffee` 4.1.0
-- Test: `npm run test && npm run check` (41 vitest tests, 0 TS errors)
+- Test: `npm run test && npm run check` (77 vitest tests, 0 TS errors)
+
+### Comercial (propuesta y precios)
+- Estructura **v4.1**: 4 rubros — instalación **$1.200** · sistema **$7.500** ·
+  soporte **$175/mes** · actualización mayor **20% ($1.500)**, opcional. Detalle
+  en `comercial/ANALISIS_PRECIOS.md` (§5 explica cómo se fijó cada rubro).
+- Regla: **cada cosa que se cobra tiene su línea** y ningún rubro subsidia a otro.
+- **Invariante de la tabla de pagos:** `costo5a(financiado) − costo5a(contado) = interés`.
+  A 5 años el contado siempre es el más barato ($19.200 vs $19.979/$20.374/$20.784).
+- `comercial/cotizador.html` es **parametrizable** (autónomo, sin servidor); sus
+  `DEFAULTS` deben coincidir con la lista vigente. Si se cambia un precio oficial:
+  actualizar ANALISIS §4.1/§4.2/§5/§7, `brochure.html` p.10, `DEFAULTS` del
+  cotizador, `README.md` y regenerar los PDF.
+- **Impresión:** brochure, hoja y guiones en **tono claro** (sin fondos negros a
+  página completa). No volver a introducirlos.
+- Regenerar: `cd comercial && weasyprint brochure.html brochure.pdf` (12 pág) ·
+  `weasyprint hoja-reunion.html hoja-reunion.pdf` (1 pág) · `python3 build-guion.py`
+  (guión PDF) · `weasyprint guion-bolsillo.html guion-bolsillo.pdf` (1 pág).
+  Verificar páginas con `pdfinfo | grep Pages`.
+- **Internos, no enviar al cliente:** `ANALISIS_PRECIOS.md`, `GUION_REUNION.*`,
+  `guion-bolsillo.*` y `cotizador.html`.
 
 ### Powerfin Admin (SvelteKit) — proyecto independiente
 - Admin es un proyecto SvelteKit **separado** en `admin/`
@@ -382,7 +403,7 @@ Ready for production integration with POS frontend.
 - Roles: ADMIN (full), SUPERVISOR (read+export), DISPATCHER (sin acceso)
 - Soft-delete para entidades con integridad referencial (users, products, grades)
 - Paginación obligatoria en todos los endpoints admin
-- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 421)
+- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 548)
 - Deploy: Nginx location /admin → SPA estática, independiente de /pos
 
 ## Deploy (resumen — ver docs/DEPLOY_QUICK.md)
