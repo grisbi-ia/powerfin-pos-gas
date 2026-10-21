@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Guion de bolsillo — Powerfin ERP + POS GAS</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #EC1B23;
+    --red-dark: #C11219;
+    --ink: #14181F;
+    --ink-2: #2A303A;
+    --grey: #666666;
+    --grey-2: #8A9099;
+    --line: #E4E7EB;
+    --bg: #F6F7F9;
+  }
+
+  body {
+    font-family: 'Lato', 'Liberation Sans', Arial, sans-serif;
+    color: var(--ink-2);
+    font-size: 9.1pt;
+    line-height: 1.4;
+  }
+
+  .sheet {
+    width: 210mm; min-height: 297mm;
+    padding: 10mm 13mm 9mm;
+    position: relative;
+  }
+  .sheet::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0;
+    height: 4mm; background: var(--red);
+  }
+
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 6mm; }
+  header img { height: 9mm; width: auto; display: block; }
+  header .r { text-align: right; }
+  .kicker {
+    font-size: 6.4pt; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--red); font-weight: 900;
+  }
+  h1 { font-size: 15pt; color: var(--ink); font-weight: 900; line-height: 1.1; margin-top: .8mm; }
+  header .sub { font-size: 7pt; color: var(--grey); margin-top: .6mm; }
+
+  .rule { height: 1px; background: var(--line); margin: 3mm 0 4mm; }
+
+  .top { display: grid; grid-template-columns: 1.06fr 1fr; gap: 7mm; }
+
+  h2 {
+    font-size: 7.8pt; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--red); font-weight: 900; margin-bottom: 2.4mm;
+  }
+
+  .step { display: grid; grid-template-columns: 7mm 1fr; gap: 2mm; margin-bottom: 3.1mm; }
+  .step .n {
+    font-size: 13pt; font-weight: 900; color: var(--red); line-height: 1;
+    padding-top: .4mm;
+  }
+  .step h3 { font-size: 9.1pt; color: var(--ink); font-weight: 900; line-height: 1.2; }
+  .step p { font-size: 8.7pt; color: var(--ink-2); margin-top: .8mm; }
+  .say {
+    border-left: 1mm solid var(--red); background: var(--bg);
+    padding: 1.7mm 2.6mm; margin-top: 1.2mm; border-radius: .8mm;
+    font-size: 9.1pt; color: var(--ink); font-weight: 700;
+  }
+  .say small { font-weight: 400; color: var(--grey); }
+  .silence {
+    display: inline-block; margin-top: 1.2mm;
+    background: var(--red); color: #fff; border-radius: .8mm;
+    padding: .9mm 2.4mm; font-size: 7.6pt; font-weight: 900;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  .rubros { display: flex; gap: 2mm; margin-top: 1.2mm; }
+  .rubro {
+    flex: 1; background: var(--bg); border-radius: .8mm;
+    padding: 1.5mm 1.8mm; text-align: center;
+  }
+  .rubro b { display: block; font-size: 10pt; color: var(--ink); }
+  .rubro span { font-size: 6.3pt; color: var(--grey-2); text-transform: uppercase; letter-spacing: .02em; }
+
+  .obj { border-bottom: 1px solid var(--line); padding: 1.5mm 0; }
+  .obj:last-child { border-bottom: none; }
+  .obj .q { font-size: 8.8pt; color: var(--ink); font-weight: 900; }
+  .obj .a { font-size: 8.5pt; color: var(--ink-2); margin-top: .4mm; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; }
+  th {
+    font-size: 6.3pt; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--grey-2); font-weight: 900; text-align: left;
+    border-bottom: 1px solid var(--ink); padding: .9mm 1.6mm;
+  }
+  td { font-size: 8.6pt; padding: .9mm 1.6mm; border-bottom: 1px solid var(--line); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.hl td { background: #FDF3F3; font-weight: 900; color: var(--ink); }
+
+  .bottom { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 4mm; margin-top: 4.5mm; }
+  .box {
+    background: var(--bg); border-left: 1.1mm solid var(--red);
+    border-radius: 1mm; padding: 2.6mm 3mm;
+  }
+  .box .t {
+    font-size: 6.4pt; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink); font-weight: 900; margin-bottom: 1mm;
+  }
+  .box p { font-size: 8.2pt; color: var(--ink-2); }
+  .box .big { font-size: 9.2pt; font-weight: 900; color: var(--ink); }
+  .box ul { list-style: none; }
+  .box li { font-size: 8.1pt; margin-bottom: .6mm; }
+  .box li b { color: var(--ink); }
+  .no li::before { content: "✕ "; color: var(--red); font-weight: 900; }
+
+  footer {
+    margin-top: 3.5mm; padding-top: 2mm; border-top: 1px solid var(--line);
+    font-size: 6.3pt; color: var(--grey-2);
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <img src="assets/grisbi.png" alt="GRISBI">
+    <div class="r">
+      <div class="kicker">Guion de bolsillo · uso interno</div>
+      <h1>Precios: los 5 pasos y las objeciones</h1>
+      <div class="sub">Powerfin ERP + POS GAS · reunión de 45 min</div>
+    </div>
+  </header>
+
+  <div class="rule"></div>
+
+  <div class="top">
+
+    <!-- ============ IZQUIERDA: LOS 5 PASOS ============ -->
+    <div>
+      <h2>Los 5 pasos del precio</h2>
+
+      <div class="step">
+        <div class="n">1</div>
+        <div>
+          <h3>Costo del problema, antes del precio</h3>
+          <p>Merma 0,3% sobre 120.000 gal ≈ $1.080/mes + cuadre, facturas y huérfanos: $1.490/mes.</p>
+          <div class="say">“Con que detecte <b>0,09%</b> de tu volumen en merma, se paga en <b>12 meses</b>.”</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="n">2</div>
+        <div>
+          <h3>Los 4 rubros, en orden y sin mezclar</h3>
+          <div class="rubros">
+            <div class="rubro"><b>$1.200</b><span>Instalación</span></div>
+            <div class="rubro"><b>$7.500</b><span>Sistema</span></div>
+            <div class="rubro"><b>$175</b><span>Soporte al mes</span></div>
+            <div class="rubro"><b>20%</b><span>Actualización</span></div>
+          </div>
+          <p style="margin-top:1.2mm">Instalación una vez · sistema una vez o financiado · soporte siempre · actualización opcional cada 3–4 años.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="n">3</div>
+        <div>
+          <h3>Decir el número y callarse</h3>
+          <div class="say">“El sistema son <b>siete mil quinientos</b>.”</div>
+          <span class="silence">Silencio 5 segundos</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="n">4</div>
+        <div>
+          <h3>Elegir la modalidad con él</h3>
+          <div class="say">“¿Contado o financiado?” <small>El contado a 5 años es $19.200 ≈ $320/mes.</small></div>
+          <p style="margin-top:1mm">Financiar cuesta <b>exactamente el interés</b>: $779 / $1.174 / $1.584. Si duda, pregunta <b>cuánto puede poner el día 0</b>.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="n">5</div>
+        <div>
+          <h3>Límites claros</h3>
+          <p><b>Incluye:</b> hosting, respaldos, monitoreo, Key49 hasta 3.000 facturas/mes, cambios del SRI y actualizaciones menores.</p>
+          <p><b>No incluye:</b> hardware, consumibles, certificado digital, IVA, módulos nuevos ni actualización mayor.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ DERECHA: OBJECIONES ============ -->
+    <div>
+      <h2>Objeciones · 20 segundos cada una</h2>
+
+      <div class="obj">
+        <div class="q">“Está caro.”</div>
+        <div class="a">“¿Caro comparado con qué? Es 4,3% del margen anual que te ayuda a controlar y se paga en 6–12 meses.”</div>
+      </div>
+      <div class="obj">
+        <div class="q">“La competencia cobra menos.”</div>
+        <div class="a">“¿Incluye pista, SRI y Admin en el mismo precio? ¿Quién integra el hardware? Si el alcance es el mismo, compárame números.”</div>
+      </div>
+      <div class="obj">
+        <div class="q">“¿Por qué pago soporte si ya compré?”</div>
+        <div class="a">“El software no es un mueble: cambia el SRI, hay que respaldar y monitorear. Eso incluye el soporte, más Key49.”</div>
+      </div>
+      <div class="obj">
+        <div class="q">“¿Por qué 20% de inicial?”</div>
+        <div class="a">“El día 0 instalamos, migramos y capacitamos. Con menos de 20% no financiamos.”</div>
+      </div>
+      <div class="obj">
+        <div class="q">“¿Y si me quiero ir?”</div>
+        <div class="a">“Los datos son tuyos: te los entrego en CSV y SQL. La salida es el saldo + cuotas restantes.”</div>
+      </div>
+      <div class="obj">
+        <div class="q">“¿Me haces descuento?”</div>
+        <div class="a">“La lista no la muevo. Sí puedo mover plazo o inicial: te respondo mañana con números.”</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ NÚMEROS ============ -->
+  <div style="margin-top:4mm">
+    <h2>Números para no dudar</h2>
+    <table>
+      <tr>
+        <th>Modalidad</th><th class="num">Pago inicial</th><th class="num">Cuota</th>
+        <th class="num">Total en el plazo</th><th class="num">Costo a 5 años</th><th class="num">Interés</th>
+      </tr>
+      <tr class="hl">
+        <td>Contado</td><td class="num">$8.875</td><td class="num">$175</td>
+        <td class="num">—</td><td class="num">$19.200</td><td class="num">—</td>
+      </tr>
+      <tr><td>Financiado 24 m</td><td class="num">$3.157</td><td class="num">$457</td><td class="num">$13.679</td><td class="num">$19.979</td><td class="num">$779</td></tr>
+      <tr><td>Financiado 36 m</td><td class="num">$3.074</td><td class="num">$374</td><td class="num">$16.174</td><td class="num">$20.374</td><td class="num">$1.174</td></tr>
+      <tr><td>Financiado 48 m</td><td class="num">$3.033</td><td class="num">$333</td><td class="num">$18.684</td><td class="num">$20.784</td><td class="num">$1.584</td></tr>
+    </table>
+  </div>
+
+  <!-- ============ CIERRE / NO DECIR / SI PREGUNTAN ============ -->
+  <div class="bottom">
+    <div class="box">
+      <div class="t">Cierre</div>
+      <p class="big">“No necesito que decidas hoy: 45 minutos en tu estación y te entrego la cotización exacta en 48 horas. ¿[día] a las [hora]?”</p>
+      <p style="margin-top:1mm; color:var(--grey)">Nunca cerrar con “¿qué te pareció?”. Cerrar con fecha.</p>
+    </div>
+
+    <div class="box no">
+      <div class="t">No decir</div>
+      <ul>
+        <li>“Te lo dejo barato”</li>
+        <li>“El sistema es barato”</li>
+        <li>“Nunca falla”</li>
+        <li>Críticas al proveedor actual</li>
+        <li>Prometer SLA 24/7</li>
+      </ul>
+    </div>
+
+    <div class="box">
+      <div class="t">Si preguntan</div>
+      <ul>
+        <li><b>SLA:</b> L-V 8 h, fin de semana 4 h; movilización 1–2 h en Cuenca.</li>
+        <li><b>Key49:</b> 3.000 facturas/mes; excedente al costo.</li>
+        <li><b>Otro plazo:</b> se calcula y se confirma.</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    <span>Uso interno · no enviar al cliente · documento completo: GUION_REUNION.pdf</span>
+    <span>Powerfin ERP + POS GAS · octubre 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Powerfin ERP + Powerfin POS GAS — Propuesta comercial</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #EC1B23;
+    --red-dark: #C11219;
+    --ink: #14181F;
+    --ink-2: #2A303A;
+    --grey: #666666;
+    --grey-2: #8A9099;
+    --line: #E4E7EB;
+    --bg: #F6F7F9;
+  }
+
+  body {
+    font-family: 'Lato', 'Liberation Sans', Arial, sans-serif;
+    color: var(--ink-2);
+    font-size: 10.3pt;
+    line-height: 1.55;
+    hyphens: none;
+  }
+
+  .page {
+    width: 210mm; height: 297mm;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  .pad { padding: 17mm 17mm 14mm; }
+
+  /* ---------- header / footer ---------- */
+  .ph {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 3.5mm; margin-bottom: 8mm;
+  }
+  .ph .brand { display: flex; align-items: center; gap: 3mm; }
+  .ph img { height: 8mm; width: auto; }
+  .ph .sect {
+    font-size: 7.5pt; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--grey-2); font-weight: 700;
+  }
+  .pf {
+    position: absolute; left: 17mm; right: 17mm; bottom: 8mm;
+    display: flex; justify-content: space-between;
+    font-size: 7pt; color: var(--grey-2);
+    border-top: 1px solid var(--line); padding-top: 3mm;
+  }
+  .pf b { color: var(--grey); font-weight: 700; }
+  .pnum {
+    position: absolute; right: 17mm; bottom: 14.5mm;
+    font-size: 7pt; color: var(--grey-2);
+  }
+
+  /* ---------- typography ---------- */
+  h1 { font-size: 25pt; line-height: 1.12; font-weight: 900; letter-spacing: -.01em; }
+  h2 { font-size: 17pt; line-height: 1.18; font-weight: 900; color: var(--ink); letter-spacing: -.01em; }
+  h3 { font-size: 11pt; font-weight: 900; color: var(--ink); }
+  .kicker {
+    font-size: 8pt; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--red); font-weight: 900; margin-bottom: 3mm;
+  }
+  .lead { font-size: 11.5pt; line-height: 1.55; color: var(--grey); }
+  .small { font-size: 8.5pt; color: var(--grey); }
+  .tiny { font-size: 7.5pt; color: var(--grey-2); }
+  strong { color: var(--ink); font-weight: 900; }
+
+  /* ---------- cover ---------- */
+  .cover {
+    background: #FFFFFF;
+    color: var(--ink-2);
+    padding: 18mm;
+    display: flex; flex-direction: column;
+  }
+  .cover::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0;
+    height: 5mm; background: var(--red);
+  }
+  .cover .logo-box {
+    background: #fff; padding: 0; width: auto;
+    display: inline-block; line-height: 0;
+  }
+  .cover .logo-box img { width: 30mm; display: block; }
+  .cover .eyebrow {
+    margin-top: 30mm; font-size: 8pt; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--red); font-weight: 900;
+  }
+  .cover h1 { color: var(--ink); font-size: 36pt; margin-top: 4mm; }
+  .cover h1 span { color: var(--red); }
+  .cover .sub {
+    font-size: 13.5pt; color: var(--grey); font-weight: 300;
+    margin-top: 8mm; max-width: 150mm; line-height: 1.5;
+  }
+  .cover .rule { width: 26mm; height: 1.2mm; background: var(--red); margin: 10mm 0; }
+  .cover .points {
+    display: flex; flex-direction: column; gap: 3.5mm; max-width: 158mm;
+    background: var(--bg); border-left: 1.2mm solid var(--red);
+    border-radius: 1.5mm; padding: 6mm 7mm;
+  }
+  .cover .points div {
+    font-size: 10pt; color: var(--ink-2); padding-left: 7mm; position: relative;
+  }
+  .cover .points div:before {
+    content: ""; position: absolute; left: 0; top: 1.6mm;
+    width: 3mm; height: 3mm; background: var(--red); border-radius: .5mm;
+  }
+  .cover .stats {
+    margin-top: 0; display: flex; gap: 0;
+    background: var(--bg); border-radius: 1.5mm;
+    padding: 6mm 6mm 5mm;
+  }
+  .cover .stats div { flex: 1; padding-right: 6mm; }
+  .cover .stats b { display: block; font-size: 19pt; color: var(--ink); font-weight: 900; line-height: 1.1; }
+  .cover .stats span { font-size: 7.5pt; color: var(--grey-2); letter-spacing: .06em; text-transform: uppercase; }
+  .cover .foot {
+    margin-top: 7mm; font-size: 7.5pt; color: var(--grey-2);
+    display: flex; justify-content: space-between;
+  }
+
+  /* ---------- cards / grids ---------- */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+  .grid-2.tight { gap: 4.5mm; margin-top: 6mm !important; }
+  .grid-2.tight .card { padding: 4.5mm; }
+  .grid-2.tight .card p { font-size: 8.9pt; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+  .grid-3.tight .card { padding: 4.6mm; }
+  .grid-3.tight .card p { font-size: 8.8pt; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
+
+  .card {
+    border: 1px solid var(--line); border-radius: 1.5mm;
+    padding: 5.5mm; background: #fff;
+  }
+  .card .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 7mm; height: 7mm; border-radius: 1mm;
+    background: #FDECEC; color: var(--red);
+    font-weight: 900; font-size: 9pt; margin-bottom: 3mm;
+  }
+  .card h3 { margin-bottom: 1.5mm; }
+  .card p { font-size: 9.1pt; color: var(--grey); line-height: 1.48; }
+  .card .cost {
+    margin-top: 3mm; font-size: 8pt; font-weight: 900; color: var(--red);
+    letter-spacing: .02em;
+  }
+
+  .band {
+    background: var(--bg); color: var(--ink-2); border-radius: 1.5mm;
+    border-left: 1.2mm solid var(--red);
+    padding: 6mm 7mm; margin-top: 7mm;
+  }
+  .band p { color: var(--ink-2); font-size: 10pt; }
+  .band b { color: var(--ink); }
+
+  /* ---------- product screenshots ---------- */
+  .shot {
+    border: 1px solid var(--line); border-radius: 1.5mm; overflow: hidden;
+    background: #fff; box-shadow: 0 1mm 2.5mm rgba(20, 24, 31, .07);
+  }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot figcaption {
+    font-size: 7.4pt; color: var(--grey-2); line-height: 1.4;
+    padding: 2.2mm 4mm; border-top: 1px solid #EEF1F4; background: #FCFCFD;
+  }
+  .shots {
+    display: flex; justify-content: center; align-items: flex-end;
+    gap: 5mm; margin-top: 5mm;
+  }
+  .shots .shot { width: auto; }
+  .shots img { width: auto; height: 78mm; }
+  .shots .phone { border-radius: 3mm; }
+  .shot-cap {
+    font-size: 7.4pt; color: var(--grey-2); line-height: 1.4;
+    text-align: center; margin-top: 2mm;
+  }
+
+  .quote {
+    border-left: 1.4mm solid var(--red);
+    padding: 1mm 0 1mm 6mm; margin: 5mm 0;
+    font-size: 12.5pt; line-height: 1.45; color: var(--ink); font-weight: 300;
+  }
+  .quote b { font-weight: 900; }
+
+  /* ---------- diagram ---------- */
+  .diagram {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 2mm;
+    padding: 7mm; margin-top: 6mm;
+  }
+  .layer {
+    display: flex; align-items: center; gap: 5mm;
+    border: 1px solid var(--line); background: #fff; border-radius: 1.5mm;
+    padding: 4mm 5mm;
+  }
+  .layer .tag {
+    font-size: 6.8pt; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    color: #fff; background: var(--ink); border-radius: .8mm;
+    padding: 1mm 2.2mm; white-space: nowrap;
+  }
+  .layer .tag.red { background: var(--red); }
+  .layer .tag.grey { background: var(--grey-2); }
+  .layer h3 { font-size: 10pt; margin-bottom: .5mm; }
+  .layer p { font-size: 8pt; color: var(--grey); }
+  .arrow {
+    text-align: center; color: var(--grey-2); font-size: 9pt;
+    line-height: 1; margin: 2.5mm 0; letter-spacing: .3em;
+  }
+
+  /* ---------- lists ---------- */
+  ul.clean { list-style: none; }
+  ul.clean li {
+    font-size: 9.1pt; color: var(--grey); line-height: 1.48;
+    padding-left: 4.5mm; position: relative; margin-bottom: 2.1mm;
+  }
+  ul.clean li:before {
+    content: ""; position: absolute; left: 0; top: 2mm;
+    width: 1.6mm; height: 1.6mm; background: var(--red); border-radius: 50%;
+  }
+  ul.clean li b { color: var(--ink); }
+
+  .checklist { list-style: none; }
+  .checklist li {
+    font-size: 8.8pt; color: var(--grey); padding-left: 6mm; position: relative;
+    margin-bottom: 1.8mm; line-height: 1.4;
+  }
+  .checklist li:before {
+    content: "✓"; position: absolute; left: 0; top: -0.3mm;
+    color: var(--red); font-weight: 900; font-size: 10pt;
+  }
+  .crosslist { list-style: none; }
+  .crosslist li {
+    font-size: 8.8pt; color: var(--grey); padding-left: 6mm; position: relative;
+    margin-bottom: 1.8mm; line-height: 1.4;
+  }
+  .crosslist li:before {
+    content: "×"; position: absolute; left: 0; top: -0.6mm;
+    color: var(--grey-2); font-weight: 900; font-size: 12pt;
+  }
+
+  /* ---------- steps ---------- */
+  .step { display: flex; gap: 4mm; margin-bottom: 5.2mm; }
+  .step .num {
+    flex: 0 0 9mm; height: 9mm; border-radius: 50%;
+    background: var(--red); color: #fff;
+    font-weight: 900; font-size: 11pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step h3 { font-size: 9.5pt; margin-bottom: .8mm; }
+  .step p { font-size: 8.8pt; color: var(--grey); line-height: 1.45; }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 7.5pt; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--grey-2); font-weight: 900;
+    border-bottom: 1px solid var(--ink); padding: 2mm 2mm;
+  }
+  td {
+    font-size: 8.5pt; color: var(--ink-2);
+    border-bottom: 1px solid var(--line); padding: 2.2mm 2mm;
+  }
+  td.num, th.num { text-align: right; }
+  table.compact th { padding: 1.0mm 2mm; }
+  table.compact td { padding: 1.0mm 2mm; }
+  tr.hl td { background: #FDF3F3; font-weight: 900; color: var(--ink); }
+  tr.total td { border-top: 1px solid var(--ink); border-bottom: none; font-weight: 900; }
+
+  /* ---------- pricing ---------- */
+  .plans { display: flex; gap: 4mm; margin-top: 5mm; align-items: stretch; }
+  .plan {
+    flex: 1 1 0;
+    position: relative;
+    border: 1px solid var(--line); border-radius: 2mm;
+    height: 66mm;
+    display: flex; flex-direction: column;
+  }
+  .plan.mid { border: 1.2mm solid var(--red); }
+  .plan .top { padding: 4mm 5mm 3mm; border-bottom: 1px solid var(--line); }
+  .plan.mid .top { padding-top: 6.5mm; }
+  .plan .top .name { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: var(--grey-2); font-weight: 900; }
+  .plan.mid .top .name { color: var(--red); }
+  .plan .top .price { font-size: 21pt; font-weight: 900; color: var(--ink); line-height: 1.1; margin-top: 1.5mm; }
+  .plan .top .price small { font-size: 8pt; font-weight: 400; color: var(--grey); }
+  .plan .body { padding: 4mm 5mm; font-size: 8.3pt; color: var(--grey); flex: 1; }
+  .plan .body .row { display: flex; justify-content: space-between; margin-bottom: 1.5mm; }
+  .plan .body .row b { color: var(--ink); }
+  .plan .body .row.lead {
+    margin-bottom: 2.5mm; padding-bottom: 2.5mm;
+    border-bottom: 1px solid var(--line);
+  }
+  .plan .body .row.lead b { color: var(--red); font-size: 10pt; }
+  .plan .body .note { font-size: 7.5pt; color: var(--grey-2); margin-top: 3mm; }
+
+  .ribbon {
+    position: absolute; top: -1.2mm; left: -1.2mm; right: -1.2mm;
+    background: var(--red); color: #fff; font-size: 6.8pt;
+    letter-spacing: .14em; text-transform: uppercase; font-weight: 900;
+    text-align: center; padding: 1.2mm; border-radius: 1.4mm 1.4mm 0 0;
+  }
+
+  /* ---------- timeline ---------- */
+  .tl { position: relative; margin-top: 4mm; padding-left: 8mm; }
+  .tl:before {
+    content: ""; position: absolute; left: 3mm; top: 2mm; bottom: 2mm;
+    width: .6mm; background: var(--line);
+  }
+  .tl .item { position: relative; margin-bottom: 5mm; }
+  .tl .item:before {
+    content: ""; position: absolute; left: -6.2mm; top: 1.6mm;
+    width: 3mm; height: 3mm; border-radius: 50%;
+    background: #fff; border: .8mm solid var(--red);
+  }
+  .tl h3 { font-size: 9.5pt; }
+  .tl .when { font-size: 7pt; letter-spacing: .1em; text-transform: uppercase; color: var(--red); font-weight: 900; }
+  .tl p { font-size: 8.5pt; color: var(--grey); line-height: 1.4; }
+
+  /* ---------- contact ---------- */
+  .contact-card {
+    background: var(--bg); color: var(--ink-2); border-radius: 2mm;
+    border: 1px solid var(--line); border-top: 1.2mm solid var(--red);
+    padding: 6.5mm 7mm; margin-top: 5mm;
+  }
+  .contact-card h2 { color: var(--ink); }
+  .contact-card .grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 6mm;
+  }
+  .contact-card .lbl { font-size: 7pt; letter-spacing: .14em; text-transform: uppercase; color: var(--grey-2); font-weight: 900; }
+  .contact-card .val { font-size: 10pt; color: var(--ink); margin-top: .8mm; }
+  .contact-card .val small { color: var(--grey); }
+
+  .kpi-row { display: flex; gap: 4mm; margin-top: 6mm; }
+
+  .clients {
+    margin-top: 6mm; width: 100%; border-collapse: collapse;
+    border: 1px solid var(--line); border-radius: 1.5mm; background: #fff;
+  }
+  .clients td { border: 0; padding: 3.6mm 5mm; vertical-align: middle; }
+  .clients td.lbl {
+    width: 46%; font-size: 6.6pt; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--grey-2); font-weight: 900; line-height: 1.4;
+  }
+  .clients td.logos { text-align: right; white-space: nowrap; }
+  .clients td.logos img { display: inline-block; vertical-align: middle; height: auto; }
+  .clients img.neo-gas { width: 26mm; margin-right: 6mm; }
+  .clients img.neo-guayas { width: 33mm; }
+  .kpi {
+    flex: 1; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 1.5mm; padding: 4mm;
+  }
+  .kpi b { display: block; font-size: 16pt; color: var(--red); font-weight: 900; line-height: 1.1; }
+  .kpi span { font-size: 7.5pt; color: var(--grey); }
+</style>
+</head>
+<body>
+
+<!-- ============================ 1 · PORTADA ============================ -->
+<div class="page cover">
+  <div class="logo-box"><img src="assets/grisbi.png" alt="GRISBI"></div>
+
+  <div class="eyebrow">Propuesta comercial · 2026</div>
+  <h1>Powerfin <span>ERP</span><br>+ Powerfin POS <span>GAS</span></h1>
+  <div class="rule"></div>
+  <div class="sub">
+    Toda la operación de tu estación de servicio en una sola plataforma:
+    del surtidor al ticket, del turno al balance contable.
+  </div>
+
+  <div class="points" style="margin-top:14mm">
+    <div>Control en tiempo real de cada pistola, isla y turno</div>
+    <div>Facturación electrónica SRI integrada, sin procesos manuales</div>
+    <div>Contabilidad, cartera y crédito en el mismo sistema</div>
+    <div>Hardware Wayne Fusion validado en operación real</div>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <div class="stats">
+    <div><b>696</b><span>Pruebas automatizadas</span></div>
+    <div><b>5</b><span>Países con Powerfin</span></div>
+    <div><b>&lt;1 h</b><span>Recuperación ante desastre</span></div>
+    <div><b>24/7</b><span>Operación de pista</span></div>
+  </div>
+
+  <div class="foot">
+    <span>Ingeniería de Sistemas GRISBI Cía. Ltda.</span>
+    <span>www.grisbi.com.ec</span>
+  </div>
+</div>
+
+<!-- ============================ 2 · PROBLEMA ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">El costo de operar a ciegas</div>
+    </div>
+
+    <div class="kicker">Por qué ahora</div>
+    <h2>Lo que no se mide,<br>se pierde en la pista.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Una estación de servicio mueve dinero todos los minutos. Cuando el control
+      vive en cuadernos, hojas de cálculo y memoria del personal, la pérdida no
+      aparece como un gasto: aparece como una diferencia que nadie sabe explicar.
+    </p>
+
+    <div class="grid-2 tight" style="margin-top:8mm">
+      <div class="card">
+        <div class="n">01</div>
+        <h3>Mermas sin trazabilidad</h3>
+        <p>Diferencias entre lo despachado y lo facturado que se detectan a fin de mes,
+          cuando ya no hay forma de saber en qué turno ni en qué pistola ocurrieron.</p>
+        <div class="cost">Costo típico: 0,2% – 0,8% del volumen</div>
+      </div>
+      <div class="card">
+        <div class="n">02</div>
+        <h3>Cuadre de turno manual</h3>
+        <p>Dos horas de cierre, sumas a mano, transferencias y depósitos que no
+          cuadran. El despachador se queda más tiempo y el gerente confía en un papel.</p>
+        <div class="cost">Costo típico: 60 horas/mes de operación</div>
+      </div>
+      <div class="card">
+        <div class="n">03</div>
+        <h3>Facturas que no llegan al SRI</h3>
+        <p>Ventas que nacen sin comprobante, claves de acceso vencidas, reintentos
+          manuales. El problema aparece semanas después, cuando el cliente reclama.</p>
+        <div class="cost">Riesgo: multas, notas de crédito y ventas no recuperables</div>
+      </div>
+      <div class="card">
+        <div class="n">04</div>
+        <h3>Crédito sin control de cupo</h3>
+        <p>Clientes corporativos y sector público con consumos que superan el cupo
+          autorizado. La cartera se descubre al momento de cobrar, no al despachar.</p>
+        <div class="cost">Riesgo: capital de trabajo inmovilizado</div>
+      </div>
+      <div class="card">
+        <div class="n">05</div>
+        <h3>Despachos que quedan “en el aire”</h3>
+        <p>El celular del despachador se apaga, la red falla, el surtidor queda en
+          pausa. La venta existe en el hardware pero no en el sistema.</p>
+        <div class="cost">Riesgo: pérdida directa no registrada</div>
+      </div>
+      <div class="card">
+        <div class="n">06</div>
+        <h3>Reportes que llegan tarde</h3>
+        <p>El gerente pide ventas por producto, por forma de pago, por turno.
+          La respuesta llega en tres días y ya no sirve para decidir.</p>
+        <div class="cost">Costo: decisiones con datos de la semana pasada</div>
+      </div>
+    </div>
+
+    <div class="band">
+      <p><b>El problema no es el software.</b> Es que la pista, la caja, la facturación
+        y la contabilidad viven en cuatro lugares distintos. Powerfin los une.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">2</div>
+</div>
+
+<!-- ============================ 3 · SOLUCIÓN ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">La solución</div>
+    </div>
+
+    <div class="kicker">Arquitectura</div>
+    <h2>Cuatro piezas.<br>Una sola verdad.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Cada componente tiene un trabajo y solo uno. Ninguno duplica la
+      responsabilidad del otro. Eso es lo que hace que el sistema sea rápido,
+      auditable y fácil de soportar.
+    </p>
+
+    <div class="diagram">
+      <div class="layer">
+        <span class="tag">ERP</span>
+        <div>
+          <h3>Powerfin ERP</h3>
+          <p>Contabilidad, cartera, compras, nómina, facturación electrónica y reportería. La fuente de verdad del negocio.</p>
+        </div>
+      </div>
+
+      <div class="arrow">▼ &nbsp; ▼ &nbsp; ▼</div>
+
+      <div class="layer" style="border-color:#F3B4B7; background:#FFF8F8">
+        <span class="tag red">POS</span>
+        <div>
+          <h3>Powerfin POS GAS</h3>
+          <p>La interfaz táctil del despachador. Vende, cobra, factura e imprime. Corre en celular o tablet, sin instalar nada.</p>
+        </div>
+      </div>
+
+      <div class="arrow">▼ &nbsp; ▼ &nbsp; ▼</div>
+
+      <div class="layer">
+        <span class="tag grey">BRIDGE</span>
+        <div>
+          <h3>FusionBridge</h3>
+          <p>Traduce entre el software y el hardware. Habla el protocolo nativo del controlador Wayne y envía los tickets a las impresoras de isla.</p>
+        </div>
+      </div>
+
+      <div class="arrow">▼ &nbsp; ▼ &nbsp; ▼</div>
+
+      <div class="layer">
+        <span class="tag">HW</span>
+        <div>
+          <h3>Controlador y dispensadores</h3>
+          <p>Wayne Fusion / Synergy y las impresoras térmicas de red. Sin modificaciones al hardware existente.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-top:7mm">
+      <div class="kpi"><b>1</b><span>Conexión TCP persistente con el controlador</span></div>
+      <div class="kpi"><b>0</b><span>Bases de datos duplicadas entre sistemas</span></div>
+      <div class="kpi"><b>&lt;1 s</b><span>Latencia de eventos de surtidor a pantalla</span></div>
+    </div>
+
+    <div class="quote" style="margin-top:6mm">
+      “El ERP es el cerebro. El bridge es el puente.
+      <b>El POS son las manos del despachador.</b>”
+    </div>
+
+    <div class="grid-3" style="margin-top:5mm">
+      <div class="kpi"><b>Auditable</b><span>Cada dato tiene un solo origen</span></div>
+      <div class="kpi"><b>Soportable</b><span>Un fallo se aísla en su capa</span></div>
+      <div class="kpi"><b>Escalable</b><span>Más pistolas sin rehacer todo</span></div>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">3</div>
+</div>
+
+<!-- ============================ 4 · ERP ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Powerfin ERP</div>
+    </div>
+
+    <div class="kicker">El cerebro del negocio</div>
+    <h2>La contabilidad deja de<br>ser un cierre de mes.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Powerfin no es un módulo contable pegado a un POS. Es un ERP completo,
+      implantado en 26 empresas a nivel nacional e internacional, que convierte
+      cada despacho en un asiento,
+      cada cobro en un movimiento bancario y cada factura en un documento
+      tributario válido.
+    </p>
+
+    <table style="margin-top:7mm">
+      <tr><th style="width:34%">Bloque</th><th>Módulos</th></tr>
+      <tr>
+        <td><strong>Gestión financiera</strong></td>
+        <td>Contabilidad General · Cuentas por Cobrar · Cuentas por Pagar ·
+          Control Bancario · Activos Fijos · Presupuesto Financiero ·
+          Control Presupuestal · Caja Chica · Flujo de Caja</td>
+      </tr>
+      <tr>
+        <td><strong>Comercial</strong></td>
+        <td>Ventas · Facturación electrónica · Listas de precios · Sucursales ·
+          CRM · Ecommerce · Documentos electrónicos</td>
+      </tr>
+      <tr>
+        <td><strong>Compras y operación</strong></td>
+        <td>Compras · Inventario y Almacenes · Logística · Producción ·
+          Taller y órdenes de trabajo</td>
+      </tr>
+      <tr>
+        <td><strong>Personas</strong></td>
+        <td>Nómina y roles de pago · Recursos Humanos</td>
+      </tr>
+      <tr>
+        <td><strong>Analítica</strong></td>
+        <td>Reportería · Indicadores · Business Intelligence · Alertas y notificaciones</td>
+      </tr>
+      <tr>
+        <td><strong>Financiero extendido</strong></td>
+        <td>Préstamos · Inversiones · Originación de cartera · Confirming y Factoring</td>
+      </tr>
+      <tr>
+        <td><strong>Plataforma</strong></td>
+        <td>Servicios Web REST (API-KEY + JWT) · Movilidad · Multimoneda ·
+          Multilingüe · Parametrización por empresa</td>
+      </tr>
+    </table>
+
+    <div class="grid-4" style="margin-top:8mm">
+      <div class="kpi"><b>Java 8+</b><span>Cualquier sistema operativo</span></div>
+      <div class="kpi"><b>PostgreSQL</b><span>9.6 o superior</span></div>
+      <div class="kpi"><b>Navegador</b><span>Sin instalar clientes</span></div>
+      <div class="kpi"><b>API REST</b><span>Integración con terceros</span></div>
+    </div>
+
+    <div class="grid-3" style="margin-top:6mm">
+      <div class="card">
+        <h3>Menos trabajo manual</h3>
+        <p>El asiento nace del despacho. Se elimina la re-digitación y el cierre
+          deja de depender de una hoja de cálculo.</p>
+      </div>
+      <div class="card">
+        <h3>Cartera bajo control</h3>
+        <p>Antigüedad de saldos, cobranza y cupo por cliente en el mismo lugar
+          donde se autoriza el despacho.</p>
+      </div>
+      <div class="card">
+        <h3>Decisiones con dato vivo</h3>
+        <p>Presupuesto contra real, márgenes por producto y flujo de caja
+          actualizado, sin esperar el cierre de mes.</p>
+      </div>
+    </div>
+
+    <div class="band" style="margin-top:7mm">
+      <p><b>Multiempresa, multimoneda y multilingüe.</b> La misma plataforma
+        opera varias razones sociales y sucursales sin duplicar infraestructura.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">4</div>
+</div>
+
+<!-- ============================ 5 · FLUJO POS ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Powerfin POS GAS · Operación</div>
+    </div>
+
+    <div class="kicker">El turno del despachador</div>
+    <h2>Seis pasos.<br>Sin papel, sin sumas a mano.</h2>
+
+    <div style="margin-top:7mm">
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>Ingreso y apertura de turno</h3>
+          <p>El despachador entra con su usuario y PIN. Registra las lecturas de
+            medidores mecánicos y abre el turno. Desde ese momento, todo lo que
+            ocurra en la pista queda asociado a su nombre.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>Pantalla de surtidores en vivo</h3>
+          <p>Estado de cada pistola en tiempo real: libre, autorizada, despachando,
+            pausada. Sin recargar la página. El despachador ve la pista completa
+            desde su celular o tablet.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h3>Nueva venta</h3>
+          <p>Preset por monto, por volumen o por llenado completo. Búsqueda del
+            cliente por cédula, RUC, placa o nombre. Validación de cédula en línea.
+            Vehículos internos predefinidos con balanceo automático.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <div>
+          <h3>Autorización y despacho</h3>
+          <p>Un toque autoriza la pistola. El progreso de galones y dólares se
+            actualiza en vivo. El despachador puede detener, limpiar o destrabar
+            un surtidor en pausa desde la misma pantalla.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">5</div>
+        <div>
+          <h3>Cobro y factura</h3>
+          <p>Efectivo, tarjeta, transferencia, Yalobox, pago mixto o crédito con
+            cupo. La factura electrónica se genera con clave de acceso de 49
+            dígitos y se envía al SRI. El ticket sale por la impresora de la isla.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">6</div>
+        <div>
+          <h3>Cierre de turno</h3>
+          <p>Cuadre automático: ventas, cobros, transferencias, depósitos a caja
+            fuerte y lecturas finales. El sistema muestra sobrantes o faltantes
+            antes de cerrar. El reporte se exporta en PDF o Excel.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:2mm; gap:8mm">
+      <div class="card" style="border-color:#E9C4C6; background:#FFFBFB">
+        <h3 style="color:var(--grey); margin-bottom:2.5mm">Antes</h3>
+        <ul class="crosslist">
+          <li>Cuadre en cuaderno y calculadora</li>
+          <li>Factura emitida “después, cuando haya tiempo”</li>
+          <li>Cliente identificado por el nombre que dio</li>
+          <li>Diferencia de galones descubierta a fin de mes</li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:#F3B4B7">
+        <h3 style="color:var(--red); margin-bottom:2.5mm">Con Powerfin</h3>
+        <ul class="checklist">
+          <li>Cuadre automático al cerrar el turno</li>
+          <li>Factura electrónica al momento del cobro</li>
+          <li>Cliente validado por cédula, RUC o placa</li>
+          <li>Cada galón trazado a su turno y su pistola</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="band">
+      <p><b>Todo ocurre en el navegador.</b> Sin instalar aplicaciones, sin
+        licencias por dispositivo, sin depender de una PC fija en la isla.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">5</div>
+</div>
+
+<!-- ============================ 6 · CAPACIDADES POS ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Powerfin POS GAS · Capacidades</div>
+    </div>
+
+    <div class="kicker">Lo que resuelve</div>
+    <h2>Diseñado para la pista,<br>no adaptado a ella.</h2>
+
+    <div class="grid-2" style="margin-top:7mm">
+      <div>
+        <h3 style="color:var(--red); font-size:9pt; letter-spacing:.1em; text-transform:uppercase; margin-bottom:3mm">Pista y hardware</h3>
+        <ul class="clean">
+          <li><b>Estado en tiempo real</b> de cada pistola mediante eventos SSE</li>
+          <li><b>Preset</b> por monto, volumen o llenado completo</li>
+          <li><b>Detener, limpiar y destrabar</b> surtidores desde la pantalla</li>
+          <li><b>Destrabe de surtidor pausado</b> sin reiniciar el controlador</li>
+          <li><b>Multi-isla:</b> cada isla con su propia impresora térmica</li>
+        </ul>
+
+        <h3 style="color:var(--red); font-size:9pt; letter-spacing:.1em; text-transform:uppercase; margin:6mm 0 3mm">Cliente y precios</h3>
+        <ul class="clean">
+          <li><b>Búsqueda por cédula, RUC, placa o nombre</b></li>
+          <li><b>Validación de cédula</b> con módulo 10 y estructura de RUC</li>
+          <li><b>Consulta y actualización</b> de datos desde registros oficiales</li>
+          <li><b>Listas de precios</b> con prioridad vehículo › persona › general</li>
+          <li><b>Vehículos internos</b> predefinidos con balanceo por despachos del día</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 style="color:var(--red); font-size:9pt; letter-spacing:.1em; text-transform:uppercase; margin-bottom:3mm">Cobro y crédito</h3>
+        <ul class="clean">
+          <li><b>Pago mixto:</b> efectivo + tarjeta + transferencia en una sola venta</li>
+          <li><b>Crédito con cupo</b> por contrato y vehículo</li>
+          <li><b>Sector público:</b> facturación en lote y cuenta por cobrar</li>
+          <li><b>Yalobox</b> y otros métodos configurables desde el admin</li>
+          <li><b>Bloqueo de cobro en $0,00</b> y validaciones anti-error</li>
+        </ul>
+
+        <h3 style="color:var(--red); font-size:9pt; letter-spacing:.1em; text-transform:uppercase; margin:6mm 0 3mm">Fiscal y caja</h3>
+        <ul class="clean">
+          <li><b>Factura electrónica SRI</b> vía Key49, con clave de 49 dígitos</li>
+          <li><b>Reintentos automáticos</b> y regeneración de clave al cruzar medianoche</li>
+          <li><b>Monitor SRI</b> con reconciliación y estados por factura</li>
+          <li><b>Ticket ESC/POS</b> con empresa, cliente, subsidio, IVA y clave</li>
+          <li><b>Cuadre completo:</b> transferencias, depósitos y medidores mecánicos</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin:7mm 0 3mm">Resiliencia operativa</h3>
+    <div class="grid-2" style="gap:8mm">
+      <ul class="clean">
+        <li><b>Recuperación de despachos:</b> si el dispositivo se desconecta, la venta se reconcilia al volver</li>
+        <li><b>Limpieza de huérfanos:</b> detección de despachos sin cobro y liberación controlada</li>
+      </ul>
+      <ul class="clean">
+        <li><b>Trazabilidad completa:</b> cada cambio de estado queda registrado con fecha y usuario</li>
+        <li><b>Errores visibles:</b> el sistema informa la causa real, nunca un mensaje genérico</li>
+      </ul>
+    </div>
+
+    <div class="band" style="margin-top:2mm">
+      <p><b>Sin fallbacks silenciosos.</b> Si algo falla, el sistema lo dice y lo
+        registra. Nunca “arregla” el problema por detrás ni inventa un resultado.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">6</div>
+</div>
+
+<!-- ============================ 7 · ADMIN ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Powerfin Admin · Control</div>
+    </div>
+
+    <div class="kicker">Para el gerente y el supervisor</div>
+    <h2>El negocio completo,<br>en una pantalla.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Un portal independiente del POS, con permisos por rol, para mirar la
+      operación sin interrumpirla y para administrar el sistema sin tocar la
+      base de datos.
+    </p>
+
+    <div class="shots">
+      <figure class="shot">
+        <img src="assets/admin/admin_dashboard.png" alt="Dashboard de Powerfin Admin en computador">
+      </figure>
+      <figure class="shot phone">
+        <img src="assets/admin/admin_dashboard_movil.png" alt="El mismo dashboard en un celular">
+      </figure>
+    </div>
+    <p class="shot-cap">El mismo panel en computador y en celular. Ventas, galones,
+      despachos y ticket promedio, con comparación contra el período anterior.</p>
+
+    <div class="grid-3 tight" style="margin-top:6mm">
+      <div class="card">
+        <h3>Dashboard</h3>
+        <p>KPIs de ventas, galones, ticket promedio y margen. Comparación por
+          día, semana, mes y año. Gráficas por producto y forma de pago.</p>
+      </div>
+      <div class="card">
+        <h3>Reportes</h3>
+        <p>Ventas, despachos, turnos y cuadre de caja. Filtros por fecha,
+          usuario, turno, contrato y producto. Exportación a PDF y Excel.</p>
+      </div>
+      <div class="card">
+        <h3>Monitor SRI</h3>
+        <p>Seguimiento de cada factura: pendiente, enviada, notificada,
+          autorizada o rechazada. Detecta comprobantes que no llegaron.</p>
+      </div>
+      <div class="card">
+        <h3>Administración</h3>
+        <p>Usuarios, roles y permisos; productos, grados y listas de precios;
+          surtidores y pistolas; puntos de emisión y formas de pago.</p>
+      </div>
+      <div class="card">
+        <h3>Contratos de crédito</h3>
+        <p>Alta, cupo, consumo, liquidación y estado. Visibilidad de la cartera
+          antes de que se convierta en un problema de cobranza.</p>
+      </div>
+      <div class="card">
+        <h3>Auditoría</h3>
+        <p>Registro de cambios, borrado lógico en entidades críticas y
+          trazabilidad por usuario.</p>
+      </div>
+    </div>
+
+    <div class="band" style="margin-top:4mm; padding:4mm 7mm">
+      <p><b>El dato nace una vez, en la pista, y se usa en toda la empresa.</b>
+        Roles: ADMIN con acceso total · SUPERVISOR con lectura y exportación ·
+        DESPACHADOR solo con operación de pista.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">7</div>
+</div>
+
+<!-- ============================ 8 · HARDWARE ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Hardware e integración</div>
+    </div>
+
+    <div class="kicker">Sin cajas negras</div>
+    <h2>Habla el idioma<br>del surtidor.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Powerfin POS no “estima” lo que pasó en la pista: lo recibe del controlador.
+      La integración con Wayne Fusion está validada contra hardware real en
+      operación, no contra un simulador.
+    </p>
+
+    <div class="grid-2" style="margin-top:7mm">
+      <div class="card">
+        <h3>Controlador Wayne Fusion / Synergy</h3>
+        <p>Protocolo nativo sobre TCP, conexión persistente, keep-alive y
+          reconexión automática con backoff exponencial. Eventos de estado,
+          transacción y progreso en tiempo real.</p>
+        <div class="cost">Validado con firmware Rel-5.19.1</div>
+      </div>
+      <div class="card">
+        <h3>Impresoras térmicas de isla</h3>
+        <p>Impresión ESC/POS por socket TCP directo, sin CUPS ni drivers.
+          Plantilla configurable desde el sistema y reimpresión con la fecha
+          y hora originales del despacho.</p>
+        <div class="cost">Una impresora por isla, configurable en BD</div>
+      </div>
+      <div class="card">
+        <h3>Servidor local</h3>
+        <p>Instalación directa sobre Debian 12 con servicios systemd. Sin Docker,
+          para garantizar acceso directo a la red de la estación y al hardware.</p>
+        <div class="cost">Operación autónoma en la LAN</div>
+      </div>
+      <div class="card">
+        <h3>Celulares y tablets</h3>
+        <p>PWA instalable desde el navegador, sin app store ni licencias por
+          dispositivo. Funciona en Chrome, Edge, Safari y Firefox.</p>
+        <div class="cost">Cualquier dispositivo de la estación</div>
+      </div>
+    </div>
+
+    <h3 style="margin:7mm 0 3mm">Requisitos de red en la estación</h3>
+    <div class="grid-4">
+      <div class="kpi"><b>TCP</b><span>Puerto del controlador Wayne accesible desde el servidor</span></div>
+      <div class="kpi"><b>IP fija</b><span>Para servidor, controlador e impresoras de isla</span></div>
+      <div class="kpi"><b>TCP 9100</b><span>Salida hacia las impresoras térmicas de red</span></div>
+      <div class="kpi"><b>UPS</b><span>Respaldo eléctrico para servidor y switch</span></div>
+    </div>
+
+    <div class="band" style="margin-top:6mm">
+      <p><b>Tu hardware no se toca.</b> Powerfin se integra al controlador y a las
+        impresoras existentes. Si la estación ya opera con Wayne, no hay que
+        reemplazar surtidores ni cableado.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">8</div>
+</div>
+
+<!-- ============================ 9 · CONTINUIDAD ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Continuidad y soporte</div>
+    </div>
+
+    <div class="kicker">Cuando algo falla</div>
+    <h2>Un plan escrito,<br>no una promesa.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Powerfin opera bajo un Acuerdo de Nivel de Servicio y un Plan de
+      Recuperación de Desastres documentados, con replicación geográfica y
+      procedimientos probados.
+    </p>
+
+    <div class="grid-2" style="margin-top:7mm">
+      <div>
+        <h3 style="margin-bottom:3mm">Disponibilidad y respaldo</h3>
+        <ul class="clean">
+          <li><b>95% de disponibilidad</b> mensual comprometida</li>
+          <li><b>Replicación geográfica</b> entre dos regiones</li>
+          <li><b>Respaldos periódicos</b> fuera de la infraestructura principal</li>
+          <li><b>Recuperación objetivo</b> menor a 1 hora ante desastre</li>
+          <li><b>Mantenimientos programados</b> notificados con 48 horas</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin-bottom:3mm">Soporte técnico</h3>
+        <ul class="clean">
+          <li><b>Lunes a viernes:</b> 8 horas de atención en línea</li>
+          <li><b>Sábados y domingos:</b> 4 horas de atención en línea</li>
+          <li><b>Movilización a la estación:</b> 1 a 2 horas</li>
+          <li><b>Canales:</b> tickets, correo y teléfono</li>
+          <li><b>Respuesta inicial:</b> 5 a 10 minutos</li>
+          <li><b>Escalamiento:</b> tres niveles hasta gerencia</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin:6mm 0 3mm">Tiempos comprometidos</h3>
+    <table>
+      <tr><th style="width:22%">Severidad</th><th>Descripción</th><th class="num" style="width:22%">Resolución</th></tr>
+      <tr><td><strong>Crítico</strong></td><td>Sistema inoperativo o función crítica no disponible</td><td class="num">2 horas</td></tr>
+      <tr><td><strong>Alto</strong></td><td>Función importante afectada, con solución alternativa</td><td class="num">1 hora</td></tr>
+      <tr><td><strong>Medio</strong></td><td>Funcionalidad limitada, no crítica para operar</td><td class="num">30 minutos</td></tr>
+      <tr><td><strong>Bajo</strong></td><td>Consultas, mejoras y problemas menores</td><td class="num">15 minutos</td></tr>
+    </table>
+
+    <h3 style="margin:5mm 0 2.5mm">Cómo se activa el plan</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h3>1 · Se declara el desastre</h3>
+        <p>Si el acceso al servidor supera las 2 horas, el equipo responsable
+          activa el plan de forma oficial.</p>
+      </div>
+      <div class="card">
+        <h3>2 · Se promueve la réplica</h3>
+        <p>Se detiene la replicación, se promueve la región de respaldo y se
+          levanta la aplicación.</p>
+      </div>
+      <div class="card">
+        <h3>3 · Se redirige el acceso</h3>
+        <p>El dominio apunta a la nueva IP y se notifica al cliente el
+          restablecimiento del servicio.</p>
+      </div>
+    </div>
+
+    <div class="band" style="margin-top:5mm; padding:4.5mm 7mm">
+      <p><b>Cobertura:</b> la movilización de 1 a 2 horas aplica en Cuenca y su
+        zona de influencia. Fuera de esa zona, tiempos y viáticos se acuerdan
+        con el cliente.</p>
+    </div>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">9</div>
+</div>
+
+<!-- ============================ 10 · INVERSIÓN ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Inversión y financiación</div>
+    </div>
+
+    <div class="kicker">Inversión</div>
+    <h2>Cuatro rubros.<br>Sin letra chica.</h2>
+    <p class="small" style="margin-top:3mm; max-width:165mm">
+      ERP Powerfin + POS GAS + Admin. Usted sabe exactamente qué paga una vez,
+      qué paga cada mes y qué se cotiza aparte.
+    </p>
+
+    <table class="compact" style="margin-top:4mm">
+      <tr>
+        <th>#</th><th>Rubro</th><th>Tipo de pago</th><th class="num">Monto</th>
+      </tr>
+      <tr>
+        <td><strong>1</strong></td>
+        <td><strong>Instalación, implementación y capacitación</strong></td>
+        <td>Una vez, al inicio</td>
+        <td class="num">$1.200</td>
+      </tr>
+      <tr>
+        <td><strong>2</strong></td>
+        <td><strong>Precio del sistema</strong> (ERP + POS + Admin)</td>
+        <td>Una vez, al inicio o financiado</td>
+        <td class="num">$7.500</td>
+      </tr>
+      <tr>
+        <td><strong>3</strong></td>
+        <td><strong>Soporte mensual y actualizaciones menores</strong></td>
+        <td>Mensual</td>
+        <td class="num">$175/mes</td>
+      </tr>
+      <tr>
+        <td><strong>4</strong></td>
+        <td><strong>Actualizaciones mayores</strong></td>
+        <td>Cuando se pacten</td>
+        <td class="num">20% del sistema</td>
+      </tr>
+    </table>
+    <p class="tiny" style="margin-top:1.5mm">
+      El rubro 4 equivale a $1.500 por versión mayor (cada 3–4 años) y es
+      opcional. Los cambios regulatorios del SRI están incluidos en el soporte.
+    </p>
+
+    <h3 style="margin:4mm 0 2mm">Cómo puede pagar el sistema</h3>
+    <table class="compact">
+      <tr>
+        <th>Modalidad</th><th class="num">Pago inicial</th>
+        <th class="num">Cuota mensual</th><th class="num">Total en el plazo</th>
+        <th class="num">Costo a 5 años</th>
+      </tr>
+      <tr class="hl">
+        <td><strong>Contado</strong></td>
+        <td class="num">$8.875</td>
+        <td class="num">$175</td>
+        <td class="num">—</td>
+        <td class="num"><strong>$19.200</strong></td>
+      </tr>
+      <tr><td>Financiado 24 meses</td><td class="num">$3.157</td><td class="num">$457</td><td class="num">$13.679</td><td class="num">$19.979</td></tr>
+      <tr><td>Financiado 36 meses</td><td class="num">$3.074</td><td class="num">$374</td><td class="num">$16.174</td><td class="num">$20.374</td></tr>
+      <tr><td>Financiado 48 meses</td><td class="num">$3.033</td><td class="num">$333</td><td class="num">$18.684</td><td class="num">$20.784</td></tr>
+    </table>
+    <p class="tiny" style="margin-top:1.5mm">
+      <b>Pago inicial</b> = instalación + 20% del sistema + primera cuota;
+      el sistema se financia a 12% anual. <b>Total en el plazo</b> = día 0 más
+      las cuotas de ese plazo. <b>Costo a 5 años</b> = la misma modalidad llevada
+      a 60 meses de soporte: es la <b>única columna comparable</b> entre filas, y
+      confirma que el contado es el más barato ($19.200). El total del plazo es
+      más bajo solo porque el plazo es más corto, no porque la modalidad cueste
+      menos.
+    </p>
+
+    <div class="band" style="margin-top:3.5mm; padding:3.5mm 7mm">
+      <p><b>El soporte incluye:</b> hosting, respaldos, monitoreo, Key49 hasta
+        3.000 facturas/mes, actualizaciones menores y cambios regulatorios del SRI.</p>
+      <p style="font-size:8pt; color:var(--grey); margin-top:1.2mm">
+        No incluye hardware, consumibles, certificado digital, IVA, módulos
+        nuevos ni actualizaciones mayores.
+      </p>
+    </div>
+
+    <h3 style="margin:3.5mm 0 2mm">El precio se ajusta al tamaño de la estación</h3>
+    <table class="compact">
+      <tr>
+        <th>Tramo</th><th class="num">Pistolas</th><th class="num">Factor</th>
+        <th class="num">Instalación</th><th class="num">Sistema</th><th class="num">Soporte/mes</th>
+      </tr>
+      <tr><td><strong>Pequeña</strong></td><td class="num">1 – 4</td><td class="num">0,85×</td><td class="num">$1.020</td><td class="num">$6.375</td><td class="num">$149</td></tr>
+      <tr class="hl"><td><strong>Mediana</strong></td><td class="num">5 – 8</td><td class="num">1,00×</td><td class="num">$1.200</td><td class="num">$7.500</td><td class="num">$175</td></tr>
+      <tr><td><strong>Grande</strong></td><td class="num">9 – 16</td><td class="num">1,30×</td><td class="num">$1.560</td><td class="num">$9.750</td><td class="num">$228</td></tr>
+      <tr><td><strong>Extra grande</strong></td><td class="num">17 – 24</td><td class="num">1,60×</td><td class="num">$1.920</td><td class="num">$12.000</td><td class="num">$280</td></tr>
+    </table>
+    <p class="tiny" style="margin-top:1mm">
+      25+ pistolas: cotización a medida. En redes, la licencia baja por volumen:
+      2.ª y 3.ª estación al 60%; 4.ª a 6.ª al 50%; 7.ª en adelante al 40%.
+      Instalación y soporte se cobran por estación.
+    </p>
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">10</div>
+</div>
+
+<!-- ============================ 11 · IMPLEMENTACIÓN ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Implementación</div>
+    </div>
+
+    <div class="kicker">De la firma al primer cierre</div>
+    <h2>Cuatro a seis semanas.<br>Acompañados.</h2>
+
+    <div class="grid-2" style="margin-top:6mm; gap:8mm">
+      <div>
+        <div class="tl">
+          <div class="item">
+            <div class="when">Semana 1</div>
+            <h3>Levantamiento y preparación</h3>
+            <p>Revisión de red, servidor y controlador. Inventario de surtidores,
+              pistolas, impresoras y usuarios. Definición de puntos de emisión y
+              responsables.</p>
+          </div>
+          <div class="item">
+            <div class="when">Semana 2</div>
+            <h3>Configuración del ERP</h3>
+            <p>Empresa, impuestos, plan de cuentas, formas de pago, productos,
+              grados, listas de precios y usuarios con sus permisos.</p>
+          </div>
+          <div class="item">
+            <div class="when">Semana 3</div>
+            <h3>Integración con la pista</h3>
+            <p>Conexión con el controlador Wayne, mapeo de pistolas, pruebas de
+              autorización, despacho, impresión y eventos en tiempo real.</p>
+          </div>
+          <div class="item">
+            <div class="when">Semana 4</div>
+            <h3>Migración y capacitación</h3>
+            <p>Carga de clientes, vehículos y saldos iniciales. Capacitación al
+              personal en dos sesiones, con material de apoyo.</p>
+          </div>
+          <div class="item">
+            <div class="when">Semanas 5 y 6</div>
+            <h3>Marcha blanca y go-live</h3>
+            <p>Operación paralela controlada, ajustes finos y acompañamiento en
+              el primer cierre de turno y la primera facturación electrónica.</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="margin-bottom:4mm">
+          <h3 style="color:var(--red); margin-bottom:3mm">Incluido</h3>
+          <ul class="checklist">
+            <li><b>ERP Powerfin + POS GAS + Admin</b> (licencia de uso)</li>
+            <li><b>Instalación, implementación y capacitación</b> ($1.200)</li>
+            <li><b>Facturación electrónica Key49</b> incluida</li>
+            <li>Hosting, respaldos diarios y actualizaciones</li>
+            <li>Integración con controlador e impresoras</li>
+            <li>Migración de hasta 50.000 registros</li>
+            <li>Capacitación de 8 horas en dos sesiones</li>
+            <li>Acompañamiento en el primer cierre</li>
+            <li>Soporte L-V 8 h y fines de semana 4 h</li>
+            <li>Movilización a la estación en 1 a 2 horas</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 style="color:var(--grey); margin-bottom:3mm">No incluido</h3>
+          <ul class="crosslist">
+            <li>Dispensadores, controlador, impresoras, servidor, red y UPS</li>
+            <li>Consumibles: rollos de papel y tintas</li>
+            <li>Certificado digital y firma electrónica del contribuyente</li>
+            <li>Viáticos y traslados fuera de Cuenca</li>
+            <li>Desarrollos a medida</li>
+            <li>IVA</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="band">
+      <p><b>Un solo proveedor responsable del resultado.</b> No coordinamos con
+        un tercero para la pista, otro para la facturación y otro para la
+        contabilidad: es el mismo equipo.</p>
+    </div>
+
+
+    <div class="pf"><span><b>Powerfin ERP + POS GAS</b> · Propuesta comercial</span><span>GRISBI Cía. Ltda.</span></div>
+  </div>
+  <div class="pnum">11</div>
+</div>
+
+<!-- ============================ 12 · CIERRE ============================ -->
+<div class="page">
+  <div class="pad">
+    <div class="ph">
+      <div class="brand"><img src="assets/grisbi.png" alt="GRISBI"></div>
+      <div class="sect">Por qué GRISBI</div>
+    </div>
+
+    <div class="kicker">Quiénes somos</div>
+    <h2>Diez años construyendo<br>software que opera.</h2>
+    <p class="lead" style="margin-top:4mm; max-width:160mm">
+      Ingeniería de Sistemas GRISBI Cía. Ltda. es una empresa ecuatoriana
+      especializada en software de gestión, facturación electrónica e
+      integración con hardware. Powerfin se implanta hoy en 26 empresas a nivel
+      nacional e internacional.
+    </p>
+
+    <div class="grid-2" style="margin-top:7mm; gap:8mm">
+      <div>
+        <h3 style="margin-bottom:3mm">Lo que nos diferencia</h3>
+        <ul class="clean">
+          <li><b>Producto propio, no reventa.</b> Desarrollamos el ERP, el POS y el bridge.</li>
+          <li><b>Integración real con hardware.</b> Validada con controladores Wayne en operación.</li>
+          <li><b>Facturación electrónica en producción.</b> No es un módulo teórico.</li>
+          <li><b>Un solo responsable.</b> Software, hardware, soporte y contabilidad.</li>
+          <li><b>Documentación y pruebas.</b> 696 pruebas automatizadas y procedimientos escritos.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin-bottom:3mm">Experiencia del grupo</h3>
+        <ul class="clean">
+          <li><b>Estaciones de servicio:</b> NeoGas y NeoGuayas operan con Powerfin</li>
+          <li>Facturación electrónica y cumplimiento tributario</li>
+          <li>Cartera, crédito y sector público</li>
+          <li>Plataformas de fidelización y pagos</li>
+          <li>Integración de hardware industrial y redes locales</li>
+        </ul>
+      </div>
+    </div>
+
+    <table class="clients"><tr>
+      <td class="lbl">Estaciones de servicio que ya operan con Powerfin</td>
+      <td class="logos">
+        <img class="neo-gas" src="assets/neogas_clean.png" alt="NeoGas">
+        <img class="neo-guayas" src="assets/neoguayas_clean.png" alt="NeoGuayas">
+      </td>
+    </tr></table>
+
+    <div class="contact-card">
+      <div class="kicker" style="color:var(--red); margin-bottom:2mm">Siguiente paso</div>
+      <h2>Agendemos una demostración<br>con tus propios datos.</h2>
+      <p style="color:var(--grey); font-size:9pt; margin-top:2.5mm; max-width:150mm">
+        En 45 minutos revisamos tu pista, tu operación actual y el número de
+        pistolas. Salimos con una cotización exacta y un plan de implementación.
+      </p>
+      <div class="grid" style="gap:3.5mm; margin-top:5mm">
+        <div>
+          <div class="lbl">Contacto</div>
+          <div class="val">Patricio Valarezo <small>· Gerente General</small></div>
+        </div>
+        <div>
+          <div class="lbl">Teléfono / WhatsApp</div>
+          <div class="val">099 383 2368</div>
+        </div>
+        <div>
+          <div class="lbl">Correo</div>
+          <div class="val">pvalarezo@grisbi.com.ec</div>
+        </div>
+        <div>
+          <div class="lbl">Web</div>
+          <div class="val">www.grisbi.com.ec</div>
+        </div>
+        <div>
+          <div class="lbl">Dirección</div>
+          <div class="val" style="font-size:9pt">Carlos Vintimilla 130 y Luis Moreno Mora · Cuenca</div>
+        </div>
+        <div>
+          <div class="lbl">Vigencia de la oferta</div>
+          <div class="val">30 días</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="tiny" style="margin-top:4mm; line-height:1.4">
+      GRISBI Cía. Ltda. · RUC 0190411826001 · Precios en USD, no incluyen IVA.
+      Aplican el SLA y el DRP vigentes. Documento informativo; no constituye
+      oferta contractual hasta la firma de la propuesta económica definitiva.
+    </p>
+
+  </div>
+  <div class="pnum">12</div>
+</div>
+
+</body>
+</html>

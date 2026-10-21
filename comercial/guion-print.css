@@ -1,0 +1,106 @@
+/* Estilo de impresión del guión interno — se aplica vía pandoc + WeasyPrint.
+   Regenerar con:
+     pandoc GUION_REUNION.md -f gfm -t html5 --standalone \
+       --metadata title="Guión interno" -c guion-print.css \
+       --embed-resources -o /tmp/guion.html
+     weasyprint /tmp/guion.html GUION_REUNION.pdf
+*/
+
+@page {
+  size: A4;
+  margin: 15mm 16mm 16mm;
+  @bottom-left {
+    content: "Powerfin ERP + POS GAS · Guión interno — no enviar al cliente";
+    font-family: 'Lato', 'Liberation Sans', Arial, sans-serif;
+    font-size: 6.8pt; color: #8A9099;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: 'Lato', 'Liberation Sans', Arial, sans-serif;
+    font-size: 6.8pt; color: #8A9099;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Lato', 'Liberation Sans', Arial, sans-serif;
+  font-size: 9.6pt;
+  line-height: 1.5;
+  color: #2A303A;
+}
+
+#title-block-header { display: none; }
+
+h1 {
+  font-size: 19pt; line-height: 1.15; color: #14181F;
+  margin: 0 0 2.5mm; letter-spacing: -.01em;
+}
+
+h2 {
+  font-size: 11pt; text-transform: uppercase; letter-spacing: .09em;
+  color: #EC1B23; font-weight: 900;
+  margin: 7mm 0 2.5mm; padding-top: 3mm;
+  border-top: 1px solid #E4E7EB;
+  break-after: avoid;
+}
+
+h3 {
+  font-size: 10.2pt; color: #14181F; font-weight: 900;
+  margin: 5mm 0 1.5mm;
+  break-after: avoid;
+}
+
+p { margin: 0 0 2.2mm; }
+strong { color: #14181F; }
+em { color: #2A303A; }
+
+blockquote {
+  background: #F6F7F9;
+  border-left: 1.2mm solid #EC1B23;
+  border-radius: 1.2mm;
+  padding: 3mm 4mm;
+  margin: 3mm 0;
+}
+blockquote p { margin: 0; color: #14181F; }
+blockquote p + p { margin-top: 1.6mm; }
+
+table {
+  width: 100%; border-collapse: collapse;
+  margin: 2.5mm 0 4mm;
+  break-inside: avoid;
+}
+thead { display: table-header-group; }
+th {
+  font-size: 7.2pt; text-transform: uppercase; letter-spacing: .06em;
+  color: #8A9099; font-weight: 900; text-align: left;
+  border-bottom: 1px solid #14181F;
+  padding: 1.4mm 2mm;
+}
+td {
+  font-size: 9pt; vertical-align: top;
+  padding: 1.4mm 2mm;
+  border-bottom: 1px solid #E4E7EB;
+}
+tr { break-inside: avoid; }
+
+ul, ol { margin: 0 0 2.5mm 5mm; padding: 0; }
+li { margin: 0 0 1.2mm; }
+
+ul.task-list { list-style: none; margin-left: 0; }
+ul.task-list li { padding-left: 6mm; position: relative; }
+ul.task-list li input { display: none; }
+ul.task-list li::before {
+  content: "☐";
+  position: absolute; left: 0; top: 0;
+  color: #8A9099; font-size: 11pt; line-height: 1.35;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8.4pt; color: #14181F;
+  background: #F6F7F9; padding: .2mm 1mm; border-radius: .8mm;
+}
+
+hr { border: none; border-top: 1px solid #E4E7EB; margin: 5mm 0; }
+a { color: #C11219; text-decoration: none; }

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Powerfin ERP + POS GAS — Resumen de inversión</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red: #EC1B23;
+    --ink: #14181F;
+    --ink-2: #2A303A;
+    --grey: #666666;
+    --grey-2: #8A9099;
+    --line: #E4E7EB;
+    --bg: #F6F7F9;
+  }
+
+  body {
+    font-family: 'Lato', 'Liberation Sans', Arial, sans-serif;
+    color: var(--ink-2);
+    font-size: 8.6pt;
+    line-height: 1.42;
+  }
+
+  .sheet {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 11mm 15mm 10mm;
+    position: relative;
+  }
+  .sheet::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0;
+    height: 4mm; background: var(--red);
+  }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 6mm; }
+  header img { height: 11mm; width: auto; display: block; }
+  header .right { text-align: right; }
+  .kicker {
+    font-size: 6.6pt; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--red); font-weight: 900;
+  }
+  h1 { font-size: 16.5pt; color: var(--ink); line-height: 1.1; margin-top: 1.2mm; font-weight: 900; letter-spacing: -.01em; white-space: nowrap; }
+  header .sub { font-size: 7.6pt; color: var(--grey); margin-top: 1mm; }
+
+  .client {
+    display: flex; align-items: flex-end; gap: 3mm;
+    margin-top: 5mm; padding-bottom: 1.6mm;
+    border-bottom: 1px solid var(--line);
+    font-size: 7.5pt; color: var(--grey-2);
+  }
+  .client .line { flex: 1; border-bottom: 1px dotted #C9CED6; height: 3.4mm; }
+  .client .line.short { flex: 0 0 38mm; }
+  .client span { text-transform: uppercase; letter-spacing: .1em; font-weight: 900; font-size: 6.6pt; }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 4.2mm; }
+  h2 {
+    font-size: 7.8pt; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--red); font-weight: 900; margin-bottom: 1.6mm;
+  }
+  h2 small { color: var(--grey-2); letter-spacing: .04em; text-transform: none; font-weight: 400; font-size: 7.5pt; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 6.4pt; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--grey-2); font-weight: 900;
+    border-bottom: 1px solid var(--ink); padding: 1.1mm 2mm;
+  }
+  td { padding: 1.05mm 2mm; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.hl td { background: #FDF3F3; font-weight: 900; color: var(--ink); }
+  td b { color: var(--ink); }
+  td small { color: var(--grey-2); font-size: 7.2pt; }
+  .n { color: var(--grey-2); width: 5mm; font-weight: 900; }
+  td.tramo { white-space: nowrap; }
+
+  .note { font-size: 6.9pt; color: var(--grey); margin-top: 1.3mm; line-height: 1.38; }
+  .note b { color: var(--ink-2); }
+
+  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 7mm; }
+  .cols section { margin-top: 0; }
+
+  /* ---------- boxes ---------- */
+  .included {
+    margin-top: 4.4mm; background: var(--bg);
+    border-left: 1.2mm solid var(--red); border-radius: 1.2mm;
+    padding: 3mm 4mm;
+  }
+  .included .t { font-size: 6.6pt; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); font-weight: 900; }
+  .included p { font-size: 7.2pt; color: var(--ink-2); margin-top: .8mm; }
+
+  .notincluded {
+    margin-top: 1.4mm; padding: 0 4mm;
+    font-size: 6.7pt; color: var(--grey-2);
+  }
+
+  /* ---------- footer ---------- */
+  footer { margin-top: 3mm; border-top: 1px solid var(--line); padding-top: 2.2mm; }
+  .contact { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2.2mm 6mm; }
+  .contact .lbl {
+    font-size: 6.2pt; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--grey-2); font-weight: 900;
+  }
+  .contact .val { font-size: 8pt; color: var(--ink); margin-top: .4mm; }
+  .contact .val small { color: var(--grey); }
+
+  .legal {
+    margin-top: 2.6mm; font-size: 6.3pt; color: var(--grey-2); line-height: 1.4;
+    display: flex; justify-content: space-between; gap: 6mm;
+  }
+  .legal .validez { color: var(--ink-2); font-weight: 900; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <img src="assets/grisbi.png" alt="GRISBI">
+    <div class="right">
+      <div class="kicker">Propuesta económica · resumen</div>
+      <h1>Powerfin ERP + POS GAS</h1>
+      <div class="sub">Todo lo que se cobra, en una página · USD, sin IVA</div>
+    </div>
+  </header>
+
+  <div class="client">
+    <span>Cliente</span><div class="line"></div>
+    <span>Fecha</span><div class="line short"></div>
+  </div>
+
+  <section>
+    <h2>1 · Qué se cobra <small>— cuatro rubros, sin letra chica</small></h2>
+    <table>
+      <tr>
+        <th class="n">#</th><th>Rubro</th><th>Tipo de pago</th><th class="num">Monto</th>
+      </tr>
+      <tr>
+        <td class="n">1</td>
+        <td><b>Instalación, implementación y capacitación</b><br><small>levantamiento, configuración, migración y go-live</small></td>
+        <td>Una vez, al inicio</td>
+        <td class="num"><b>$1.200</b></td>
+      </tr>
+      <tr>
+        <td class="n">2</td>
+        <td><b>Precio del sistema</b> <small>(ERP + POS + Admin)</small><br><small>licencia de uso</small></td>
+        <td>Una vez, al inicio o financiado</td>
+        <td class="num"><b>$7.500</b></td>
+      </tr>
+      <tr>
+        <td class="n">3</td>
+        <td><b>Soporte mensual y actualizaciones menores</b><br><small>hosting, respaldos, monitoreo, Key49 y cambios del SRI</small></td>
+        <td>Mensual</td>
+        <td class="num"><b>$175/mes</b></td>
+      </tr>
+      <tr>
+        <td class="n">4</td>
+        <td><b>Actualizaciones mayores</b><br><small>versión mayor cada 3–4 años, opcional</small></td>
+        <td>Cuando se pacten</td>
+        <td class="num"><b>20% del sistema</b></td>
+      </tr>
+    </table>
+    <p class="note">El rubro 4 equivale a <b>$1.500</b> por versión mayor. Los cambios regulatorios del SRI están incluidos en el soporte.</p>
+  </section>
+
+  <section>
+    <h2>2 · Cómo puede pagar el sistema <small>— elegir una sola modalidad</small></h2>
+    <table>
+      <tr>
+        <th>Modalidad</th><th class="num">Pago inicial</th><th class="num">Cuota mensual</th>
+        <th class="num">Total en el plazo</th><th class="num">Costo a 5 años</th>
+      </tr>
+      <tr class="hl">
+        <td>Contado</td>
+        <td class="num">$8.875</td><td class="num">$175</td>
+        <td class="num">—</td><td class="num">$19.200</td>
+      </tr>
+      <tr>
+        <td>Financiado 24 meses</td>
+        <td class="num">$3.157</td><td class="num">$457</td>
+        <td class="num">$13.679</td><td class="num">$19.979</td>
+      </tr>
+      <tr>
+        <td>Financiado 36 meses</td>
+        <td class="num">$3.074</td><td class="num">$374</td>
+        <td class="num">$16.174</td><td class="num">$20.374</td>
+      </tr>
+      <tr>
+        <td>Financiado 48 meses</td>
+        <td class="num">$3.033</td><td class="num">$333</td>
+        <td class="num">$18.684</td><td class="num">$20.784</td>
+      </tr>
+    </table>
+    <p class="note">
+      <b>Pago inicial</b> = instalación + 20% del sistema + primera cuota. El saldo se financia al <b>12% anual</b>.
+      <b>Costo a 5 años</b> lleva las cuatro modalidades a 60 meses de soporte: es la única columna comparable,
+      y confirma que <b>el contado es el más barato</b> ($19.200 en 5 años ≈ <b>$320/mes</b>).
+      Financiar cuesta exactamente el interés ($779 / $1.174 / $1.584).
+    </p>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>3 · El precio se ajusta al tamaño <small>— soporte en USD/mes</small></h2>
+      <table>
+        <tr>
+          <th>Tramo</th><th class="num">Pistolas</th><th class="num">Instalación</th>
+          <th class="num">Sistema</th><th class="num">Soporte</th>
+        </tr>
+        <tr><td class="tramo">Pequeña <small>0,85×</small></td><td class="num">1 – 4</td><td class="num">$1.020</td><td class="num">$6.375</td><td class="num">$149</td></tr>
+        <tr class="hl"><td class="tramo">Mediana <small>1,00×</small></td><td class="num">5 – 8</td><td class="num">$1.200</td><td class="num">$7.500</td><td class="num">$175</td></tr>
+        <tr><td class="tramo">Grande <small>1,30×</small></td><td class="num">9 – 16</td><td class="num">$1.560</td><td class="num">$9.750</td><td class="num">$228</td></tr>
+        <tr><td class="tramo">Extra grande <small>1,60×</small></td><td class="num">17 – 24</td><td class="num">$1.920</td><td class="num">$12.000</td><td class="num">$280</td></tr>
+        <tr><td class="tramo">Red</td><td class="num">25+</td><td class="num" colspan="3">A cotizar según inventario</td></tr>
+      </table>
+      <p class="note">
+        En redes, la licencia baja por volumen: <b>2.ª y 3.ª estación al 60%</b>,
+        <b>4.ª a 6.ª al 50%</b>, <b>7.ª en adelante al 40%</b>.
+        Instalación y soporte se cobran por estación.
+      </p>
+    </section>
+
+    <section>
+      <h2>4 · Servicios opcionales</h2>
+      <table>
+        <tr><th>Concepto</th><th class="num">Precio</th></tr>
+        <tr><td>Capacitación adicional</td><td class="num">$480 <small>/ 8 h</small></td></tr>
+        <tr><td>Visita en sitio</td><td class="num">$120 <small>+ viáticos</small></td></tr>
+        <tr><td>Isla de impresión adicional</td><td class="num">$15 <small>/ mes</small></td></tr>
+        <tr><td>Módulo nuevo (tienda, flotas…)</td><td class="num">$2.000 – $6.000</td></tr>
+        <tr><td>Migración &gt; 50.000 registros</td><td class="num">A cotizar</td></tr>
+      </table>
+      <p class="note">Se cotizan aparte y no son requisito para operar.</p>
+    </section>
+  </div>
+
+  <div class="included">
+    <div class="t">El soporte y la instalación incluyen</div>
+    <p>
+      ERP Powerfin + POS GAS + Admin · facturación electrónica Key49 hasta 3.000 facturas/mes ·
+      hosting, respaldos y monitoreo · actualizaciones menores y cambios regulatorios del SRI ·
+      integración con controlador e impresoras · migración de hasta 50.000 registros ·
+      capacitación de 8 horas en dos sesiones · acompañamiento en el primer cierre ·
+      soporte L-V 8 h y fines de semana 4 h · movilización en 1–2 h en Cuenca y zona de influencia.
+    </p>
+  </div>
+  <div class="notincluded">
+    No incluye: hardware (dispensadores, controlador, impresoras, servidor, red, UPS), consumibles,
+    certificado digital, IVA, módulos nuevos, actualizaciones mayores ni desarrollos a medida.
+  </div>
+
+  <footer>
+    <div class="contact">
+      <div><div class="lbl">Contacto</div><div class="val">Patricio Valarezo <small>· Gerente General</small></div></div>
+      <div><div class="lbl">Teléfono / WhatsApp</div><div class="val">099 383 2368</div></div>
+      <div><div class="lbl">Correo</div><div class="val">pvalarezo@grisbi.com.ec</div></div>
+      <div><div class="lbl">Web</div><div class="val">www.grisbi.com.ec</div></div>
+      <div><div class="lbl">Dirección</div><div class="val">Carlos Vintimilla 130 y Luis Moreno Mora · Cuenca</div></div>
+      <div><div class="lbl">Vigencia de la oferta</div><div class="val">30 días</div></div>
+    </div>
+    <div class="legal">
+      <span>GRISBI Cía. Ltda. · RUC 0190411826001 · Precios en USD, no incluyen IVA.
+        Documento informativo; no constituye oferta contractual.</span>
+      <span class="validez">Octubre 2026</span>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
