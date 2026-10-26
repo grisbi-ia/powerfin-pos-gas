@@ -496,12 +496,21 @@ async def _compute_evolution(
         ),
         else_=0,
     )
+    costed_cost = case(
+        (
+            (DispatchDetail.unit_cost.is_not(None))
+            & (DispatchDetail.quantity.is_not(None)),
+            DispatchDetail.quantity * DispatchDetail.unit_cost,
+        ),
+        else_=0,
+    )
 
     rows = (await db.execute(
         select(
             bucket_label,
             func.coalesce(func.sum(Dispatch.total), 0).label("sales"),
             func.coalesce(func.sum(DispatchDetail.subtotal), 0).label("net_sales"),
+            func.coalesce(func.sum(costed_cost), 0).label("cost"),
             func.coalesce(func.sum(DispatchDetail.quantity), 0).label("gallons"),
             func.count(func.distinct(Dispatch.dispatch_id)).label("count"),
             func.coalesce(func.sum(costed_margin), 0).label("utility"),
@@ -529,21 +538,22 @@ async def _compute_evolution(
         else:
             label = str(row[0])
 
-        dispatch_total = int(row[6] or 0)
-        dispatch_costed = int(row[7] or 0)
-        missing_details = int(row[8] or 0)
+        dispatch_total = int(row[7] or 0)
+        dispatch_costed = int(row[8] or 0)
+        missing_details = int(row[9] or 0)
         complete = (
             missing_details == 0
             and dispatch_costed == dispatch_total
         )
-        utility = None if dispatch_costed == 0 else round(float(row[5] or 0), 2)
+        utility = None if dispatch_costed == 0 else round(float(row[6] or 0), 2)
 
         items.append(EvolutionItem(
             period_label=label,
             sales=round(float(row[1]), 2),
             net_sales=round(float(row[2]), 2),
-            gallons=round(float(row[3]), 2),
-            count=int(row[4]),
+            cost=round(float(row[3] or 0), 2),
+            gallons=round(float(row[4]), 2),
+            count=int(row[5]),
             utility=utility,
             utility_complete=complete,
         ))

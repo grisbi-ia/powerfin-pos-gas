@@ -314,11 +314,14 @@ Ready for production integration with POS frontend.
 
 - [x] v0.40.0: **Utilidad por Hora / Día / Mes en el Dashboard Admin** — historial de
       costos de compra con vigencia (`product_cost_history`, costo neto sin IVA), costo
-      congelado por despacho (`dispatch_details.unit_cost`), gráfico de utilidad en las
-      tres vistas y CRUD de vigencias en Admin → Productos. Los datos de ejemplo se
+      congelado por despacho (`dispatch_details.unit_cost`), gráfica de ventas netas, costo y utilidad (3 líneas) en las
+      tres vistas, etiquetas “con IVA”/“sin IVA” y CRUD de vigencias en Admin → Productos. Los datos de ejemplo se
       marcan `source='EXAMPLE'`; se reemplazan con el CSV del ERP
       (`scripts/import_product_costs.py` + `scripts/backfill_dispatch_costs.py`).
       Backend: **559 tests**.
+- [x] v0.40.1: etiquetas **“con IVA”** en las gráficas de ventas (KPI, evolución,
+      productos, pagos, top) y **“sin IVA”** en la gráfica de margen. La gráfica de
+      margen pasó a **3 líneas**: ventas netas, costo de ventas y utilidad.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**

@@ -1168,6 +1168,7 @@ class EvolutionItem(BaseModel):
     period_label: str  # "2026-06-26T14:00" or "2026-06-01" or "2026-01"
     sales: float = 0          # gross revenue (VAT included)
     net_sales: float = 0      # revenue net of VAT
+    cost: float = 0           # known cost of goods sold (net of VAT)
     gallons: float = 0
     count: int = 0
     # Gross margin = net sales - cost of goods sold.

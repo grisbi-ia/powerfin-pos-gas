@@ -144,7 +144,7 @@ GET /api/admin/dashboard/top-customers
 | 1 | KPI Cards (Ventas $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
 | 2 | Ventas por Hora | 📊 Barras | `evolution` |
 | 3 | Galones por Hora | 📊 Barras | `evolution` |
-| 4 | **Utilidad por Hora** | 📈 Línea | `evolution` (`utility`) |
+| 4 | **Ventas, Costo y Utilidad por Hora** | 📈 3 líneas | `evolution` (`net_sales`, `cost`, `utility`) |
 | 5 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
 | 6 | Galones por Producto | 🍩 Donut | `galones-by-product` |
 | 7 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
@@ -162,7 +162,7 @@ GET /api/admin/dashboard/top-customers
 | 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
 | 2 | Evolución Ventas por Día | 📈 Línea | `evolution` |
 | 3 | Evolución Galones por Día | 📈 Línea | `evolution` |
-| 4 | **Utilidad por Día** | 📈 Línea | `evolution` (`utility`) |
+| 4 | **Ventas, Costo y Utilidad por Día** | 📈 3 líneas | `evolution` (`net_sales`, `cost`, `utility`) |
 | 5 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
 | 5 | Galones por Producto | 🍩 Donut | `galones-by-product` |
 | 6 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
@@ -177,7 +177,7 @@ GET /api/admin/dashboard/top-customers
 | 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
 | 2 | Evolución Ventas por Mes | 📈 Línea/Área | `evolution` |
 | 3 | Evolución Galones por Mes | 📈 Línea/Área | `evolution` |
-| 4 | **Utilidad por Mes** | 📈 Línea | `evolution` (`utility`) |
+| 4 | **Ventas, Costo y Utilidad por Mes** | 📈 3 líneas | `evolution` (`net_sales`, `cost`, `utility`) |
 | 5 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
 | 5 | Galones por Producto | 🍩 Donut | `galones-by-product` |
 | 6 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
@@ -188,6 +188,11 @@ GET /api/admin/dashboard/top-customers
 ---
 
 ## 4.4 Utilidad (margen bruto)
+
+Las gráficas de ventas del dashboard (**KPI Ventas, Ventas por Hora/Día/Mes, Ventas por
+Producto, Métodos de Pago, Top Clientes/Productos, comparativos**) usan el **total con
+IVA**, porque representan lo que paga el cliente y lo que debe cuadrar en caja. La
+gráfica de margen es la excepción: muestra **venta neta, costo y utilidad sin IVA**.
 
 La utilidad se calcula **por despacho**, no con el costo actual del producto:
 
@@ -221,10 +226,15 @@ Cada bucket (hora / día / mes) incluye:
 |---|---|
 | `sales` | Venta bruta (con IVA) |
 | `net_sales` | Venta neta (sin IVA) |
+| `cost` | Costo de ventas conocido (sin IVA) |
 | `gallons` | Galones despachados |
 | `count` | Despachos distintos |
 | `utility` | Margen bruto del bucket; `null` si no hay ningún costo |
 | `utility_complete` | `false` si algún despacho del bucket no tiene costo |
+
+La gráfica muestra tres líneas: **Ventas netas (azul)**, **Costo de ventas (ámbar,
+discontinua)** y **Utilidad (verde azulado)**. En un bucket completo se cumple
+`net_sales = cost + utility`; si falta algún costo, la utilidad es parcial y se avisa.
 
 ---
 

@@ -247,6 +247,7 @@ class TestEvolution:
         assert "period_label" in today_bucket
         # Utility = net sales - frozen cost of goods sold.
         assert today_bucket["net_sales"] == 108.70
+        assert today_bucket["cost"] == 105.30
         assert today_bucket["utility"] == 3.40
         assert today_bucket["utility_complete"] is True
 
@@ -320,7 +321,9 @@ class TestEvolution:
         buckets = [b for b in r.json() if b["count"] > 0]
         assert len(buckets) == 1
         bucket = buckets[0]
-        # Known margins are still reported, but the bucket is marked partial.
+        # Known margins/costs are still reported, but the bucket is marked partial.
+        assert bucket["net_sales"] == 126.09
+        assert bucket["cost"] == 105.30
         assert bucket["utility"] == 3.40
         assert bucket["utility_complete"] is False
 

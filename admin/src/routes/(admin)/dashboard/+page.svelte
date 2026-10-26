@@ -9,6 +9,7 @@
   import ComparisonChart from '$components/dashboard/ComparisonChart.svelte';
   import TopPeriodsChart from '$components/dashboard/TopPeriodsChart.svelte';
   import ProductLinesChart from '$components/dashboard/ProductLinesChart.svelte';
+  import MarginChart from '$components/dashboard/MarginChart.svelte';
   import type { Period, ChipItem } from '$components/dashboard/types';
 
   // ── State ────────────────────────────────────────────────────────
@@ -268,10 +269,10 @@
     <div class="dashboard-content">
     <!-- KPI Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-      <KpiCard title="Ventas {period === 'daily' ? 'Hoy' : 'Totales'}" value={formatCurrency(summary.total_sales)} icon={DollarSign} color="blue" />
+      <KpiCard title="Ventas {period === 'daily' ? 'Hoy' : 'Totales'} (con IVA)" value={formatCurrency(summary.total_sales)} icon={DollarSign} color="blue" />
       <KpiCard title="Galones" value={`${summary.total_gallons.toLocaleString('es-EC')} gl`} icon={Droplets} color="green" />
       <KpiCard title="Despachos" value={String(summary.dispatch_count)} icon={ShoppingCart} color="purple" />
-      <KpiCard title="Ticket Prom." value={formatCurrency(summary.avg_ticket)} icon={Receipt} color="orange" />
+      <KpiCard title="Ticket Prom. (con IVA)" value={formatCurrency(summary.avg_ticket)} icon={Receipt} color="orange" />
     </div>
 
     <!-- Growth badges -->
@@ -280,7 +281,7 @@
         {#if compareData.growth_sales_pct != null}
           <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full {compareData.growth_sales_pct >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}">
             {#if compareData.growth_sales_pct >= 0}<TrendingUp class="w-4 h-4" />{:else}<TrendingDown class="w-4 h-4" />{/if}
-            Ventas: {compareData.growth_sales_pct >= 0 ? '+' : ''}{compareData.growth_sales_pct}% vs período anterior
+            Ventas (con IVA): {compareData.growth_sales_pct >= 0 ? '+' : ''}{compareData.growth_sales_pct}% vs período anterior
           </span>
         {/if}
         {#if compareData.growth_gallons_pct != null}
@@ -296,7 +297,7 @@
     {#if evolutionCompare}
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-700 mb-4">
-          {period === 'daily' ? 'Ventas $ por Hora' : period === 'annual' ? 'Ventas $ por Mes' : 'Ventas $ por Día'}
+          {period === 'daily' ? 'Ventas $ por Hora (con IVA)' : period === 'annual' ? 'Ventas $ por Mes (con IVA)' : 'Ventas $ por Día (con IVA)'}
         </h3>
         <ComparisonChart
           metric="sales"
@@ -326,29 +327,25 @@
         />
       </div>
 
-      <!-- Gross margin per hour/day/month -->
+      <!-- Net sales, cost of goods sold and gross margin -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
           <h3 class="text-sm font-semibold text-gray-700">
-            {period === 'daily' ? 'Utilidad por Hora' : period === 'annual' ? 'Utilidad por Mes' : 'Utilidad por Día'}
+            {period === 'daily' ? 'Ventas, Costo y Utilidad por Hora' : period === 'annual' ? 'Ventas, Costo y Utilidad por Mes' : 'Ventas, Costo y Utilidad por Día'}
+            <span class="font-normal text-gray-500">(sin IVA)</span>
           </h3>
           {#if hasUtility}
             <div class="text-xs text-gray-500">
               Utilidad: <span class="font-semibold text-teal-700">{formatCurrency(utilityTotal)}</span>
               · Margen: <span class="font-semibold text-teal-700">{marginPct.toFixed(1)}%</span>
+              <span class="text-gray-400">(sobre venta neta)</span>
             </div>
           {/if}
         </div>
-        <ComparisonChart
-          metric="utility"
-          {period}
-          previous={evolutionCompare.previous}
-          current={evolutionCompare.current}
-          next={evolutionCompare.next}
-          previousLabel={evolutionCompare.previous_label}
-          currentLabel={evolutionCompare.current_label}
-          nextLabel={evolutionCompare.next_label}
-        />
+        <p class="text-xs text-gray-500 mb-4">
+          Venta neta = Costo de ventas + Utilidad. Las tres líneas están sin IVA.
+        </p>
+        <MarginChart {period} anchor={selectedDate} data={utilitySeries} />
         {#if costQuality === 'EXAMPLE'}
           <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
             ⚠️ Datos de costo de <strong>ejemplo</strong>. Reemplázalos con el costo real del ERP
@@ -384,7 +381,7 @@
     <!-- 3 donuts/pies -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto</h3>
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Ventas por Producto (con IVA)</h3>
         <DonutChart labels={byProduct.map((d: any) => d.product_name)} data={byProduct.map((d: any) => d.total_amount)} />
       </div>
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
@@ -392,7 +389,7 @@
         <DonutChart labels={byGallons.map((d: any) => d.product_name)} data={byGallons.map((d: any) => d.total_liters)} />
       </div>
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-        <h3 class="text-sm font-semibold text-gray-700 mb-4">Método de Pago</h3>
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Método de Pago (con IVA)</h3>
         <DonutChart type="pie" labels={byPayment.map((d: any) => d.method_name)} data={byPayment.map((d: any) => d.total)} />
       </div>
     </div>
@@ -442,7 +439,7 @@
     {#if period !== 'daily' && topPeriods.length > 0}
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-700 mb-4">
-          {period === 'annual' ? 'Mejores Meses' : 'Mejores Días'}
+          {period === 'annual' ? 'Mejores Meses (con IVA)' : 'Mejores Días (con IVA)'}
         </h3>
         <TopPeriodsChart {period} data={topPeriods} limit={period === 'annual' ? 3 : 5} />
       </div>

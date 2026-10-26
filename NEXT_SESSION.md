@@ -1,20 +1,24 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## ✅ Dashboard Admin — Utilidad por Hora (2026-10-26) — v0.40.0
+## ✅ Dashboard Admin — Utilidad por Hora (2026-10-26) — v0.40.0 / v0.40.1
 
 - [x] **Costo de compra con vigencia**: tabla `product_cost_history` (`valid_from` +
       costo neto sin IVA; el “hasta” se calcula con la siguiente fila) y snapshot
       `dispatch_details.unit_cost` al momento de la venta. Si no hay costo para la
       fecha, el bucket queda `utility=null` / `utility_complete=false`, nunca en cero.
-- [x] **Gráfico “Utilidad por Hora”** después de “Galones por Hora” y el mismo cálculo
-      en Mensual (por día) y Anual (por mes). Muestra utilidad y margen del período,
-      con aviso visible si la utilidad es parcial.
+- [x] **Gráfica de tres líneas** (Ventas netas, Costo de ventas y Utilidad) por Hora,
+      Día y Mes después de “Galones”. Las gráficas de ventas llevan la etiqueta
+      “con IVA”; la de margen, “sin IVA”. Muestra utilidad y margen del período, con
+      aviso visible si la utilidad es parcial.
 - [x] **Admin → Productos → Editar**: historial de vigencias (Desde / Hasta / Costo sin
       IVA / Origen / Nota) y alta/baja de costos. La lista de productos muestra el
       costo vigente.
 - [x] **Datos de ejemplo** cargados como `source='EXAMPLE'` desde 2026-06-01
       (`scripts/seed_product_costs.py`). **No son datos reales**: reemplazarlos cuando
       llegue el CSV del ERP.
+- [x] **v0.40.1 — etiquetas con/sin IVA y gráfica de 3 líneas**: las gráficas de ventas
+      dicen “(con IVA)”; la de margen dice “(sin IVA)” y muestra ventas netas, costo de
+      ventas y utilidad. `evolution` devuelve también `cost` por bucket.
 - [ ] **Importar el CSV real del ERP**:
       `python scripts/import_product_costs.py --file costos.csv --apply`
       y luego `python scripts/backfill_dispatch_costs.py --apply`.

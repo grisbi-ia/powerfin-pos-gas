@@ -4,6 +4,19 @@
 
 ---
 
+## v0.40.1 (2026-10-26) — Etiquetas con/sin IVA y gráfica de margen de 3 líneas
+
+- **Etiquetas**: el dashboard ahora informa el criterio de cada cifra. KPI Ventas, Ventas
+  por Hora/Día/Mes, Ventas por Producto, Métodos de Pago y Top períodos llevan
+  **“(con IVA)”**. La gráfica de margen lleva **“(sin IVA)”**.
+- **Gráfica de margen**: reemplaza la comparación de utilidad por una gráfica de tres
+  líneas — **Ventas netas** (azul), **Costo de ventas** (ámbar, discontinua) y
+  **Utilidad** (verde azulado). En un bucket completo se cumple `venta neta = costo + utilidad`.
+- **Backend**: `EvolutionItem` agrega `cost` (costo de ventas conocido, sin IVA) por bucket.
+- **Tests**: backend **559 passed**; Admin `svelte-check` 0 errores + build OK.
+
+---
+
 ## v0.40.0 (2026-10-26) — Utilidad por Hora y costos de compra con vigencia
 
 - **Problema**: el dashboard mostraba ventas y galones, pero no la utilidad. No existía
@@ -17,8 +30,9 @@
   endpoints CRUD en `/api/admin/products/{id}/costs`, snapshot en
   `create_dispatch`/`complete_dispatch`, y `evolution` ahora devuelve `net_sales`,
   `utility` y `utility_complete` por bucket (hora/día/mes).
-- **Frontend Admin**: gráfico “Utilidad por Hora” (y por Día/Mes) después de Galones;
-  total y margen del período; aviso de utilidad parcial si faltan costos. En
+- **Frontend Admin**: gráfica de tres líneas (Ventas netas, Costo de ventas y Utilidad) por Hora/Día/Mes
+  después de Galones; total y margen del período; etiquetas “con IVA” en las gráficas de
+  ventas y “sin IVA” en la de margen; aviso de utilidad parcial si faltan costos. En
   Productos → Editar se agregó el historial de vigencias (desde/hasta/costo/origen).
 - **Datos de ejemplo**: `scripts/seed_product_costs.py` carga vigencias `EXAMPLE`
   desde 2026-06-01; `scripts/import_product_costs.py` importa el CSV del ERP;
