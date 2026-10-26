@@ -4,6 +4,21 @@
 
 ---
 
+## v0.40.2 (2026-10-26) — Utilidad por producto y tabla diaria
+
+- **Gráfica**: la tarjeta de margen ahora muestra **una línea de utilidad por producto**
+  (Diesel, Súper, Eco País), sin IVA. Se quitaron las líneas de compra y de venta para
+  no mezclar conceptos. La tarjeta conserva la utilidad total y el margen % del período.
+- **Backend**: `gallons-by-period` ahora devuelve, por producto y bucket, `net_sales`,
+  `cost`, `utility` y `utility_complete`.
+- **Tabla**: nueva **Utilidad por Día y Producto** (vista mensual), con el mismo formato
+  que “Galones por Día y Producto”: fecha, Diesel, Súper, Eco País y total; aviso si
+  algún día tiene productos sin costo.
+- **Tests**: backend **560 passed** (nuevo test de utilidad por producto); Admin
+  `svelte-check` 0 errores + build OK.
+
+---
+
 ## v0.40.1 (2026-10-26) — Etiquetas con/sin IVA y gráfica de margen de 3 líneas
 
 - **Etiquetas**: el dashboard ahora informa el criterio de cada cifra. KPI Ventas, Ventas

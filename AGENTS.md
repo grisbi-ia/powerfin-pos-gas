@@ -318,10 +318,14 @@ Ready for production integration with POS frontend.
       tres vistas, etiquetas “con IVA”/“sin IVA” y CRUD de vigencias en Admin → Productos. Los datos de ejemplo se
       marcan `source='EXAMPLE'`; se reemplazan con el CSV del ERP
       (`scripts/import_product_costs.py` + `scripts/backfill_dispatch_costs.py`).
-      Backend: **559 tests**.
+      Backend: **560 tests**.
 - [x] v0.40.1: etiquetas **“con IVA”** en las gráficas de ventas (KPI, evolución,
       productos, pagos, top) y **“sin IVA”** en la gráfica de margen. La gráfica de
       margen pasó a **3 líneas**: ventas netas, costo de ventas y utilidad.
+- [x] v0.40.2: la gráfica de margen muestra **una línea de utilidad por producto**
+      (Diesel, Súper, Eco País) sin IVA, sin mezclar compra/venta, y se agregó la tabla
+      **Utilidad por Día y Producto** en la vista mensual. `gallons-by-period` devuelve
+      `net_sales`, `cost`, `utility` y `utility_complete` por producto.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**
@@ -357,7 +361,7 @@ Ready for production integration with POS frontend.
 - Stack: FastAPI + SQLAlchemy 2.0 (async) + asyncpg + Alembic
 - Virtual env: `pos_backend/venv/`
 - Run: `source venv/bin/activate && uvicorn app.main:app --reload --port 8080`
-- Test: `pytest` (559 tests — endpoints POS + admin /api/admin/*)
+- Test: `pytest` (560 tests — endpoints POS + admin /api/admin/*)
 - DB dev: `localhost:5433/powerfin_gas` (user: postgres, pass: 1234abcd)
 - Test DB: `localhost:5433/powerfin_gas_test`
 - DB prod (lectura): `100.97.47.123:5432` (Tailscale) / `192.168.1.25:5432` (LAN)
@@ -414,7 +418,7 @@ Ready for production integration with POS frontend.
 - Roles: ADMIN (full), SUPERVISOR (read+export), DISPATCHER (sin acceso)
 - Soft-delete para entidades con integridad referencial (users, products, grades)
 - Paginación obligatoria en todos los endpoints admin
-- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 559)
+- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 560)
 - Deploy: Nginx location /admin → SPA estática, independiente de /pos
 
 ## Deploy (resumen — ver docs/DEPLOY_QUICK.md)

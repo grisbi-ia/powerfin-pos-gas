@@ -8,10 +8,15 @@
     product_code: string;
     gallons: number;
     count: number;
+    net_sales?: number;
+    cost?: number;
+    utility?: number | null;
+    utility_complete?: boolean;
   }
 
   let {
     period = 'daily' as Period,
+    metric = 'gallons' as 'gallons' | 'utility',
     data = [] as GallonsItem[],
   } = $props();
 
@@ -24,6 +29,24 @@
 
   const fallbackColors = ['#ef4444','#14b8a6','#f97316','#ec4899','#e11d48','#0891b2','#d946ef','#84cc16'];
   const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+  function formatMoney(v: number): string {
+    return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('es-EC', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function getValue(item: GallonsItem): number | null {
+    return metric === 'utility' ? (item.utility ?? null) : item.gallons;
+  }
+
+  function formatValue(value: number | null): string {
+    if (value == null) return metric === 'utility' ? 'sin costo' : '0 gl';
+    return metric === 'utility'
+      ? formatMoney(value)
+      : value.toLocaleString('es-EC') + ' gl';
+  }
 
   function hexToRgba(hex: string, alpha: number): string {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -80,7 +103,7 @@
       const color = known || fallbackColors[fallbackIdx++ % fallbackColors.length];
       const values = sortedLabels.map(label => {
         const found = data.find(d => d.period_label === label && d.product_id === pid);
-        return found ? found.gallons : null;
+        return found ? getValue(found) : null;
       });
       return {
         label: productSet.get(pid) || String(pid),
@@ -105,13 +128,17 @@
           legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
           tooltip: {
             callbacks: {
-              label: (ctx: any) => `${ctx.dataset.label}: ${ctx.raw?.toLocaleString('es-EC') || 0} gl`,
+              label: (ctx: any) => `${ctx.dataset.label}: ${formatValue(ctx.raw)}`,
             },
           },
         },
         scales: {
           y: {
-            ticks: { callback: (v: any) => v + ' gl' },
+            ticks: {
+              callback: (v: any) => metric === 'utility'
+                ? formatMoney(Number(v))
+                : v + ' gl',
+            },
           },
         },
       },

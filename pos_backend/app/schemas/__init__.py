@@ -1209,13 +1209,18 @@ class TopPeriodItem(BaseModel):
 
 
 class GallonsByPeriodItem(BaseModel):
-    """Gallons volume in a time bucket, broken down by product."""
+    """Volume and gross margin in a time bucket, broken down by product."""
     period_label: str  # "2026-06-26T08:00" or "2026-06-15" or "2026-06"
     product_id: int
     product_name: str
     product_code: str
     gallons: float
     count: int
+    # Net-of-VAT amounts for the product in this bucket.
+    net_sales: float = 0
+    cost: float = 0
+    utility: float | None = None
+    utility_complete: bool = True
 
 
 # ── Admin — Reports ─────────────────────────────────────────────────

@@ -913,6 +913,25 @@ async def gallons_by_period(
         bucket_label = func.date(Dispatch.created_at).label("bucket")
         bucket_order = text("bucket")
 
+    # Per-product margin, using the cost frozen at sale time.
+    costed_margin = case(
+        (
+            (DispatchDetail.unit_cost.is_not(None))
+            & (DispatchDetail.subtotal.is_not(None)),
+            DispatchDetail.subtotal
+            - DispatchDetail.quantity * DispatchDetail.unit_cost,
+        ),
+        else_=0,
+    )
+    costed_cost = case(
+        (
+            (DispatchDetail.unit_cost.is_not(None))
+            & (DispatchDetail.quantity.is_not(None)),
+            DispatchDetail.quantity * DispatchDetail.unit_cost,
+        ),
+        else_=0,
+    )
+
     rows = (await db.execute(
         select(
             bucket_label,
@@ -921,6 +940,13 @@ async def gallons_by_period(
             Product.code.label("product_code"),
             func.coalesce(func.sum(DispatchDetail.quantity), 0).label("gallons"),
             func.count(func.distinct(Dispatch.dispatch_id)).label("count"),
+            func.coalesce(func.sum(DispatchDetail.subtotal), 0).label("net_sales"),
+            func.coalesce(func.sum(costed_cost), 0).label("cost"),
+            func.coalesce(func.sum(costed_margin), 0).label("utility"),
+            func.count(DispatchDetail.detail_id).label("details"),
+            func.count(
+                case((DispatchDetail.unit_cost.is_(None), 1), else_=None)
+            ).label("missing_details"),
         ).select_from(DispatchDetail)
         .join(Dispatch, DispatchDetail.dispatch_id == Dispatch.dispatch_id)
         .join(Product, DispatchDetail.product_id == Product.product_id)
@@ -940,6 +966,13 @@ async def gallons_by_period(
             label = str(int(row[0])).zfill(2)
         else:
             label = str(row[0])
+        details = int(row[9] or 0)
+        missing_details = int(row[10] or 0)
+        utility = (
+            None
+            if details == 0 or missing_details == details
+            else round(float(row[8] or 0), 2)
+        )
         result.append(GallonsByPeriodItem(
             period_label=label,
             product_id=int(row[1]),
@@ -947,5 +980,9 @@ async def gallons_by_period(
             product_code=row[3],
             gallons=round(float(row[4]), 2),
             count=int(row[5]),
+            net_sales=round(float(row[6] or 0), 2),
+            cost=round(float(row[7] or 0), 2),
+            utility=utility,
+            utility_complete=(missing_details == 0),
         ))
     return result

@@ -9,7 +9,6 @@
   import ComparisonChart from '$components/dashboard/ComparisonChart.svelte';
   import TopPeriodsChart from '$components/dashboard/TopPeriodsChart.svelte';
   import ProductLinesChart from '$components/dashboard/ProductLinesChart.svelte';
-  import MarginChart from '$components/dashboard/MarginChart.svelte';
   import type { Period, ChipItem } from '$components/dashboard/types';
 
   // ── State ────────────────────────────────────────────────────────
@@ -55,6 +54,9 @@
   );
   const hasUtility = $derived(utilityKnown.length > 0);
   const hasSales = $derived(utilitySeries.some((item: any) => (item.count ?? 0) > 0));
+  const hasProductUtility = $derived(
+    gallonsByPeriod.some((item: any) => item.utility !== null && item.utility !== undefined)
+  );
   const utilityComplete = $derived(
     utilitySeries.length > 0 && utilitySeries.every((item: any) => item.utility_complete !== false)
   );
@@ -193,6 +195,50 @@
     return { rows, totals };
   }
 
+  // ── Pivot utilityByPeriod into a monthly table ──────────────────
+
+  function pivotUtilityMonthly(data: any[]) {
+    const byDay = new Map<string, { diesel: number; super_: number; eco: number; incomplete: boolean }>();
+    for (const d of data) {
+      const day = d.period_label;
+      if (!byDay.has(day)) byDay.set(day, { diesel: 0, super_: 0, eco: 0, incomplete: false });
+      const entry = byDay.get(day)!;
+      if (d.utility === null || d.utility === undefined) {
+        entry.incomplete = true;
+        continue;
+      }
+      if (d.product_id === 1) entry.diesel += d.utility;
+      else if (d.product_id === 2) entry.super_ += d.utility;
+      else if (d.product_id === 3) entry.eco += d.utility;
+    }
+
+    const monthNamesShort = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const sorted = [...byDay.keys()].sort();
+
+    const rows = sorted.map(day => {
+      const e = byDay.get(day)!;
+      const parts = day.split('-');
+      const label = parts.length === 3 ? `${parseInt(parts[2])} ${monthNamesShort[parseInt(parts[1])]}` : day;
+      return {
+        label,
+        diesel: e.diesel,
+        super: e.super_,
+        eco: e.eco,
+        total: e.diesel + e.super_ + e.eco,
+        incomplete: e.incomplete,
+      };
+    });
+
+    const totals = {
+      diesel: rows.reduce((s, r) => s + r.diesel, 0),
+      super: rows.reduce((s, r) => s + r.super, 0),
+      eco: rows.reduce((s, r) => s + r.eco, 0),
+      total: rows.reduce((s, r) => s + r.total, 0),
+    };
+
+    return { rows, totals, incomplete: rows.some(r => r.incomplete) };
+  }
+
   // ── Data loading ─────────────────────────────────────────────────
 
   async function loadData() {
@@ -327,25 +373,27 @@
         />
       </div>
 
-      <!-- Net sales, cost of goods sold and gross margin -->
+      <!-- Gross margin per product -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
           <h3 class="text-sm font-semibold text-gray-700">
-            {period === 'daily' ? 'Ventas, Costo y Utilidad por Hora' : period === 'annual' ? 'Ventas, Costo y Utilidad por Mes' : 'Ventas, Costo y Utilidad por Día'}
+            Utilidad por Producto —
+            {period === 'daily' ? 'por Hora' : period === 'annual' ? 'por Mes' : 'por Día'}
             <span class="font-normal text-gray-500">(sin IVA)</span>
           </h3>
           {#if hasUtility}
             <div class="text-xs text-gray-500">
-              Utilidad: <span class="font-semibold text-teal-700">{formatCurrency(utilityTotal)}</span>
+              Utilidad total: <span class="font-semibold text-teal-700">{formatCurrency(utilityTotal)}</span>
               · Margen: <span class="font-semibold text-teal-700">{marginPct.toFixed(1)}%</span>
-              <span class="text-gray-400">(sobre venta neta)</span>
+              <span class="text-gray-400">(sobre venta neta de todos los productos)</span>
             </div>
           {/if}
         </div>
         <p class="text-xs text-gray-500 mb-4">
-          Venta neta = Costo de ventas + Utilidad. Las tres líneas están sin IVA.
+          Una línea por producto. El margen se calcula con la venta neta y el costo congelado
+          al momento de cada despacho.
         </p>
-        <MarginChart {period} anchor={selectedDate} data={utilitySeries} />
+        <ProductLinesChart {period} metric="utility" data={gallonsByPeriod} />
         {#if costQuality === 'EXAMPLE'}
           <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
             ⚠️ Datos de costo de <strong>ejemplo</strong>. Reemplázalos con el costo real del ERP
@@ -354,10 +402,10 @@
         {/if}
         {#if !hasSales}
           <p class="mt-3 text-xs text-gray-500">Sin despachos en el período.</p>
-        {:else if !hasUtility}
+        {:else if !hasProductUtility}
           <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            Sin costo de compra configurado. Ve a <strong>Productos → Historial de costos</strong>
-            para cargar el costo por galón (sin IVA).
+            Sin costo de compra configurado para los productos vendidos. Ve a
+            <strong>Productos → Historial de costos</strong> para cargar el costo por galón (sin IVA).
           </p>
         {:else if !utilityComplete}
           <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
@@ -432,6 +480,54 @@
             </tfoot>
           </table>
         </div>
+      </div>
+    {/if}
+
+    <!-- Monthly utility table (per day × product) -->
+    {#if period === 'monthly' && gallonsByPeriod.length > 0}
+      {@const upivot = pivotUtilityMonthly(gallonsByPeriod)}
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+        <h3 class="text-sm font-semibold text-gray-700 px-4 md:px-6 py-4 border-b border-gray-200">
+          Utilidad por Día y Producto <span class="font-normal text-gray-500">(sin IVA)</span>
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Fecha</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Diesel</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Súper</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Eco País</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Total</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {#each upivot.rows as row}
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-1.5 font-medium text-gray-900">{row.label}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.diesel !== 0 ? formatCurrency(row.diesel) : '—'}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.super !== 0 ? formatCurrency(row.super) : '—'}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.eco !== 0 ? formatCurrency(row.eco) : '—'}</td>
+                  <td class="px-4 py-1.5 text-right font-mono font-semibold text-gray-900">{formatCurrency(row.total)}</td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+              <tr>
+                <td class="px-4 py-2 text-left text-xs font-bold text-gray-700 uppercase">Total</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.diesel)}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.super)}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.eco)}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {#if upivot.incomplete}
+          <p class="px-4 md:px-6 py-2 text-xs text-amber-700 bg-amber-50 border-t border-amber-200">
+            ⚠️ Hay días con productos sin costo para su fecha; esos valores no se cuentan como utilidad cero.
+          </p>
+        {/if}
       </div>
     {/if}
 

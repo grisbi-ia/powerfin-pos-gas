@@ -356,6 +356,29 @@ class TestEvolution:
         assert r.status_code == 403
 
 
+# ── Gallons / utility by period and product ───────────────────────
+
+
+class TestGallonsByPeriod:
+    async def test_utility_per_product(self, client, db):
+        await _seed_dispatch_data(db)
+
+        from datetime import date
+        r = await client.get(
+            f"/api/admin/dashboard/gallons-by-period?period=monthly&date={date.today().isoformat()}",
+            headers=_admin_headers(),
+        )
+        assert r.status_code == 200
+        rows = r.json()
+        by_product = {row["product_id"]: row for row in rows}
+        assert by_product[1]["gallons"] == 25.5
+        assert by_product[1]["net_sales"] == 69.57
+        assert by_product[1]["cost"] == 66.30
+        assert by_product[1]["utility"] == 3.27
+        assert by_product[1]["utility_complete"] is True
+        assert by_product[2]["utility"] == 0.13
+
+
 # ── Compare ───────────────────────────────────────────────────────
 
 
