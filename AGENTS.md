@@ -333,6 +333,8 @@ Ready for production integration with POS frontend.
 - [x] v0.40.5: la tabla de utilidad muestra **utilidad total y $/galón** por producto
       (totales ponderados) y el tooltip de la gráfica muestra utilidad, galones y
       $/galón.
+- [x] v0.40.7: **KPI “Utilidad del Día / del Mes / del Año (sin IVA)”** en el Dashboard,
+      adaptado a la vista seleccionada, con margen % o aviso de utilidad parcial.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**

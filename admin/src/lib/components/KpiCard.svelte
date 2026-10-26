@@ -1,15 +1,24 @@
 <script lang="ts">
-  let { title = '', value = '', icon: IconComponent = null as any, color = 'blue' as 'blue'|'green'|'purple'|'orange' } = $props();
+  let {
+    title = '',
+    value = '',
+    subtitle = '',
+    subtitleClass = 'text-gray-500',
+    icon: IconComponent = null as any,
+    color = 'blue' as 'blue'|'green'|'purple'|'orange'|'teal',
+    class: className = '',
+  } = $props();
 
   const colorMap = {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-green-50 text-green-600',
     purple: 'bg-purple-50 text-purple-600',
     orange: 'bg-orange-50 text-orange-600',
+    teal: 'bg-teal-50 text-teal-600',
   };
 </script>
 
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 {className}">
   <div class="flex items-center gap-3">
     <div class="w-10 h-10 rounded-lg flex items-center justify-center {colorMap[color]}">
       {#if IconComponent}
@@ -19,6 +28,9 @@
     <div>
       <p class="text-sm text-gray-500">{title}</p>
       <p class="text-xl md:text-2xl font-bold text-gray-900">{value}</p>
+      {#if subtitle}
+        <p class="text-xs mt-0.5 {subtitleClass}">{subtitle}</p>
+      {/if}
     </div>
   </div>
 </div>

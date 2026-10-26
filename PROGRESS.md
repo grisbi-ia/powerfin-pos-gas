@@ -1,6 +1,24 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.6`
+> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.7`
+
+---
+
+## v0.40.7 (2026-10-26) — KPI de utilidad en el Dashboard
+
+- **Nueva tarjeta KPI “Utilidad del Día / del Mes / del Año (sin IVA)”**, que se adapta al
+  modo seleccionado (DIARIO / MENSUAL / ANUAL). El valor es la utilidad acumulada del
+  período: suma de los buckets `current` de `evolution/compare`.
+- **Subtítulo contextual**: margen % sobre venta neta cuando el período está completo;
+  “Parcial: hay despachos sin costo” en ámbar si falta algún costo; “Sin costo
+  configurado” y valor `—` cuando no hay ninguna vigencia. No se asume costo cero.
+- **`KpiCard`**: soporta `subtitle`, `subtitleClass`, `class` y color `teal`
+  (retrocompatible con las tarjetas existentes).
+- **Layout**: la fila de KPIs pasa a 5 columnas en `lg`; en móvil la tarjeta de utilidad
+  ocupa el ancho completo.
+- **Sin cambios de backend** (usa datos que el dashboard ya cargaba).
+- **Tests**: Admin `svelte-check` 0 errores + build OK.
+- **Pendiente**: desplegar Admin v0.40.7 a producción.
 
 ---
 

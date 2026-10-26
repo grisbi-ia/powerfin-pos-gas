@@ -786,6 +786,7 @@ producto y por hora/día/mes, respetando el costo de compra vigente en cada fech
 ✅ Gráfica "Utilidad por Producto" por hora/día/mes (sin IVA)
 ✅ Tabla "Utilidad por Día y Producto" con utilidad total y $/galón
 ✅ Tooltip con utilidad total, galones y utilidad/galón
+✅ KPI “Utilidad del Día / del Mes / del Año (sin IVA)” con margen % o utilidad parcial
 ✅ Etiquetas "con IVA" en ventas y "sin IVA" en utilidad
 ✅ CRUD de vigencias en Admin → Productos
 ✅ Importador CSV (PRODUCT_ID, duplicados con promedio)
@@ -795,7 +796,7 @@ producto y por hora/día/mes, respetando el costo de compra vigente en cada fech
 ### Pendiente
 
 ```
-☐ Subir Admin v0.40.5 a producción
+☐ Subir Admin v0.40.7 a producción
 ☐ Revisión con el gerente/directivo
 ☐ Importar costos de junio/julio si el ERP los tiene (12.383 detalles sin costo)
 ☐ Confirmar definición de utilidad: margen bruto sin IVA, sin sueldos/transporte/merma
@@ -880,3 +881,4 @@ producto y por hora/día/mes, respetando el costo de compra vigente en cada fech
 | Post-17      | `v0.40.4` | Importación ERP (59 vigencias) + backfill corregido (19.625 detalles) |
 | Post-17      | `v0.40.5` | Utilidad por galón en tabla y tooltip |
 | Post-17      | `v0.40.6` | Documentación de operación, costos ERP y utilidad |
+| Post-17      | `v0.40.7` | KPI de utilidad (día/mes/año) en el Dashboard |

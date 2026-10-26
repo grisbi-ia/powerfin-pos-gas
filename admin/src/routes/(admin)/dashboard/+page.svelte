@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api/api';
   import { formatCurrency } from '$lib/utils/format';
-  import { DollarSign, ShoppingCart, Receipt, TrendingUp, TrendingDown, Droplets } from 'lucide-svelte';
+  import { DollarSign, ShoppingCart, Receipt, TrendingUp, TrendingDown, Droplets, PiggyBank } from 'lucide-svelte';
   import KpiCard from '$components/KpiCard.svelte';
   import ModeSelector from '$components/dashboard/ModeSelector.svelte';
   import ChipScroller from '$components/dashboard/ChipScroller.svelte';
@@ -64,6 +64,23 @@
     netSalesTotal > 0 ? (utilityTotal / netSalesTotal) * 100 : 0
   );
   const costQuality = $derived(evolutionCompare?.cost_quality ?? 'UNKNOWN');
+
+  // Label and status of the utility KPI card, according to the selected view.
+  const utilityPeriodLabel = $derived(
+    period === 'daily' ? 'del Día' : period === 'monthly' ? 'del Mes' : 'del Año'
+  );
+  const utilitySubtitle = $derived(
+    !hasSales
+      ? 'Sin despachos en el período'
+      : !hasUtility
+        ? 'Sin costo configurado'
+        : !utilityComplete
+          ? 'Parcial: hay despachos sin costo'
+          : `Margen ${marginPct.toFixed(1)}% sobre venta neta`
+  );
+  const utilitySubtitleClass = $derived(
+    hasSales && (!hasUtility || !utilityComplete) ? 'text-amber-700' : 'text-gray-500'
+  );
 
   // ── Date helpers ─────────────────────────────────────────────────
 
@@ -352,11 +369,22 @@
     {#key transitionKey}
     <div class="dashboard-content">
     <!-- KPI Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
       <KpiCard title="Ventas {period === 'daily' ? 'Hoy' : 'Totales'} (con IVA)" value={formatCurrency(summary.total_sales)} icon={DollarSign} color="blue" />
       <KpiCard title="Galones" value={`${summary.total_gallons.toLocaleString('es-EC')} gl`} icon={Droplets} color="green" />
       <KpiCard title="Despachos" value={String(summary.dispatch_count)} icon={ShoppingCart} color="purple" />
       <KpiCard title="Ticket Prom. (con IVA)" value={formatCurrency(summary.avg_ticket)} icon={Receipt} color="orange" />
+      <div class="col-span-2 lg:col-span-1">
+        <KpiCard
+          title={`Utilidad ${utilityPeriodLabel} (sin IVA)`}
+          value={hasUtility ? formatCurrency(utilityTotal) : '—'}
+          subtitle={utilitySubtitle}
+          subtitleClass={utilitySubtitleClass}
+          icon={PiggyBank}
+          color="teal"
+          class="h-full"
+        />
+      </div>
     </div>
 
     <!-- Growth badges -->

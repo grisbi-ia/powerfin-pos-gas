@@ -141,7 +141,7 @@ GET /api/admin/dashboard/top-customers
 
 | # | Componente | Gráfica | Endpoint |
 |---|-----------|---------|----------|
-| 1 | KPI Cards (Ventas $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
+| 1 | KPI Cards (Ventas $, Despachos, Galones, Ticket Prom., **Utilidad del día**) | Tarjetas | `summary` + `evolution/compare` |
 | 2 | Ventas por Hora | 📊 Barras | `evolution` |
 | 3 | Galones por Hora | 📊 Barras | `evolution` |
 | 4 | **Utilidad por Producto — por Hora** | 📈 3 líneas (una por producto) | `gallons-by-period` (`utility`) |
@@ -159,7 +159,7 @@ GET /api/admin/dashboard/top-customers
 
 | # | Componente | Gráfica | Endpoint |
 |---|-----------|---------|----------|
-| 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
+| 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom., **Utilidad del mes**) | Tarjetas | `summary` + `evolution/compare` |
 | 2 | Evolución Ventas por Día | 📈 Línea | `evolution` |
 | 3 | Evolución Galones por Día | 📈 Línea | `evolution` |
 | 4 | **Utilidad por Producto — por Día** | 📈 3 líneas (una por producto) | `gallons-by-period` (`utility`) |
@@ -175,7 +175,7 @@ GET /api/admin/dashboard/top-customers
 
 | # | Componente | Gráfica | Endpoint |
 |---|-----------|---------|----------|
-| 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
+| 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom., **Utilidad del año**) | Tarjetas | `summary` + `evolution/compare` |
 | 2 | Evolución Ventas por Mes | 📈 Línea/Área | `evolution` |
 | 3 | Evolución Galones por Mes | 📈 Línea/Área | `evolution` |
 | 4 | **Utilidad por Producto — por Mes** | 📈 3 líneas (una por producto) | `gallons-by-period` (`utility`) |
@@ -203,6 +203,20 @@ utilidad = dispatch_details.subtotal          (venta neta, sin IVA)
          − dispatch_details.quantity
            × dispatch_details.unit_cost       (costo neto congelado al vender)
 ```
+
+### KPI de utilidad (v0.40.7)
+
+La primera fila de tarjetas incluye **“Utilidad del Día / del Mes / del Año (sin IVA)”**,
+que se adapta a la vista seleccionada. El valor es la suma de la utilidad de los
+buckets del período (`current` de `evolution/compare`).
+
+- Si **no hay costo** para los despachos del período, la tarjeta muestra `—` y
+  “Sin costo configurado”. **No se asume costo cero.**
+- Si hay despachos sin costo, muestra el monto conocido y la leyenda
+  “Parcial: hay despachos sin costo” en ámbar.
+- Si el período está completo, el subtítulo muestra el **margen % sobre venta neta**.
+
+El desglose por producto sigue en la tarjeta “Utilidad por Producto”.
 
 ### Costos con vigencia
 
