@@ -19,21 +19,25 @@
   let error = $state('');
   let mounted = $state(false);
   let transitionKey = $state(0);
+  let loadToken = 0;  // invalidates responses from a previous view selection
   let firstYear = $state(2024);  // fallback, will fetch from system_config
 
   // API data
-  let summary: any = null;
-  let evolutionCompare: any = null;
-  let byProduct: any[] = [];
-  let byPayment: any[] = [];
-  let byGallons: any[] = [];
-  let compareData: any = null;
-  let topPeriods: any[] = [];
-  let gallonsByPeriod: any[] = [];
+  // These MUST be $state: plain `let` bindings are not reactive in runes mode,
+  // so $derived values (utilityTotal, marginPct, ...) would cache the first
+  // period forever and never update when switching DIARIO/MENSUAL/ANUAL.
+  let summary = $state<any>(null);
+  let evolutionCompare = $state<any>(null);
+  let byProduct = $state<any[]>([]);
+  let byPayment = $state<any[]>([]);
+  let byGallons = $state<any[]>([]);
+  let compareData = $state<any>(null);
+  let topPeriods = $state<any[]>([]);
+  let gallonsByPeriod = $state<any[]>([]);
 
   // Today-only data
-  let todayShifts: any[] = [];
-  let lastDispatches: any[] = [];
+  let todayShifts = $state<any[]>([]);
+  let lastDispatches = $state<any[]>([]);
 
   const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const monthNamesFull = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -297,6 +301,7 @@
   // ── Data loading ─────────────────────────────────────────────────
 
   async function loadData() {
+    const token = ++loadToken;
     loading = true; error = '';
     const apiDate = formatApiDate(period, selectedDate);
     try {
@@ -318,6 +323,8 @@
       fetches.push(api.get<any[]>(`/dashboard/gallons-by-period?period=${period}&date=${apiDate}`).catch(() => []));
 
       const [sum, evoComp, prod, pay, gal, comp, topP, gbp] = await Promise.all(fetches);
+      // Ignore a response that lost the race against a newer view selection.
+      if (token !== loadToken) return;
       summary = sum; evolutionCompare = evoComp; byProduct = prod; byPayment = pay;
       byGallons = gal; compareData = comp; topPeriods = topP; gallonsByPeriod = gbp;
 
@@ -329,6 +336,7 @@
             api.get<any>(`/reports/sales?date_from=${todayStr}&date_to=${todayStr}&page_size=10`),
             api.get<any>(`/reports/shifts?date_from=${todayStr}&date_to=${todayStr}&closed_date_from=${todayStr}&closed_date_to=${todayStr}&page_size=50`),
           ]);
+          if (token !== loadToken) return;
           lastDispatches = dispatches.items || [];
           todayShifts = shifts.items || [];
         } catch { lastDispatches = []; todayShifts = []; }
@@ -338,6 +346,7 @@
 
       loading = false;
     } catch (err: any) {
+      if (token !== loadToken) return;
       error = err.message || 'Error loading dashboard';
       loading = false;
     }

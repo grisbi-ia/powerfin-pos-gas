@@ -27,6 +27,8 @@
   let canvasEl = $state<HTMLCanvasElement>();
   let ChartJs: any = null;
   let chartInstance: any = null;
+  let disposed = false;
+  let renderToken = 0;
 
   function formatLabel(raw: string): string {
     if (period === 'daily') return raw.split('T')[1]?.substring(0, 5) || raw;
@@ -65,6 +67,7 @@
   };
 
   async function renderChart() {
+    const token = ++renderToken;
     if (!canvasEl) return;
     // ── Generate ALL expected labels for the period ────────────
     // This ensures datasets align by bucket value, not array position.
@@ -161,7 +164,9 @@
       mod.Chart.register(...mod.registerables);
       ChartJs = mod.Chart;
     }
+    if (disposed || token !== renderToken || !canvasEl) return;
     if (chartInstance) chartInstance.destroy();
+    ChartJs.getChart(canvasEl)?.destroy();
 
     chartInstance = new ChartJs(canvasEl, {
       type: 'line',
@@ -231,6 +236,20 @@
   $effect(() => {
     current; previous; next; metric; period;
     renderChart();
+  });
+
+  // Tear down the chart when the component is destroyed (view switch / keyed
+  // block). This effect has no reactive reads, so it only runs its cleanup
+  // on unmount. Using an effect (instead of onDestroy) keeps the component
+  // free of a root `svelte` import, which Vite may resolve to the SSR build.
+  $effect(() => {
+    return () => {
+      disposed = true;
+      if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+      }
+    };
   });
 </script>
 

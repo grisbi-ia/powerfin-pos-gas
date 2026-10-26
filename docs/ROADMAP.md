@@ -796,7 +796,7 @@ producto y por hora/día/mes, respetando el costo de compra vigente en cada fech
 ### Pendiente
 
 ```
-☐ Subir Admin v0.40.7 a producción
+☐ Subir Admin v0.40.8 a producción
 ☐ Revisión con el gerente/directivo
 ☐ Importar costos de junio/julio si el ERP los tiene (12.383 detalles sin costo)
 ☐ Confirmar definición de utilidad: margen bruto sin IVA, sin sueldos/transporte/merma
@@ -882,3 +882,4 @@ producto y por hora/día/mes, respetando el costo de compra vigente en cada fech
 | Post-17      | `v0.40.5` | Utilidad por galón en tabla y tooltip |
 | Post-17      | `v0.40.6` | Documentación de operación, costos ERP y utilidad |
 | Post-17      | `v0.40.7` | KPI de utilidad (día/mes/año) en el Dashboard |
+| Post-17      | `v0.40.8` | Fix: utilidad congelada entre vistas + limpieza de charts |

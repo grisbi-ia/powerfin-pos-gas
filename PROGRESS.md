@@ -1,6 +1,29 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.7`
+> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.8`
+
+---
+
+## v0.40.8 (2026-10-26) — Fix: KPI de utilidad no cambiaba entre vistas
+
+- **Causa**: en el dashboard los datos de la API (`summary`, `evolutionCompare`,
+  `gallonsByPeriod`, etc.) estaban declarados con `let` simple. En modo runes los
+  `let` no son reactivos, así que los valores `$derived` (`utilityTotal`,
+  `marginPct`, `hasUtility`, `utilityComplete`, …) se calculaban una sola vez y
+  quedaban congelados con el primer período. La tarjeta mostraba siempre la
+  utilidad del día ($88,44) aunque las gráficas sí cambiaran.
+- **Fix**: los datos del dashboard pasan a `$state(...)`, de modo que las tarjetas
+  y todos los derivados se recalculan al cambiar de período.
+- **Error de Chart.js**: al cambiar de vista se destruía el bloque `{#key}`
+  mientras el `import('chart.js')` seguía en vuelo; el canvas quedaba `null` y
+  `new Chart(null)` lanzaba `Cannot read properties of null (reading 'id')`.
+  Se agregó guardia de disposición + token de render y limpieza en unmount en
+  `DonutChart`, `ComparisonChart`, `ProductLinesChart` y `TopPeriodsChart`.
+- **Verificado** con Chromium headless sobre el build de producción y sobre dev:
+  DIARIO $88,44 → MENSUAL $3.621,69 → ANUAL $11.268,15 (datos reales de
+  producción), sin errores de consola. También se probó cambio rápido entre
+  vistas (7 cambios) sin errores.
+- **Tests**: Admin `svelte-check` 0 errores + build OK.
 
 ---
 

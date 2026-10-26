@@ -6,7 +6,7 @@
 - Backend desplegado y migración `a1b2c3d4e5f6` aplicada.
 - **59 vigencias ERP** cargadas; **19.625 detalles** con costo congelado.
 - **12.383 detalles anteriores al 05-ago** sin costo (utilidad parcial en junio/julio).
-- **Admin v0.40.7 pendiente de subir**; dashboard en revisión con el gerente.
+- **Admin v0.40.8 pendiente de subir**; dashboard en revisión con el gerente.
 - Incidente resuelto: DBVisualizer dejó una transacción abierta (`idle in transaction`,
   PID 2287751) que bloqueó la migración; se terminó esa sesión, sin pérdida de ventas.
 
@@ -47,7 +47,10 @@
       el tooltip de la gráfica muestra utilidad, galones y $/galón.
 - [x] **v0.40.7 — KPI de utilidad**: nueva tarjeta “Utilidad del Día / del Mes / del Año
       (sin IVA)” en la primera fila de KPIs, con margen % o aviso de utilidad parcial.
-- [ ] **Deploy admin v0.40.7** (subir y aplicar; no afecta ventas del POS).
+- [x] **v0.40.8 — fix KPI congelado**: los datos del dashboard pasan a `$state`;
+      la utilidad ya cambia con la vista (Día/Mes/Año) y se corrigió el error de
+      Chart.js al cambiar de período (`new Chart(null)`).
+- [ ] **Deploy admin v0.40.8** (subir y aplicar; no afecta ventas del POS).
 - [ ] **Revisión con el gerente/directivo** del dashboard de utilidad.
 - [ ] **Costos de junio/julio**: si el ERP los tiene, importarlos para completar la
       utilidad histórica (hoy quedan 12.383 detalles sin costo).

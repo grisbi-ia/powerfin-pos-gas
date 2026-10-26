@@ -218,6 +218,12 @@ buckets del período (`current` de `evolution/compare`).
 
 El desglose por producto sigue en la tarjeta “Utilidad por Producto”.
 
+**Implementación (v0.40.8):** los datos del período se guardan en `$state(...)`; de lo
+contrario los `$derived` (utilidad total, margen, avisos) se calculan una sola vez y
+quedan congelados con el primer modo. Los componentes de gráfica destruyen su
+instancia en el unmount y descartan renders en vuelo, para que cambiar de vista no
+lance `new Chart(null)` (`Cannot read properties of null (reading 'id')`).
+
 ### Costos con vigencia
 
 `product_cost_history` guarda `product_id`, `valid_from` y `cost_price` (neto sin

@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   let {
     type = 'doughnut' as 'doughnut' | 'pie',
     labels = [] as string[],
@@ -12,6 +10,10 @@
   let canvasEl = $state<HTMLCanvasElement>();
   let ChartJs: any = null;
   let chartInstance: any = null;
+  // Guards against an in-flight dynamic import finishing after the component
+  // was destroyed (view switch / keyed block) or after newer data arrived.
+  let disposed = false;
+  let renderToken = 0;
 
   const percentageLabelPlugin = {
     id: 'percentageLabel',
@@ -51,13 +53,19 @@
   }
 
   async function renderChart() {
+    const token = ++renderToken;
     if (!canvasEl || !data.length) return;
     if (!ChartJs) {
       const mod = await import('chart.js');
       mod.Chart.register(...mod.registerables);
       ChartJs = mod.Chart;
     }
+    // The canvas binding is cleared when the component unmounts while the
+    // chart module is still loading: never build a chart with a null canvas.
+    if (disposed || token !== renderToken || !canvasEl) return;
     if (chartInstance) chartInstance.destroy();
+    // Defensive: destroy any orphan chart still attached to this canvas.
+    ChartJs.getChart(canvasEl)?.destroy();
 
     chartInstance = new ChartJs(canvasEl, {
       type,
@@ -83,6 +91,20 @@
     // Re-render when data changes
     labels; data;
     renderChart();
+  });
+
+  // Tear down the chart when the component is destroyed (view switch / keyed
+  // block). This effect has no reactive reads, so it only runs its cleanup
+  // on unmount. Using an effect (instead of onDestroy) keeps the component
+  // free of a root `svelte` import, which Vite may resolve to the SSR build.
+  $effect(() => {
+    return () => {
+      disposed = true;
+      if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+      }
+    };
   });
 </script>
 

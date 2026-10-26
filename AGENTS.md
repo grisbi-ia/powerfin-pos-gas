@@ -335,6 +335,9 @@ Ready for production integration with POS frontend.
       $/galón.
 - [x] v0.40.7: **KPI “Utilidad del Día / del Mes / del Año (sin IVA)”** en el Dashboard,
       adaptado a la vista seleccionada, con margen % o aviso de utilidad parcial.
+- [x] v0.40.8: fix de reactividad del dashboard (datos en `$state`; la utilidad ya
+      cambia con la vista) y limpieza de charts al desmontar (evita el error de
+      Chart.js al cambiar de período).
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**
