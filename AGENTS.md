@@ -330,6 +330,9 @@ Ready for production integration with POS frontend.
       compras; backfill corregido y ejecutado en producción (**59 vigencias ERP**,
       **19.625 detalles** con costo). Los 12.383 despachos anteriores al 05-ago quedan
       sin costo (utilidad parcial).
+- [x] v0.40.5: la tabla de utilidad muestra **utilidad total y $/galón** por producto
+      (totales ponderados) y el tooltip de la gráfica muestra utilidad, galones y
+      $/galón.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**

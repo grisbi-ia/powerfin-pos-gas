@@ -197,19 +197,37 @@
 
   // ── Pivot utilityByPeriod into a monthly table ──────────────────
 
+  function perGallon(utility: number, gallons: number): number | null {
+    return gallons > 0 ? utility / gallons : null;
+  }
+
+  function formatPerGallon(value: number | null): string {
+    return value == null ? '—' : formatCurrency(value) + '/gal';
+  }
+
   function pivotUtilityMonthly(data: any[]) {
-    const byDay = new Map<string, { diesel: number; super_: number; eco: number; incomplete: boolean }>();
+    const byDay = new Map<string, {
+      diesel: number; super_: number; eco: number;
+      dieselGal: number; superGal: number; ecoGal: number;
+      incomplete: boolean;
+    }>();
     for (const d of data) {
       const day = d.period_label;
-      if (!byDay.has(day)) byDay.set(day, { diesel: 0, super_: 0, eco: 0, incomplete: false });
+      if (!byDay.has(day)) {
+        byDay.set(day, {
+          diesel: 0, super_: 0, eco: 0,
+          dieselGal: 0, superGal: 0, ecoGal: 0,
+          incomplete: false,
+        });
+      }
       const entry = byDay.get(day)!;
       if (d.utility === null || d.utility === undefined) {
         entry.incomplete = true;
         continue;
       }
-      if (d.product_id === 1) entry.diesel += d.utility;
-      else if (d.product_id === 2) entry.super_ += d.utility;
-      else if (d.product_id === 3) entry.eco += d.utility;
+      if (d.product_id === 1) { entry.diesel += d.utility; entry.dieselGal += d.gallons; }
+      else if (d.product_id === 2) { entry.super_ += d.utility; entry.superGal += d.gallons; }
+      else if (d.product_id === 3) { entry.eco += d.utility; entry.ecoGal += d.gallons; }
     }
 
     const monthNamesShort = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -219,12 +237,18 @@
       const e = byDay.get(day)!;
       const parts = day.split('-');
       const label = parts.length === 3 ? `${parseInt(parts[2])} ${monthNamesShort[parseInt(parts[1])]}` : day;
+      const total = e.diesel + e.super_ + e.eco;
+      const totalGal = e.dieselGal + e.superGal + e.ecoGal;
       return {
         label,
         diesel: e.diesel,
         super: e.super_,
         eco: e.eco,
-        total: e.diesel + e.super_ + e.eco,
+        total,
+        dieselPerGal: perGallon(e.diesel, e.dieselGal),
+        superPerGal: perGallon(e.super_, e.superGal),
+        ecoPerGal: perGallon(e.eco, e.ecoGal),
+        totalPerGal: perGallon(total, totalGal),
         incomplete: e.incomplete,
       };
     });
@@ -234,9 +258,23 @@
       super: rows.reduce((s, r) => s + r.super, 0),
       eco: rows.reduce((s, r) => s + r.eco, 0),
       total: rows.reduce((s, r) => s + r.total, 0),
+      dieselGal: data.filter((d: any) => d.product_id === 1 && d.utility != null).reduce((s: number, d: any) => s + d.gallons, 0),
+      superGal: data.filter((d: any) => d.product_id === 2 && d.utility != null).reduce((s: number, d: any) => s + d.gallons, 0),
+      ecoGal: data.filter((d: any) => d.product_id === 3 && d.utility != null).reduce((s: number, d: any) => s + d.gallons, 0),
     };
+    const totalGal = totals.dieselGal + totals.superGal + totals.ecoGal;
 
-    return { rows, totals, incomplete: rows.some(r => r.incomplete) };
+    return {
+      rows,
+      totals: {
+        ...totals,
+        dieselPerGal: perGallon(totals.diesel, totals.dieselGal),
+        superPerGal: perGallon(totals.super, totals.superGal),
+        ecoPerGal: perGallon(totals.eco, totals.ecoGal),
+        totalPerGal: perGallon(totals.total, totalGal),
+      },
+      incomplete: rows.some(r => r.incomplete),
+    };
   }
 
   // ── Data loading ─────────────────────────────────────────────────
@@ -452,10 +490,10 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Fecha</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Diesel</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Súper</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Eco País</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Total</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Diesel<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Súper<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Eco País<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Total<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -495,34 +533,61 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Fecha</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Diesel</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Súper</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Eco País</th>
-                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Total</th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Diesel<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Súper<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Eco País<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
+                <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Total<span class="block text-[10px] font-normal normal-case text-gray-400">$ / gal</span></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               {#each upivot.rows as row}
                 <tr class="hover:bg-gray-50">
                   <td class="px-4 py-1.5 font-medium text-gray-900">{row.label}</td>
-                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.diesel !== 0 ? formatCurrency(row.diesel) : '—'}</td>
-                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.super !== 0 ? formatCurrency(row.super) : '—'}</td>
-                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">{row.eco !== 0 ? formatCurrency(row.eco) : '—'}</td>
-                  <td class="px-4 py-1.5 text-right font-mono font-semibold text-gray-900">{formatCurrency(row.total)}</td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">
+                    <div>{row.diesel !== 0 ? formatCurrency(row.diesel) : '—'}</div>
+                    <div class="text-[10px] text-gray-400">{formatPerGallon(row.dieselPerGal)}</div>
+                  </td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">
+                    <div>{row.super !== 0 ? formatCurrency(row.super) : '—'}</div>
+                    <div class="text-[10px] text-gray-400">{formatPerGallon(row.superPerGal)}</div>
+                  </td>
+                  <td class="px-4 py-1.5 text-right font-mono text-gray-600">
+                    <div>{row.eco !== 0 ? formatCurrency(row.eco) : '—'}</div>
+                    <div class="text-[10px] text-gray-400">{formatPerGallon(row.ecoPerGal)}</div>
+                  </td>
+                  <td class="px-4 py-1.5 text-right font-mono font-semibold text-gray-900">
+                    <div>{formatCurrency(row.total)}</div>
+                    <div class="text-[10px] font-normal text-gray-400">{formatPerGallon(row.totalPerGal)}</div>
+                  </td>
                 </tr>
               {/each}
             </tbody>
             <tfoot class="bg-gray-50 border-t-2 border-gray-200">
               <tr>
                 <td class="px-4 py-2 text-left text-xs font-bold text-gray-700 uppercase">Total</td>
-                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.diesel)}</td>
-                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.super)}</td>
-                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.eco)}</td>
-                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">{formatCurrency(upivot.totals.total)}</td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">
+                  <div>{formatCurrency(upivot.totals.diesel)}</div>
+                  <div class="text-[10px] font-normal text-gray-500">{formatPerGallon(upivot.totals.dieselPerGal)}</div>
+                </td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">
+                  <div>{formatCurrency(upivot.totals.super)}</div>
+                  <div class="text-[10px] font-normal text-gray-500">{formatPerGallon(upivot.totals.superPerGal)}</div>
+                </td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">
+                  <div>{formatCurrency(upivot.totals.eco)}</div>
+                  <div class="text-[10px] font-normal text-gray-500">{formatPerGallon(upivot.totals.ecoPerGal)}</div>
+                </td>
+                <td class="px-4 py-2 text-right font-mono font-bold text-gray-900">
+                  <div>{formatCurrency(upivot.totals.total)}</div>
+                  <div class="text-[10px] font-normal text-gray-500">{formatPerGallon(upivot.totals.totalPerGal)}</div>
+                </td>
               </tr>
             </tfoot>
           </table>
         </div>
+        <p class="px-4 md:px-6 py-2 text-xs text-gray-500 border-t border-gray-100">
+          La segunda línea de cada celda es <strong>utilidad por galón</strong> (utilidad ÷ galones).
+        </p>
         {#if upivot.incomplete}
           <p class="px-4 md:px-6 py-2 text-xs text-amber-700 bg-amber-50 border-t border-amber-200">
             ⚠️ Hay días con productos sin costo para su fecha; esos valores no se cuentan como utilidad cero.

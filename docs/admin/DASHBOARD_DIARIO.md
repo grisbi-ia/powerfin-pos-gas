@@ -237,9 +237,14 @@ Cada bucket (hora / día / mes) incluye:
 | `utility_complete` | `false` si algún despacho del bucket no tiene costo |
 
 La gráfica de utilidad muestra **una línea por producto** (Diesel, Súper, Eco País),
-todas sin IVA. La tabla **Utilidad por Día y Producto** (vista mensual) replica el
-formato de la tabla de galones: una fila por día y una columna por producto. Si un
-producto no tiene costo para una fecha, su utilidad queda fuera y la tabla lo advierte.
+todas sin IVA. El tooltip de cada punto muestra **utilidad total, galones y
+utilidad/galón**.
+
+La tabla **Utilidad por Día y Producto** (vista mensual) replica el formato de la
+tabla de galones: una fila por día y una columna por producto. Cada celda muestra
+la **utilidad total** y, debajo, la **utilidad por galón** (utilidad ÷ galones); la
+fila de totales usa el promedio ponderado. Si un producto no tiene costo para una
+fecha, su utilidad queda fuera y la tabla lo advierte.
 
 ---
 

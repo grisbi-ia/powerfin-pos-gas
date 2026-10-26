@@ -4,6 +4,19 @@
 
 ---
 
+## v0.40.5 (2026-10-26) — Utilidad por galón en tabla y tooltip
+
+- **Tabla “Utilidad por Día y Producto”**: cada celda muestra la utilidad total del
+  producto y, debajo, la **utilidad por galón** (`utilidad ÷ galones`). La fila de
+  totales muestra el promedio ponderado.
+- **Tooltip de la gráfica**: al pasar sobre una línea de utilidad muestra
+  **utilidad total**, **galones** y **utilidad/galón** del producto en ese bloque.
+- No hay cambios de backend: se calcula con `utility` y `gallons` que ya devuelve
+  `gallons-by-period`.
+- **Tests**: Admin `svelte-check` 0 errores + build OK.
+
+---
+
 ## v0.40.4 (2026-10-26) — Backfill corregido e importación real del ERP
 
 - **Fix `backfill_dispatch_costs.py`**: `--since` se parsea como `date` y el `UPDATE`

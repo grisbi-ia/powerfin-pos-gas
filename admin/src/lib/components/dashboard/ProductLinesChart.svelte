@@ -48,6 +48,11 @@
       : value.toLocaleString('es-EC') + ' gl';
   }
 
+  function formatPerGallon(utility: number | null, gallons: number): string {
+    if (utility == null || gallons <= 0) return '—';
+    return formatMoney(utility / gallons) + '/gal';
+  }
+
   function hexToRgba(hex: string, alpha: number): string {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -95,6 +100,16 @@
     const sortedLabels = [...labelSet.keys()].sort();
     const labels = sortedLabels.map(l => labelSet.get(l)!);
 
+    // Per-point metadata for the tooltip (gallons + utility)
+    const metaByKey = new Map<string, { gallons: number; utility: number | null }>();
+    for (const d of data) {
+      const formatted = labelSet.get(d.period_label)!;
+      metaByKey.set(`${formatted}|${d.product_id}`, {
+        gallons: d.gallons,
+        utility: d.utility ?? null,
+      });
+    }
+
     // Build datasets: one per product
     const productIds = [...productSet.keys()];
     let fallbackIdx = 0;
@@ -128,7 +143,23 @@
           legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
           tooltip: {
             callbacks: {
-              label: (ctx: any) => `${ctx.dataset.label}: ${formatValue(ctx.raw)}`,
+              label: (ctx: any) => {
+                if (metric !== 'utility') {
+                  return `${ctx.dataset.label}: ${formatValue(ctx.raw)}`;
+                }
+                const utility = ctx.raw as number | null;
+                if (utility == null) {
+                  return `${ctx.dataset.label}: sin costo`;
+                }
+                const pid = productIds[ctx.datasetIndex];
+                const meta = metaByKey.get(`${ctx.label}|${pid}`);
+                const gallons = meta?.gallons ?? 0;
+                return [
+                  `${ctx.dataset.label}: ${formatMoney(utility)}`,
+                  `Galones: ${gallons.toLocaleString('es-EC')}`,
+                  `Utilidad/gal: ${formatPerGallon(utility, gallons)}`,
+                ];
+              },
             },
           },
         },

@@ -31,9 +31,13 @@
       detalles** desde el 05-ago. Quedan 12.383 detalles anteriores al 05-ago sin
       costo (utilidad parcial en junio/julio). Verificado: utilidad del día
       $51,17 sobre venta neta $1.250,56.
+- [x] **v0.40.5 — utilidad por galón**: la tabla “Utilidad por Día y Producto”
+      muestra utilidad total y $/galón por producto (promedio ponderado en totales);
+      el tooltip de la gráfica muestra utilidad, galones y $/galón.
 - [x] **v0.40.4 — fix del backfill**: `--since` como fecha y `UPDATE ... FROM
       dispatches d`; aplicado y verificado en producción.
-- [ ] **Deploy** de backend + admin y ejecutar migración `a1b2c3d4e5f6`.
+- [x] **Deploy backend + migración `a1b2c3d4e5f6`** — HECHO 2026-10-26.
+- [ ] **Deploy admin v0.40.5** (subir y aplicar; no afecta ventas del POS).
 - [ ] **Decisión de negocio**: confirmar que “utilidad” = margen bruto (venta neta de
       IVA − costo neto de IVA), sin sueldos, transporte ni merma.
 
