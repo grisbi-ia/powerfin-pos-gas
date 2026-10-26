@@ -5,10 +5,10 @@
 > Las fases 12-17 del ROADMAP.md principal son el resumen; aquí está el detalle.
 
 ```
-Última actualización: 2026-06-23
-Fase actual: 17 — Cloudflare + Deploy (completado)
-Progreso:  ████████████████████  Fases 12-17 ✅
-Tag: v0.32.0
+Última actualización: 2026-10-26
+Fase actual: Post-17 — Operación y hardening
+Progreso:  ████████████████████  Fases 12-17 ✅ · Post-17 en curso
+Tag: v0.40.9
 ```
 
 ---
@@ -238,8 +238,20 @@ Tag: v0.32.0
 - [x] Admin → Productos → Editar: historial de vigencias (alta/baja)
 - [x] Lista de productos muestra el costo vigente
 - [x] Datos `EXAMPLE` + importador CSV del ERP + backfill histórico
-- [ ] Importar el CSV real del ERP y reemplazar los datos `EXAMPLE`
-- [ ] Deploy de backend + admin con la migración `a1b2c3d4e5f6`
+- [x] Importar el CSV real del ERP y reemplazar los datos `EXAMPLE` (59 vigencias, 19.625 detalles)
+- [x] Deploy de backend + admin con la migración `a1b2c3d4e5f6`
+
+### v0.40.7 / v0.40.8 — KPI de utilidad y fix de vistas (2026-10-26)
+
+- [x] Tarjeta KPI “Utilidad del Día / del Mes / del Año (sin IVA)” en el Dashboard
+- [x] Subtítulo con margen % o aviso de utilidad parcial / sin costo
+- [x] Fix: la utilidad no cambiaba al pasar DIARIO → MENSUAL → ANUAL
+      (datos del dashboard en `$state`; antes `$derived` quedaba congelado)
+- [x] Fix: error de Chart.js al cambiar de vista (`new Chart(null)`)
+      con limpieza de instancias en unmount y descarte de renders en vuelo
+- [x] Desplegado en producción (2026-10-26)
+- [ ] Revisión con el gerente/directivo
+- [ ] Importar costos de junio/julio (12.383 detalles sin costo)
 
 ---
 

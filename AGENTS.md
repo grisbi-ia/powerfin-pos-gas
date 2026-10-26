@@ -338,6 +338,8 @@ Ready for production integration with POS frontend.
 - [x] v0.40.8: fix de reactividad del dashboard (datos en `$state`; la utilidad ya
       cambia con la vista) y limpieza de charts al desmontar (evita el error de
       Chart.js al cambiar de período).
+- [x] v0.40.9: **Admin v0.40.8 desplegado en producción** (2026-10-26); dashboard en
+      revisión con el gerente/directivo. Solo documentación y estado de operación.
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**

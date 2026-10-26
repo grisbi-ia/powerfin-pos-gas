@@ -1,12 +1,13 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## ✅ Dashboard Admin — Utilidad, costos y operación (2026-10-26) — v0.40.0 → v0.40.5
+## ✅ Dashboard Admin — Utilidad, costos y operación (2026-10-26) — v0.40.0 → v0.40.8
 
 **Estado de producción (2026-10-26):**
 - Backend desplegado y migración `a1b2c3d4e5f6` aplicada.
 - **59 vigencias ERP** cargadas; **19.625 detalles** con costo congelado.
 - **12.383 detalles anteriores al 05-ago** sin costo (utilidad parcial en junio/julio).
-- **Admin v0.40.8 pendiente de subir**; dashboard en revisión con el gerente.
+- **Admin v0.40.8 desplegado** (KPI de utilidad + fix de cambio de vista);
+  dashboard en revisión con el gerente/directivo.
 - Incidente resuelto: DBVisualizer dejó una transacción abierta (`idle in transaction`,
   PID 2287751) que bloqueó la migración; se terminó esa sesión, sin pérdida de ventas.
 
@@ -50,7 +51,9 @@
 - [x] **v0.40.8 — fix KPI congelado**: los datos del dashboard pasan a `$state`;
       la utilidad ya cambia con la vista (Día/Mes/Año) y se corrigió el error de
       Chart.js al cambiar de período (`new Chart(null)`).
-- [ ] **Deploy admin v0.40.8** (subir y aplicar; no afecta ventas del POS).
+- [x] **Deploy admin v0.40.8** — HECHO 2026-10-26. Incluye la tarjeta KPI de utilidad
+      (v0.40.7) y el fix de reactividad/charts (v0.40.8). En revisión con el
+      gerente/directivo.
 - [ ] **Revisión con el gerente/directivo** del dashboard de utilidad.
 - [ ] **Costos de junio/julio**: si el ERP los tiene, importarlos para completar la
       utilidad histórica (hoy quedan 12.383 detalles sin costo).

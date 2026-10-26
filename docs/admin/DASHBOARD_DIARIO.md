@@ -224,6 +224,9 @@ quedan congelados con el primer modo. Los componentes de gráfica destruyen su
 instancia en el unmount y descartan renders en vuelo, para que cambiar de vista no
 lance `new Chart(null)` (`Cannot read properties of null (reading 'id')`).
 
+**Estado:** desplegado en producción el **2026-10-26** (Admin v0.40.7 + v0.40.8); en
+revisión con el gerente/directivo.
+
 ### Costos con vigencia
 
 `product_cost_history` guarda `product_id`, `valid_from` y `cost_price` (neto sin

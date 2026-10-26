@@ -1,6 +1,20 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.8`
+> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.9`
+
+---
+
+## v0.40.9 (2026-10-26) — Deploy de Admin v0.40.8 y documentación
+
+- **Admin v0.40.8 desplegado en producción** (2026-10-26): incluye la tarjeta KPI
+  “Utilidad del Día / del Mes / del Año (sin IVA)” (v0.40.7) y el fix de reactividad
+  que hacía que la utilidad no cambiara entre vistas (v0.40.8).
+- **Verificado en producción** por el usuario; el dashboard queda en revisión con el
+  gerente/directivo. No afecta las ventas del POS.
+- **Documentación actualizada**: `NEXT_SESSION.md`, `PROGRESS.md`, `AGENTS.md`,
+  `docs/ROADMAP.md`, `docs/admin/DASHBOARD_DIARIO.md` y
+  `docs/admin/ADMIN_ROADMAP.md` (estado de deploy y pendientes).
+- **Sin cambios de código**: solo documentación y estado de operación.
 
 ---
 
