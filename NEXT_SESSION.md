@@ -1,5 +1,32 @@
 # NEXT_SESSION.md — Powerfin POS
 
+## ✅ Dashboard Admin — Utilidad por Hora (2026-10-26) — v0.40.0
+
+- [x] **Costo de compra con vigencia**: tabla `product_cost_history` (`valid_from` +
+      costo neto sin IVA; el “hasta” se calcula con la siguiente fila) y snapshot
+      `dispatch_details.unit_cost` al momento de la venta. Si no hay costo para la
+      fecha, el bucket queda `utility=null` / `utility_complete=false`, nunca en cero.
+- [x] **Gráfico “Utilidad por Hora”** después de “Galones por Hora” y el mismo cálculo
+      en Mensual (por día) y Anual (por mes). Muestra utilidad y margen del período,
+      con aviso visible si la utilidad es parcial.
+- [x] **Admin → Productos → Editar**: historial de vigencias (Desde / Hasta / Costo sin
+      IVA / Origen / Nota) y alta/baja de costos. La lista de productos muestra el
+      costo vigente.
+- [x] **Datos de ejemplo** cargados como `source='EXAMPLE'` desde 2026-06-01
+      (`scripts/seed_product_costs.py`). **No son datos reales**: reemplazarlos cuando
+      llegue el CSV del ERP.
+- [ ] **Importar el CSV real del ERP**:
+      `python scripts/import_product_costs.py --file costos.csv --apply`
+      y luego `python scripts/backfill_dispatch_costs.py --apply`.
+      El CSV adjunto no apareció en el proyecto; el importador acepta
+      `product_code,valid_from,cost_price,notes` (o equivalentes en español).
+- [ ] **Deploy** de backend + admin y ejecutar migración `a1b2c3d4e5f6`.
+- [ ] **Decisión de negocio**: confirmar que “utilidad” = margen bruto (venta neta de
+      IVA − costo neto de IVA), sin sueldos, transporte ni merma.
+
+---
+
+
 ## 📅 Reunión comercial — 2026-10-21
 
 - [x] **Hoja de reunión de 1 página A4** — **HECHA** (`comercial/hoja-reunion.html`

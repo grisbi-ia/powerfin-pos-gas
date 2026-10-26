@@ -39,6 +39,7 @@ from app.schemas import (
     InvoiceRequest,
     PendingBulkDispatchItem,
 )
+from app.services.cost_service import get_cost_at
 from app.services.credit_service import validate_credit_dispatch
 from app.services.id_validation import validate_identification
 from app.services.sequential_service import consume_sequential
@@ -47,6 +48,30 @@ from app.services.access_key_service import generate_access_key
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pos/dispatches", tags=["dispatches"])
+
+
+async def _freeze_detail_cost(db: AsyncSession, dispatch: Dispatch, details: list[DispatchDetail]) -> None:
+    """Freeze the purchase cost at sale time for details that don't have it.
+
+    Legacy rows (created before the cost history existed) get the cost that was
+    effective on the dispatch date. If there is no cost row for that date the
+    value stays NULL and the dashboard flags the bucket as incomplete.
+    """
+    if dispatch.created_at:
+        created = dispatch.created_at
+        sale_date = (
+            created.astimezone(ECUADOR_TZ).date()
+            if created.tzinfo is not None
+            else created.date()
+        )
+    else:
+        sale_date = datetime.now(ECUADOR_TZ).date()
+
+    for det in details:
+        if det.unit_cost is None:
+            cost = await get_cost_at(db, det.product_id, sale_date)
+            if cost is not None:
+                det.unit_cost = float(cost)
 
 
 async def _assert_identification_ready(db: AsyncSession, person_id: int | None) -> None:
@@ -400,6 +425,7 @@ async def create_dispatch(
 
         # Resolve base price from product for ticket printing
         base_price_dec = unit_price_dec
+        unit_cost_dec = None
         if product_id:
             prod_result = await db.execute(
                 select(ProductModel).where(ProductModel.product_id == product_id)
@@ -407,12 +433,19 @@ async def create_dispatch(
             product_obj = prod_result.scalar_one_or_none()
             if product_obj and product_obj.base_price:
                 base_price_dec = Decimal(str(product_obj.base_price))
+            # Freeze the purchase cost effective on the sale date. NULL means
+            # "not configured"; the dashboard will flag the bucket instead of
+            # assuming zero cost.
+            unit_cost_dec = await get_cost_at(
+                db, product_id, datetime.now(ECUADOR_TZ).date()
+            )
 
         detail = DispatchDetail(
             dispatch_id=dispatch.dispatch_id,
             product_id=product_id,
             quantity=0,
             unit_price=float(unit_price_dec),
+            unit_cost=float(unit_cost_dec) if unit_cost_dec is not None else None,
             price_without_subsidy=float(base_price_dec),
             subsidy_amount=0,
             tax_rate=float(tax_rate),
@@ -431,11 +464,15 @@ async def create_dispatch(
     # Fallback: if items were sent explicitly, use them
     if body.items:
         for item in body.items:
+            item_cost = await get_cost_at(
+                db, item.product_id, datetime.now(ECUADOR_TZ).date()
+            )
             detail = DispatchDetail(
                 dispatch_id=dispatch.dispatch_id,
                 product_id=item.product_id,
                 quantity=float(item.quantity),
                 unit_price=float(item.unit_price),
+                unit_cost=float(item_cost) if item_cost is not None else None,
                 tax_rate=float(item.tax_rate),
                 tax_amount=float(item.quantity * item.unit_price * item.tax_rate),
                 subtotal=float(item.quantity * item.unit_price),
@@ -535,6 +572,7 @@ async def complete_dispatch(
     )
     details = detail_result.scalars().all()
     if details:
+        await _freeze_detail_cost(db, dispatch, details)
         # Use first detail's unit_price and tax_rate for calculations
         first_detail = details[0]
         unit_price_dec = Decimal(str(first_detail.unit_price))
@@ -666,6 +704,7 @@ async def complete_dispatch_by_pump(
         )
         details = detail_result.scalars().all()
         if details:
+            await _freeze_detail_cost(db, dispatch, details)
             first_detail = details[0]
             unit_price_dec = Decimal(str(body.unit_price)) if body.unit_price and float(body.unit_price) > 0 else Decimal(str(first_detail.unit_price))
             tax_rate_dec = Decimal(str(first_detail.tax_rate))

@@ -227,6 +227,22 @@ Tag: v0.32.0
 
 ---
 
+## Post-FASE 17 — Operación y hardening
+
+### v0.40.0 — Utilidad por Hora y costos con vigencia (2026-10-26)
+
+- [x] Tabla `product_cost_history` (costo neto sin IVA, `valid_from`; “hasta” calculado)
+- [x] `dispatch_details.unit_cost` congelado al vender
+- [x] Gráfico “Utilidad por Hora / Día / Mes” en el Dashboard (después de Galones)
+- [x] Utilidad y margen del período; aviso de utilidad parcial si faltan costos
+- [x] Admin → Productos → Editar: historial de vigencias (alta/baja)
+- [x] Lista de productos muestra el costo vigente
+- [x] Datos `EXAMPLE` + importador CSV del ERP + backfill histórico
+- [ ] Importar el CSV real del ERP y reemplazar los datos `EXAMPLE`
+- [ ] Deploy de backend + admin con la migración `a1b2c3d4e5f6`
+
+---
+
 ## Convenciones de este documento
 
 - **[x]** = completado y con tests pasando

@@ -4,12 +4,15 @@
   interface EvoItem {
     period_label: string;
     sales: number;
+    net_sales?: number;
     gallons: number;
     count: number;
+    utility?: number | null;
+    utility_complete?: boolean;
   }
 
   let {
-    metric = 'sales' as 'sales' | 'gallons',
+    metric = 'sales' as 'sales' | 'gallons' | 'utility',
     period = 'daily' as Period,
     previous = [] as EvoItem[],
     current = [] as EvoItem[],
@@ -42,13 +45,24 @@
     return raw; // already formatted by backend
   }
 
-  function getValue(item: EvoItem): number {
+  function getValue(item: EvoItem): number | null {
+    if (metric === 'utility') return item.utility ?? null;
     return metric === 'sales' ? item.sales : item.gallons;
   }
 
-  let formatValue = $derived(metric === 'sales'
-    ? (v: number) => '$' + v.toLocaleString('es-EC')
-    : (v: number) => v.toLocaleString('es-EC') + ' gl');
+  let formatValue = $derived(
+    metric === 'utility'
+      ? (v: number) => (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : metric === 'sales'
+        ? (v: number) => '$' + v.toLocaleString('es-EC')
+        : (v: number) => v.toLocaleString('es-EC') + ' gl'
+  );
+
+  const LINE_COLORS = {
+    sales: { border: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+    gallons: { border: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+    utility: { border: '#0d9488', bg: 'rgba(13,148,136,0.12)' },
+  };
 
   async function renderChart() {
     if (!canvasEl) return;
@@ -82,8 +96,8 @@
       return item.period_label;
     }
 
-    function buildLookup(arr: EvoItem[]): Map<string, number> {
-      const m = new Map<string, number>();
+    function buildLookup(arr: EvoItem[]): Map<string, number | null> {
+      const m = new Map<string, number | null>();
       for (const item of arr) {
         const key = extractKey(item);
         m.set(key, getValue(item));
@@ -116,7 +130,7 @@
     }
 
     // ── Align data to allLabels ──────────────────────────────
-    const lookupValue = (label: string, map: Map<string, number>) => {
+    const lookupValue = (label: string, map: Map<string, number | null>) => {
       if (period === 'monthly') {
         // Compare by day number only — months differ across previous/current/next
         const labelDay = extractDayFromLabel(label);
@@ -169,12 +183,12 @@
           {
             label: currentLabel || 'Actual',
             data: curData,
-            borderColor: metric === 'sales' ? '#3b82f6' : '#22c55e',
-            backgroundColor: metric === 'sales' ? 'rgba(59,130,246,0.1)' : 'rgba(34,197,94,0.1)',
+            borderColor: LINE_COLORS[metric].border,
+            backgroundColor: LINE_COLORS[metric].bg,
             borderWidth: 2.5,
             tension: 0.3,
             pointRadius: allLabels.length <= 31 ? 3 : 0,
-            fill: true,
+            fill: metric !== 'utility',
             spanGaps: false,
           },
           {
@@ -199,7 +213,9 @@
           legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
           tooltip: {
             callbacks: {
-              label: (ctx: any) => `${ctx.dataset.label}: ${formatValue(ctx.raw || 0)}`,
+              label: (ctx: any) => ctx.raw == null
+                ? `${ctx.dataset.label}: sin costo`
+                : `${ctx.dataset.label}: ${formatValue(ctx.raw as number)}`,
             },
           },
         },

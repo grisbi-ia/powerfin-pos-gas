@@ -5,6 +5,7 @@ grades depend on products). Deleting sets is_active=False.
 """
 
 import math
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -17,10 +18,21 @@ from app.models.user import User
 from app.schemas import (
     AdminProductDetail,
     AdminProductListItem,
+    CreateProductCostRequest,
     CreateProductRequest,
     ErrorResponse,
     PaginatedResponse,
+    ProductCostItem,
+    UpdateProductCostRequest,
     UpdateProductRequest,
+)
+from app.services.cost_service import (
+    delete_cost,
+    get_cost_at,
+    get_current_costs,
+    list_cost_history,
+    update_cost,
+    upsert_cost,
 )
 
 router = APIRouter(
@@ -33,7 +45,7 @@ router = APIRouter(
 # ── Helpers ────────────────────────────────────────────────────────
 
 
-def _product_to_list_item(product: Product, category: ProductCategory) -> dict:
+def _product_to_list_item(product: Product, category: ProductCategory, cost_price=None) -> dict:
     return {
         "product_id": product.product_id,
         "code": product.code,
@@ -42,6 +54,7 @@ def _product_to_list_item(product: Product, category: ProductCategory) -> dict:
         "category_name": category.name if category else "???",
         "unit": product.unit,
         "base_price": float(product.base_price) if product.base_price else 0,
+        "cost_price": float(cost_price) if cost_price is not None else None,
         "is_active": product.is_active,
     }
 
@@ -50,6 +63,14 @@ async def _product_to_detail(product: Product, db: AsyncSession) -> dict:
     """Build a detail dict with eagerly loaded or fetched relationships."""
     category = await db.get(ProductCategory, product.category_id)
     tax_type = await db.get(TaxType, product.tax_type_id) if product.tax_type_id else None
+
+    current_cost = await get_cost_at(db, product.product_id, date.today())
+    current_source = None
+    if current_cost is not None:
+        history = await list_cost_history(db, product.product_id)
+        current_source = next(
+            (h["source"] for h in history if h["is_current"]), None
+        )
 
     return {
         "product_id": product.product_id,
@@ -65,6 +86,8 @@ async def _product_to_detail(product: Product, db: AsyncSession) -> dict:
         "tax_type_name": tax_type.name if tax_type else None,
         "tax_rate": float(tax_type.rate) if tax_type else None,
         "is_active": product.is_active,
+        "cost_price": float(current_cost) if current_cost is not None else None,
+        "cost_source": current_source,
     }
 
 
@@ -119,9 +142,13 @@ async def list_products(
     offset = (page - 1) * page_size
     result = await db.execute(base.order_by(sort_col).offset(offset).limit(page_size))
     rows = result.all()
+    current_costs = await get_current_costs(db, [p.product_id for p, _ in rows])
 
     return PaginatedResponse(
-        items=[_product_to_list_item(p, pc) for p, pc in rows],
+        items=[
+            _product_to_list_item(p, pc, current_costs.get(p.product_id))
+            for p, pc in rows
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -270,6 +297,119 @@ async def list_tax_types(
     """List all tax types (for dropdowns)."""
     result = await db.execute(select(TaxType).order_by(TaxType.name))
     return [{"tax_type_id": t.tax_type_id, "code": t.code, "name": t.name, "rate": float(t.rate)} for t in result.scalars().all()]
+
+
+# ── Purchase cost history (net of VAT) ─────────────────────────────
+
+
+async def _cost_item(db: AsyncSession, product_id: int, cost_id: int) -> dict:
+    history = await list_cost_history(db, product_id)
+    item = next((h for h in history if h["product_cost_id"] == cost_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Costo no encontrado")
+    return item
+
+
+@router.get("/{product_id}/costs", response_model=list[ProductCostItem])
+async def list_product_costs(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("products", "read")),
+):
+    """Effective-dated purchase costs for a product.
+
+    ``valid_to`` is computed from the next row; it is not stored.
+    """
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return await list_cost_history(db, product_id)
+
+
+@router.post(
+    "/{product_id}/costs",
+    response_model=ProductCostItem,
+    status_code=status.HTTP_201_CREATED,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+)
+async def create_product_cost(
+    product_id: int,
+    body: CreateProductCostRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("products", "write")),
+):
+    """Add (or update) a cost effective from ``valid_from``.
+
+    Costs are NET of VAT. If a row already exists for that exact date and it
+    came from ERP/EXAMPLE, ``force=true`` is required to overwrite it.
+    """
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    try:
+        row = await upsert_cost(
+            db,
+            product_id=product_id,
+            valid_from=body.valid_from,
+            cost_price=body.cost_price,
+            source=body.source,
+            notes=body.notes,
+            created_by=_admin.user_id,
+            force=body.force,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        code = 409 if "Ya existe" in message else 400
+        raise HTTPException(status_code=code, detail=message) from exc
+    return await _cost_item(db, product_id, row.product_cost_id)
+
+
+@router.put(
+    "/{product_id}/costs/{cost_id}",
+    response_model=ProductCostItem,
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+)
+async def update_product_cost(
+    product_id: int,
+    cost_id: int,
+    body: UpdateProductCostRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("products", "write")),
+):
+    """Correct an existing cost row (e.g. a typo). Use with care: it changes history."""
+    try:
+        row = await update_cost(
+            db,
+            product_id=product_id,
+            cost_id=cost_id,
+            valid_from=body.valid_from,
+            cost_price=body.cost_price,
+            notes=body.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not row:
+        raise HTTPException(status_code=404, detail="Costo no encontrado")
+    return await _cost_item(db, product_id, row.product_cost_id)
+
+
+@router.delete(
+    "/{product_id}/costs/{cost_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"model": ErrorResponse}},
+)
+async def delete_product_cost(
+    product_id: int,
+    cost_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_permission("products", "write")),
+):
+    """Delete a cost row. Already-frozen dispatch costs are not affected."""
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    if not await delete_cost(db, product_id, cost_id):
+        raise HTTPException(status_code=404, detail="Costo no encontrado")
 
 
 @router.delete(

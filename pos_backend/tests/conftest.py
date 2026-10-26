@@ -92,6 +92,7 @@ async def _seed_data(db: AsyncSession):
     from app.models.person import Person, Vehicle
     from app.models.pricing import PriceList, PriceListItem
     from app.models.product import Grade, Product, ProductCategory, TaxType
+    from app.models.product_cost import ProductCost
     from app.models.tributary import EmissionPoint
     from app.models.user import Role, User
 
@@ -132,6 +133,14 @@ async def _seed_data(db: AsyncSession):
 
     db.add(Grade(grade_id=1, code="DIESEL", name="Diesel", product_id=1))
     db.add(Grade(grade_id=2, code="SUPER", name="Super", product_id=2))
+
+    # Effective purchase costs (net of VAT) — used by dashboard utility tests.
+    db.add_all([
+        ProductCost(product_id=1, valid_from=date(2026, 1, 1), cost_price=2.60,
+                    source="MANUAL", notes="test"),
+        ProductCost(product_id=2, valid_from=date(2026, 1, 1), cost_price=3.90,
+                    source="MANUAL", notes="test"),
+    ])
 
     std = PriceList(price_list_id=1, code="STANDARD", name="Precio Normal", is_default=True)
     vip = PriceList(price_list_id=2, code="VIP", name="VIP", is_default=False)

@@ -7,7 +7,7 @@
   import { api } from '$lib/api/api';
   import { toast } from '$lib/utils/toast';
 
-  interface ProductItem { product_id: number; code: string; name: string; category_name: string; unit: string; base_price: number; is_active: boolean; }
+  interface ProductItem { product_id: number; code: string; name: string; category_name: string; unit: string; base_price: number; cost_price: number | null; is_active: boolean; }
 
   let items = $state<ProductItem[]>([]);
   let total = $state(0); let page = $state(1); let pages = $state(1);
@@ -30,7 +30,7 @@
   $effect(() => { load(); });
 </script>
 
-<DataTable title="Productos" {items} columns={[{key:'name',label:'Nombre',sortable:true},{key:'code',label:'Código',sortable:true},{key:'category_name',label:'Categoría'},{key:'unit',label:'Unidad'},{key:'is_active',label:'Estado',sortable:true}]}
+<DataTable title="Productos" {items} columns={[{key:'name',label:'Nombre',sortable:true},{key:'code',label:'Código',sortable:true},{key:'category_name',label:'Categoría'},{key:'base_price',label:'Precio base',type:'currency'},{key:'cost_price',label:'Costo sin IVA',type:'currency'},{key:'is_active',label:'Estado',sortable:true}]}
   {loading} {error} {total} {page} {pages} {search} {sortKey} {sortOrder}
   onSearch={(q: string) => { search = q; page = 1; load(); }}
   onSort={(k: string) => { sortKey = k; sortOrder = sortOrder==='asc'?'desc':'asc'; load(); }}

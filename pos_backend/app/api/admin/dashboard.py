@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin.deps import get_admin_user, require_permission
@@ -19,6 +19,7 @@ from app.models.dispatch import Dispatch, DispatchDetail
 from app.models.payment import PaymentMethod
 from app.models.person import Person
 from app.models.product import Product
+from app.models.product_cost import ProductCost
 from app.models.shift import Shift
 from app.models.user import User
 from app.schemas import (
@@ -484,12 +485,33 @@ async def _compute_evolution(
         bucket_label = func.date(Dispatch.created_at).label("bucket")
         bucket_order = text("bucket")
 
+    # Margin of each detail whose cost was frozen at sale time.
+    # NULL unit_cost means "cost unknown", never "cost zero".
+    costed_margin = case(
+        (
+            (DispatchDetail.unit_cost.is_not(None))
+            & (DispatchDetail.subtotal.is_not(None)),
+            DispatchDetail.subtotal
+            - DispatchDetail.quantity * DispatchDetail.unit_cost,
+        ),
+        else_=0,
+    )
+
     rows = (await db.execute(
         select(
             bucket_label,
             func.coalesce(func.sum(Dispatch.total), 0).label("sales"),
+            func.coalesce(func.sum(DispatchDetail.subtotal), 0).label("net_sales"),
             func.coalesce(func.sum(DispatchDetail.quantity), 0).label("gallons"),
-            func.count(Dispatch.dispatch_id).label("count"),
+            func.count(func.distinct(Dispatch.dispatch_id)).label("count"),
+            func.coalesce(func.sum(costed_margin), 0).label("utility"),
+            func.count(func.distinct(Dispatch.dispatch_id)).label("dispatch_total"),
+            func.count(func.distinct(
+                case((DispatchDetail.unit_cost.is_not(None), Dispatch.dispatch_id), else_=None)
+            )).label("dispatch_costed"),
+            func.count(
+                case((DispatchDetail.unit_cost.is_(None), 1), else_=None)
+            ).label("missing_details"),
         ).outerjoin(DispatchDetail, DispatchDetail.dispatch_id == Dispatch.dispatch_id)
         .where(
             Dispatch.status == "COLLECTED",
@@ -506,11 +528,24 @@ async def _compute_evolution(
             label = str(int(row[0])).zfill(2)  # "01".."12"
         else:
             label = str(row[0])
+
+        dispatch_total = int(row[6] or 0)
+        dispatch_costed = int(row[7] or 0)
+        missing_details = int(row[8] or 0)
+        complete = (
+            missing_details == 0
+            and dispatch_costed == dispatch_total
+        )
+        utility = None if dispatch_costed == 0 else round(float(row[5] or 0), 2)
+
         items.append(EvolutionItem(
             period_label=label,
             sales=round(float(row[1]), 2),
-            gallons=round(float(row[2]), 2),
-            count=int(row[3]),
+            net_sales=round(float(row[2]), 2),
+            gallons=round(float(row[3]), 2),
+            count=int(row[4]),
+            utility=utility,
+            utility_complete=complete,
         ))
 
     if period == Period.daily:
@@ -561,6 +596,21 @@ async def evolution(
     return items
 
 
+async def _cost_quality(db: AsyncSession, date_to: date) -> str:
+    """Classify the latest cost source per product as of ``date_to``."""
+    rows = (await db.execute(
+        select(ProductCost.product_id, ProductCost.source)
+        .where(ProductCost.valid_from <= date_to)
+        .order_by(ProductCost.product_id, ProductCost.valid_from.desc())
+        .distinct(ProductCost.product_id)
+    )).all()
+    if not rows:
+        return "MISSING"
+    if any(source == "EXAMPLE" for _, source in rows):
+        return "EXAMPLE"
+    return "REAL"
+
+
 @router.get("/evolution/compare", response_model=EvolutionCompareResponse)
 async def evolution_compare(
     period: Period = Query(default=Period.daily, description="Period: daily, monthly, annual"),
@@ -578,6 +628,7 @@ async def evolution_compare(
 
     prev_date = _shift_period(period, date_val, -1)
     next_date = _shift_period(period, date_val, +1)
+    _, period_end = _resolve_date_range(period, date_val)
 
     prev_items, prev_label = await _compute_evolution(db, period, prev_date)
     cur_items, cur_label = await _compute_evolution(db, period, date_val)
@@ -591,6 +642,7 @@ async def evolution_compare(
         previous=prev_items,
         current=cur_items,
         next=next_items,
+        cost_quality=await _cost_quality(db, period_end),
     )
 
 

@@ -122,6 +122,10 @@ class DispatchDetail(Base):
     )
     quantity: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False)
+    unit_cost: Mapped[float | None] = mapped_column(
+        Numeric(10, 4),
+        comment="Purchase cost per unit (net of VAT) frozen at sale time",
+    )
     price_without_subsidy: Mapped[float | None] = mapped_column(
         Numeric(10, 4), comment="unit_price + subsidy_per_unit at time of sale"
     )

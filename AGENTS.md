@@ -312,6 +312,14 @@ Ready for production integration with POS frontend.
       las ventas en curso (`AUTHORIZED` con `sri_status='PENDING'`) y los `CANCELLED`
       ya no se cuentan como problemas.
 
+- [x] v0.40.0: **Utilidad por Hora / Día / Mes en el Dashboard Admin** — historial de
+      costos de compra con vigencia (`product_cost_history`, costo neto sin IVA), costo
+      congelado por despacho (`dispatch_details.unit_cost`), gráfico de utilidad en las
+      tres vistas y CRUD de vigencias en Admin → Productos. Los datos de ejemplo se
+      marcan `source='EXAMPLE'`; se reemplazan con el CSV del ERP
+      (`scripts/import_product_costs.py` + `scripts/backfill_dispatch_costs.py`).
+      Backend: **559 tests**.
+
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**
       con `id_number = NULL` (respaldo CSV en `/tmp/ids_invalidos_backup_20260914_023929.csv`).
@@ -346,7 +354,7 @@ Ready for production integration with POS frontend.
 - Stack: FastAPI + SQLAlchemy 2.0 (async) + asyncpg + Alembic
 - Virtual env: `pos_backend/venv/`
 - Run: `source venv/bin/activate && uvicorn app.main:app --reload --port 8080`
-- Test: `pytest` (548 tests — endpoints POS + admin /api/admin/*)
+- Test: `pytest` (559 tests — endpoints POS + admin /api/admin/*)
 - DB dev: `localhost:5433/powerfin_gas` (user: postgres, pass: 1234abcd)
 - Test DB: `localhost:5433/powerfin_gas_test`
 - DB prod (lectura): `100.97.47.123:5432` (Tailscale) / `192.168.1.25:5432` (LAN)
@@ -403,7 +411,7 @@ Ready for production integration with POS frontend.
 - Roles: ADMIN (full), SUPERVISOR (read+export), DISPATCHER (sin acceso)
 - Soft-delete para entidades con integridad referencial (users, products, grades)
 - Paginación obligatoria en todos los endpoints admin
-- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 548)
+- Sin tests unitarios frontend por ahora (lógica admin cubierta por pytest 559)
 - Deploy: Nginx location /admin → SPA estática, independiente de /pos
 
 ## Deploy (resumen — ver docs/DEPLOY_QUICK.md)

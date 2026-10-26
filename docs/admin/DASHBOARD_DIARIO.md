@@ -144,11 +144,12 @@ GET /api/admin/dashboard/top-customers
 | 1 | KPI Cards (Ventas $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
 | 2 | Ventas por Hora | 📊 Barras | `evolution` |
 | 3 | Galones por Hora | 📊 Barras | `evolution` |
-| 4 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
-| 5 | Galones por Producto | 🍩 Donut | `galones-by-product` |
-| 6 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
-| 7 | Comparativo vs AYER | 📊 Barras lado a lado | `compare` |
-| 8 | Top 5 Clientes | 📋 Tabla | `top-customers` |
+| 4 | **Utilidad por Hora** | 📈 Línea | `evolution` (`utility`) |
+| 5 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
+| 6 | Galones por Producto | 🍩 Donut | `galones-by-product` |
+| 7 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
+| 8 | Comparativo vs AYER | 📊 Barras lado a lado | `compare` |
+| 9 | Top 5 Clientes | 📋 Tabla | `top-customers` |
 
 **Especial (solo si fecha = HOY):**
 - Turnos abiertos/cerrados (ya existe)
@@ -161,7 +162,8 @@ GET /api/admin/dashboard/top-customers
 | 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
 | 2 | Evolución Ventas por Día | 📈 Línea | `evolution` |
 | 3 | Evolución Galones por Día | 📈 Línea | `evolution` |
-| 4 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
+| 4 | **Utilidad por Día** | 📈 Línea | `evolution` (`utility`) |
+| 5 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
 | 5 | Galones por Producto | 🍩 Donut | `galones-by-product` |
 | 6 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
 | 7 | Comparativo vs MES ANTERIOR | 📊 Barras agrupadas | `compare` |
@@ -175,12 +177,54 @@ GET /api/admin/dashboard/top-customers
 | 1 | KPI Cards (Total $, Despachos, Galones, Ticket Prom.) | Tarjetas | `summary` |
 | 2 | Evolución Ventas por Mes | 📈 Línea/Área | `evolution` |
 | 3 | Evolución Galones por Mes | 📈 Línea/Área | `evolution` |
-| 4 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
+| 4 | **Utilidad por Mes** | 📈 Línea | `evolution` (`utility`) |
+| 5 | Ventas por Producto | 🍩 Donut | `sales-by-product` |
 | 5 | Galones por Producto | 🍩 Donut | `galones-by-product` |
 | 6 | Métodos de Pago | 🥧 Pie | `sales-by-payment` |
 | 7 | Comparativo vs AÑO ANTERIOR | 📊 Barras agrupadas (12 pares) | `compare` |
 | 8 | Top 3 Meses del Año | 📊 Barras horizontales | `top-periods` |
 | 9 | Top 20 Clientes | 📋 Tabla | `top-customers` |
+
+---
+
+## 4.4 Utilidad (margen bruto)
+
+La utilidad se calcula **por despacho**, no con el costo actual del producto:
+
+```
+utilidad = dispatch_details.subtotal          (venta neta, sin IVA)
+         − dispatch_details.quantity
+           × dispatch_details.unit_cost       (costo neto congelado al vender)
+```
+
+### Costos con vigencia
+
+`product_cost_history` guarda `product_id`, `valid_from` y `cost_price` (neto sin
+IVA). El “hasta” se **calcula** con la siguiente fila: la última vigencia queda
+abierta. No se almacena `valid_to`, así que no puede haber huecos ni solapes.
+
+- Alta/baja de vigencias: **Admin → Productos → Editar → Historial de costos**.
+- El costo aplicado se congela en `dispatch_details.unit_cost` al crear/completar
+  el despacho. Corregir una vigencia vieja **no** cambia la utilidad ya emitida.
+- Si un despacho no tiene costo para su fecha, `unit_cost` queda `NULL`:
+  el bucket devuelve `utility=null` o `utility_complete=false` y el dashboard
+  muestra “Utilidad parcial”. **Nunca se asume costo cero.**
+- Datos de ejemplo: `source='EXAMPLE'` (scripts `seed_product_costs.py`). Se
+  reemplazan con el CSV del ERP (`import_product_costs.py`) y se congela el
+  histórico con `backfill_dispatch_costs.py`.
+
+### Respuesta de `evolution`
+
+Cada bucket (hora / día / mes) incluye:
+
+| Campo | Significado |
+|---|---|
+| `sales` | Venta bruta (con IVA) |
+| `net_sales` | Venta neta (sin IVA) |
+| `gallons` | Galones despachados |
+| `count` | Despachos distintos |
+| `utility` | Margen bruto del bucket; `null` si no hay ningún costo |
+| `utility_complete` | `false` si algún despacho del bucket no tiene costo |
 
 ---
 

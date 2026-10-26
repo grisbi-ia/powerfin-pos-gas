@@ -59,13 +59,16 @@ async def _seed_dispatch_data(db):
     # Details
     db.add_all([
         DispatchDetail(dispatch_id=d1.dispatch_id, product_id=1, quantity=15.5,
-                       unit_price=3.103, total=48.10, tax_rate=0.15, tax_amount=6.27,
+                       unit_price=3.103, unit_cost=2.60, subtotal=43.48,
+                       total=48.10, tax_rate=0.15, tax_amount=6.27,
                        price_without_subsidy=3.103, subsidy_amount=7.75),
         DispatchDetail(dispatch_id=d2.dispatch_id, product_id=1, quantity=10.0,
-                       unit_price=3.103, total=31.03, tax_rate=0.15, tax_amount=4.05,
+                       unit_price=3.103, unit_cost=2.60, subtotal=26.09,
+                       total=31.03, tax_rate=0.15, tax_amount=4.05,
                        price_without_subsidy=3.103, subsidy_amount=5.00),
         DispatchDetail(dispatch_id=d3.dispatch_id, product_id=2, quantity=10.0,
-                       unit_price=4.50, total=45.00, tax_rate=0.15, tax_amount=5.87,
+                       unit_price=4.50, unit_cost=3.90, subtotal=39.13,
+                       total=45.00, tax_rate=0.15, tax_amount=5.87,
                        price_without_subsidy=4.50, subsidy_amount=0),
     ])
     await db.flush()
@@ -242,6 +245,10 @@ class TestEvolution:
         assert today_bucket["gallons"] == 35.5  # 15.5+10.0+10.0
         assert today_bucket["count"] == 3
         assert "period_label" in today_bucket
+        # Utility = net sales - frozen cost of goods sold.
+        assert today_bucket["net_sales"] == 108.70
+        assert today_bucket["utility"] == 3.40
+        assert today_bucket["utility_complete"] is True
 
     async def test_evolution_daily(self, client, db):
         """Daily evolution returns hourly buckets."""
@@ -276,6 +283,68 @@ class TestEvolution:
         # At least current month has data
         buckets_with_data = [b for b in data if b["count"] > 0]
         assert len(buckets_with_data) >= 1
+
+    async def test_evolution_utility_incomplete_without_cost(self, client, db):
+        """A dispatch without a frozen cost must not be counted as zero-cost profit."""
+        await _seed_dispatch_data(db)
+
+        from datetime import date, datetime
+        from app.config import ECUADOR_TZ
+        from app.models.dispatch import Dispatch, DispatchDetail
+        from app.models.shift import Shift
+
+        shift = Shift(user_id=2, opening_cash=0.0, status="OPEN")
+        db.add(shift)
+        await db.flush()
+        now = datetime.now(ECUADOR_TZ)
+        d = Dispatch(
+            order_id="DASH-NOCOST", shift_id=shift.shift_id, dispenser_id=1,
+            hose_id=1, dispatch_type_id=1, grade_id="DIESEL", status="COLLECTED",
+            person_id=1, total=20.00, subtotal=17.39, tax_amount=2.61,
+            created_at=now, authorized_by_user_id=2,
+        )
+        db.add(d)
+        await db.flush()
+        db.add(DispatchDetail(
+            dispatch_id=d.dispatch_id, product_id=1, quantity=6.0,
+            unit_price=3.103, unit_cost=None, subtotal=17.39,
+            total=20.00, tax_rate=0.15, tax_amount=2.61,
+        ))
+        await db.commit()
+
+        r = await client.get(
+            f"/api/admin/dashboard/evolution?period=daily&date={date.today().isoformat()}",
+            headers=_admin_headers(),
+        )
+        assert r.status_code == 200
+        buckets = [b for b in r.json() if b["count"] > 0]
+        assert len(buckets) == 1
+        bucket = buckets[0]
+        # Known margins are still reported, but the bucket is marked partial.
+        assert bucket["utility"] == 3.40
+        assert bucket["utility_complete"] is False
+
+    async def test_evolution_compare_reports_cost_quality(self, client, db):
+        from datetime import date
+        from app.models.product_cost import ProductCost
+
+        r = await client.get(
+            f"/api/admin/dashboard/evolution/compare?period=daily&date={date.today().isoformat()}",
+            headers=_admin_headers(),
+        )
+        assert r.status_code == 200
+        assert r.json()["cost_quality"] == "REAL"
+
+        db.add(ProductCost(
+            product_id=3, valid_from=date(2026, 1, 1),
+            cost_price=10.0, source="EXAMPLE",
+        ))
+        await db.commit()
+        r = await client.get(
+            f"/api/admin/dashboard/evolution/compare?period=daily&date={date.today().isoformat()}",
+            headers=_admin_headers(),
+        )
+        assert r.json()["cost_quality"] == "EXAMPLE"
 
     async def test_evolution_dispatcher_forbidden(self, client):
         r = await client.get(

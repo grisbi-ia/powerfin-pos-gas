@@ -718,6 +718,7 @@ class AdminProductListItem(BaseModel):
     category_name: str
     unit: str
     base_price: float
+    cost_price: float | None = None
     is_active: bool
 
     model_config = {"from_attributes": True}
@@ -737,8 +738,36 @@ class AdminProductDetail(BaseModel):
     tax_type_name: str | None = None
     tax_rate: float | None = None
     is_active: bool
+    cost_price: float | None = None
+    cost_source: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ProductCostItem(BaseModel):
+    """One effective-dated purchase cost row (net of VAT)."""
+    product_cost_id: int
+    product_id: int
+    valid_from: date
+    valid_to: date | None = None
+    cost_price: float
+    source: str = "MANUAL"
+    notes: str | None = None
+    is_current: bool = False
+
+
+class CreateProductCostRequest(BaseModel):
+    valid_from: date
+    cost_price: float = Field(ge=0, le=1000)
+    source: str = "MANUAL"
+    notes: str | None = Field(default=None, max_length=255)
+    force: bool = False
+
+
+class UpdateProductCostRequest(BaseModel):
+    valid_from: date | None = None
+    cost_price: float | None = Field(default=None, ge=0, le=1000)
+    notes: str | None = Field(default=None, max_length=255)
 
 
 class CreateProductRequest(BaseModel):
@@ -1137,9 +1166,15 @@ class TopProductItem(BaseModel):
 class EvolutionItem(BaseModel):
     """One bucket in a time-series chart (hour / day / month)."""
     period_label: str  # "2026-06-26T14:00" or "2026-06-01" or "2026-01"
-    sales: float = 0
+    sales: float = 0          # gross revenue (VAT included)
+    net_sales: float = 0      # revenue net of VAT
     gallons: float = 0
     count: int = 0
+    # Gross margin = net sales - cost of goods sold.
+    # None when no dispatch in the bucket has a cost snapshot.
+    utility: float | None = None
+    # False when at least one dispatch/detail in the bucket lacks a cost.
+    utility_complete: bool = True
 
 
 class CompareResponse(BaseModel):
@@ -1159,6 +1194,9 @@ class EvolutionCompareResponse(BaseModel):
     previous: list[EvolutionItem]
     current: list[EvolutionItem]
     next: list[EvolutionItem]
+    # Latest cost source per product as of the anchor period:
+    # REAL (ERP/MANUAL), EXAMPLE (seed data), MISSING (no costs).
+    cost_quality: str = "UNKNOWN"
 
 
 class TopPeriodItem(BaseModel):

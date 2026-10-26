@@ -17,6 +17,7 @@ from app.models.payment import PaymentMethod
 from app.models.person import Person, Vehicle
 from app.models.pricing import PriceList, PriceListItem
 from app.models.product import Grade, Product, ProductCategory, TaxType
+from app.models.product_cost import ProductCost
 from app.models.shift import Shift
 from app.models.tributary import EmissionPoint
 from app.models.user import Role, User
@@ -44,6 +45,7 @@ __all__ = [
     "PriceListItem",
     "Product",
     "ProductCategory",
+    "ProductCost",
     "Role",
     "Shift",
     "SystemConfig",

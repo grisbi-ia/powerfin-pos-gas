@@ -110,6 +110,34 @@ class TestDispatchAPI:
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
+    async def test_complete_dispatch_freezes_unit_cost(self, client, auth_headers, db):
+        """The purchase cost effective on the sale date is frozen in the detail."""
+        from sqlalchemy import select
+        from app.models.dispatch import Dispatch, DispatchDetail
+
+        await self._open_shift(client, auth_headers)
+        r = await client.post("/api/pos/dispatches", headers=auth_headers, json={
+            "dispenser_id": 1, "hose_id": 1, "side": "A",
+            "preset_type": "MONEY", "preset_value": "20.00",
+            "unit_price": 3.103, "payment_method_id": 1,
+            "customer_id": "0912345675",
+            "dispatch_type_code": "SALE",
+        })
+        order_id = r.json()["order_id"]
+        r = await client.post(f"/api/pos/dispatches/{order_id}/complete", headers=auth_headers, json={
+            "order_id": order_id, "amount": 3.103, "unit_price": 3.103,
+            "volume": "1", "payment_method_id": 1, "fusion_sale_id": "200",
+        })
+        assert r.status_code == 200
+
+        dispatch = (await db.execute(
+            select(Dispatch).where(Dispatch.order_id == order_id)
+        )).scalar_one()
+        detail = (await db.execute(
+            select(DispatchDetail).where(DispatchDetail.dispatch_id == dispatch.dispatch_id)
+        )).scalar_one()
+        assert float(detail.unit_cost) == 2.60
+
     async def test_complete_idempotent(self, client, auth_headers):
         await self._open_shift(client, auth_headers)
         r = await client.post("/api/pos/dispatches", headers=auth_headers, json={

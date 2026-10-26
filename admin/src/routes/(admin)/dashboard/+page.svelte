@@ -41,6 +41,27 @@
 
   const isToday = $derived(period === 'daily' && selectedDate === toLocalDate(new Date()));
 
+  // Utility = net sales - cost of goods sold (cost frozen at sale time).
+  const utilitySeries = $derived(evolutionCompare?.current ?? []);
+  const utilityKnown = $derived(
+    utilitySeries.filter((item: any) => item.utility !== null && item.utility !== undefined)
+  );
+  const utilityTotal = $derived(
+    utilityKnown.reduce((sum: number, item: any) => sum + item.utility, 0)
+  );
+  const netSalesTotal = $derived(
+    utilitySeries.reduce((sum: number, item: any) => sum + (item.net_sales ?? 0), 0)
+  );
+  const hasUtility = $derived(utilityKnown.length > 0);
+  const hasSales = $derived(utilitySeries.some((item: any) => (item.count ?? 0) > 0));
+  const utilityComplete = $derived(
+    utilitySeries.length > 0 && utilitySeries.every((item: any) => item.utility_complete !== false)
+  );
+  const marginPct = $derived(
+    netSalesTotal > 0 ? (utilityTotal / netSalesTotal) * 100 : 0
+  );
+  const costQuality = $derived(evolutionCompare?.cost_quality ?? 'UNKNOWN');
+
   // ── Date helpers ─────────────────────────────────────────────────
 
   function toLocalDate(d: Date): string {
@@ -303,6 +324,50 @@
           currentLabel={evolutionCompare.current_label}
           nextLabel={evolutionCompare.next_label}
         />
+      </div>
+
+      <!-- Gross margin per hour/day/month -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <h3 class="text-sm font-semibold text-gray-700">
+            {period === 'daily' ? 'Utilidad por Hora' : period === 'annual' ? 'Utilidad por Mes' : 'Utilidad por Día'}
+          </h3>
+          {#if hasUtility}
+            <div class="text-xs text-gray-500">
+              Utilidad: <span class="font-semibold text-teal-700">{formatCurrency(utilityTotal)}</span>
+              · Margen: <span class="font-semibold text-teal-700">{marginPct.toFixed(1)}%</span>
+            </div>
+          {/if}
+        </div>
+        <ComparisonChart
+          metric="utility"
+          {period}
+          previous={evolutionCompare.previous}
+          current={evolutionCompare.current}
+          next={evolutionCompare.next}
+          previousLabel={evolutionCompare.previous_label}
+          currentLabel={evolutionCompare.current_label}
+          nextLabel={evolutionCompare.next_label}
+        />
+        {#if costQuality === 'EXAMPLE'}
+          <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            ⚠️ Datos de costo de <strong>ejemplo</strong>. Reemplázalos con el costo real del ERP
+            en <strong>Productos → Historial de costos</strong>.
+          </p>
+        {/if}
+        {#if !hasSales}
+          <p class="mt-3 text-xs text-gray-500">Sin despachos en el período.</p>
+        {:else if !hasUtility}
+          <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            Sin costo de compra configurado. Ve a <strong>Productos → Historial de costos</strong>
+            para cargar el costo por galón (sin IVA).
+          </p>
+        {:else if !utilityComplete}
+          <p class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            ⚠️ Utilidad parcial: hay despachos sin costo congelado para su fecha. Esos despachos
+            no se cuentan como utilidad cero; el período se completa al cargar la vigencia faltante.
+          </p>
+        {/if}
       </div>
     {/if}
 

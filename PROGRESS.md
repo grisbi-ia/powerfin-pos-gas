@@ -4,6 +4,30 @@
 
 ---
 
+## v0.40.0 (2026-10-26) — Utilidad por Hora y costos de compra con vigencia
+
+- **Problema**: el dashboard mostraba ventas y galones, pero no la utilidad. No existía
+  ningún costo de compra en la base del POS, y guardar solo el costo actual habría
+  reescrito la utilidad histórica cada vez que cambia el costo.
+- **Modelo**: nueva tabla `product_cost_history` (`product_id`, `valid_from`,
+  `cost_price` neto sin IVA, `source`, `notes`). El "hasta" se calcula con la siguiente
+  vigencia: no hay huecos ni solapes. `dispatch_details.unit_cost` congela el costo al
+  momento de la venta; si no hay costo para la fecha, queda `NULL` (nunca cero).
+- **Backend**: `app/services/cost_service.py` (lookup por fecha, historial, upsert),
+  endpoints CRUD en `/api/admin/products/{id}/costs`, snapshot en
+  `create_dispatch`/`complete_dispatch`, y `evolution` ahora devuelve `net_sales`,
+  `utility` y `utility_complete` por bucket (hora/día/mes).
+- **Frontend Admin**: gráfico “Utilidad por Hora” (y por Día/Mes) después de Galones;
+  total y margen del período; aviso de utilidad parcial si faltan costos. En
+  Productos → Editar se agregó el historial de vigencias (desde/hasta/costo/origen).
+- **Datos de ejemplo**: `scripts/seed_product_costs.py` carga vigencias `EXAMPLE`
+  desde 2026-06-01; `scripts/import_product_costs.py` importa el CSV del ERP;
+  `scripts/backfill_dispatch_costs.py` congela el costo en despachos históricos.
+- **Tests**: backend **559 passed** (11 nuevos: CRUD de costos, utilidad por bucket,
+  utilidad incompleta y snapshot). Admin `svelte-check` 0 errores · build OK.
+
+---
+
 ## v0.39.3 (2026-09-21) — POS: identificación editable (solo si es NULL) en "Datos faltantes"
 
 - **Problema reportado**: tras dejar `persons.id_number = NULL` en 197 clientes para que
