@@ -326,6 +326,10 @@ Ready for production integration with POS frontend.
       (Diesel, Súper, Eco País) sin IVA, sin mezclar compra/venta, y se agregó la tabla
       **Utilidad por Día y Producto** en la vista mensual. `gallons-by-period` devuelve
       `net_sales`, `cost`, `utility` y `utility_complete` por producto.
+- [x] v0.40.3/v0.40.4: importador de costos con `PRODUCT_ID` y promedio de dobles
+      compras; backfill corregido y ejecutado en producción (**59 vigencias ERP**,
+      **19.625 detalles** con costo). Los 12.383 despachos anteriores al 05-ago quedan
+      sin costo (utilidad parcial).
 
 **Próximas tareas (fuente viva: NEXT_SESSION.md).**
 - [x] **2026-09-13**: `scripts/limpiar_ids_invalidos.py --apply` ejecutado → **198 clientes**

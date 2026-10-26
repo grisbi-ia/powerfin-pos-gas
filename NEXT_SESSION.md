@@ -26,11 +26,13 @@
       duplicados (`average` por defecto; también `last`/`first`/`error`). Dry-run:
       63 filas → 59 vigencias, 4 duplicados (dos compras/día → promedio), 0 errores.
       Pendiente aplicar en producción como `postgres`.
-- [ ] **Importar el CSV real del ERP**:
-      `python scripts/import_product_costs.py --file costos.csv --apply`
-      y luego `python scripts/backfill_dispatch_costs.py --apply`.
-      El CSV adjunto no apareció en el proyecto; el importador acepta
-      `product_code,valid_from,cost_price,notes` (o equivalentes en español).
+- [x] **Importar el CSV real del ERP** — **HECHO 2026-10-26**: 59 vigencias
+      `ERP` cargadas (4 fechas de doble compra promediadas) y backfill de **19.625
+      detalles** desde el 05-ago. Quedan 12.383 detalles anteriores al 05-ago sin
+      costo (utilidad parcial en junio/julio). Verificado: utilidad del día
+      $51,17 sobre venta neta $1.250,56.
+- [x] **v0.40.4 — fix del backfill**: `--since` como fecha y `UPDATE ... FROM
+      dispatches d`; aplicado y verificado en producción.
 - [ ] **Deploy** de backend + admin y ejecutar migración `a1b2c3d4e5f6`.
 - [ ] **Decisión de negocio**: confirmar que “utilidad” = margen bruto (venta neta de
       IVA − costo neto de IVA), sin sueldos, transporte ni merma.

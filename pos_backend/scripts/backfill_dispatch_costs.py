@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from datetime import date
 
 from sqlalchemy import text
 
@@ -66,23 +67,21 @@ UPDATE_SQL = """
 UPDATE dispatch_details dd
 SET unit_cost = (
     SELECT pc.cost_price
-    FROM dispatches d
-    JOIN product_cost_history pc
-      ON pc.product_id = dd.product_id
-     AND pc.valid_from <= (d.created_at AT TIME ZONE 'America/Guayaquil')::date
-    WHERE d.dispatch_id = dd.dispatch_id
+    FROM product_cost_history pc
+    WHERE pc.product_id = dd.product_id
+      AND pc.valid_from <= (d.created_at AT TIME ZONE 'America/Guayaquil')::date
     ORDER BY pc.valid_from DESC
     LIMIT 1
 )
-WHERE dd.unit_cost IS NULL
+FROM dispatches d
+WHERE dd.dispatch_id = d.dispatch_id
+  AND dd.unit_cost IS NULL
   {since_filter}
   AND EXISTS (
       SELECT 1
-      FROM dispatches d
-      JOIN product_cost_history pc
-        ON pc.product_id = dd.product_id
-       AND pc.valid_from <= (d.created_at AT TIME ZONE 'America/Guayaquil')::date
-      WHERE d.dispatch_id = dd.dispatch_id
+      FROM product_cost_history pc
+      WHERE pc.product_id = dd.product_id
+        AND pc.valid_from <= (d.created_at AT TIME ZONE 'America/Guayaquil')::date
   )
 """
 
@@ -96,7 +95,7 @@ WHERE unit_cost IS NULL
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--apply", action="store_true", help="Write the values (default: dry-run)")
-    p.add_argument("--since", default=None, help="Only rows on/after this date (YYYY-MM-DD)")
+    p.add_argument("--since", type=date.fromisoformat, default=None, help="Only rows on/after this date (YYYY-MM-DD)")
     return p.parse_args(argv)
 
 

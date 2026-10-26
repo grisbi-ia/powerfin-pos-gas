@@ -4,6 +4,22 @@
 
 ---
 
+## v0.40.4 (2026-10-26) — Backfill corregido e importación real del ERP
+
+- **Fix `backfill_dispatch_costs.py`**: `--since` se parsea como `date` y el `UPDATE`
+  ahora declara `FROM dispatches d` (antes fallaba con `missing FROM-clause entry for
+  table "d"`).
+- **Importación real en producción**: 59 vigencias `ERP` cargadas (26 Diesel,
+  3 Súper, 30 Eco País), con las 4 fechas de doble compra promediadas.
+- **Backfill aplicado**: **19.625 detalles** con `unit_cost` congelado desde el
+  2026-08-05. Quedan **12.383 detalles anteriores al 05-ago** sin costo (utilidad
+  parcial en junio/julio).
+- **Verificado**: utilidad del 2026-10-26 = **$51,17** sobre venta neta de
+  **$1.250,56** (4,1%); Diesel $14,92 · Súper $1,19 · Eco País $35,06.
+- **Tests**: sin cambios de código de la app; el backfill se validó contra producción.
+
+---
+
 ## v0.40.3 (2026-10-26) — Importador de costos: PRODUCT_ID y duplicados
 
 - **`scripts/import_product_costs.py`**: acepta `PRODUCT_ID` además de
