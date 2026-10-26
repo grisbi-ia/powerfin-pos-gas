@@ -1,21 +1,29 @@
 # NEXT_SESSION.md — Powerfin POS
 
-## ✅ Dashboard Admin — Utilidad por Hora (2026-10-26) — v0.40.0 → v0.40.2
+## ✅ Dashboard Admin — Utilidad, costos y operación (2026-10-26) — v0.40.0 → v0.40.5
+
+**Estado de producción (2026-10-26):**
+- Backend desplegado y migración `a1b2c3d4e5f6` aplicada.
+- **59 vigencias ERP** cargadas; **19.625 detalles** con costo congelado.
+- **12.383 detalles anteriores al 05-ago** sin costo (utilidad parcial en junio/julio).
+- **Admin v0.40.5 pendiente de subir**; dashboard en revisión con el gerente.
+- Incidente resuelto: DBVisualizer dejó una transacción abierta (`idle in transaction`,
+  PID 2287751) que bloqueó la migración; se terminó esa sesión, sin pérdida de ventas.
 
 - [x] **Costo de compra con vigencia**: tabla `product_cost_history` (`valid_from` +
       costo neto sin IVA; el “hasta” se calcula con la siguiente fila) y snapshot
       `dispatch_details.unit_cost` al momento de la venta. Si no hay costo para la
       fecha, el bucket queda `utility=null` / `utility_complete=false`, nunca en cero.
-- [x] **Gráfica de tres líneas** (Ventas netas, Costo de ventas y Utilidad) por Hora,
-      Día y Mes después de “Galones”. Las gráficas de ventas llevan la etiqueta
-      “con IVA”; la de margen, “sin IVA”. Muestra utilidad y margen del período, con
-      aviso visible si la utilidad es parcial.
+- [x] **Gráfica de utilidad por producto** (v0.40.2): una línea por producto
+      (Diesel, Súper, Eco País), sin IVA, sin mezclar compra/venta. La versión inicial
+      de tres líneas (venta/costo/utilidad) se descartó. Las gráficas de ventas llevan
+      la etiqueta “con IVA”; la de margen, “sin IVA”.
 - [x] **Admin → Productos → Editar**: historial de vigencias (Desde / Hasta / Costo sin
       IVA / Origen / Nota) y alta/baja de costos. La lista de productos muestra el
       costo vigente.
-- [x] **Datos de ejemplo** cargados como `source='EXAMPLE'` desde 2026-06-01
-      (`scripts/seed_product_costs.py`). **No son datos reales**: reemplazarlos cuando
-      llegue el CSV del ERP.
+- [x] **Datos de ejemplo** solo en desarrollo (`scripts/seed_product_costs.py`,
+      `source='EXAMPLE'`, desde 2026-06-01). **Producción usa los 59 costos reales del
+      ERP** importados el 2026-10-26, no los ejemplos.
 - [x] **v0.40.1 — etiquetas con/sin IVA**: las gráficas de ventas dicen “(con IVA)”;
       la de margen dice “(sin IVA)”.
 - [x] **v0.40.2 — utilidad por producto**: la gráfica muestra una línea de utilidad por
@@ -25,7 +33,7 @@
 - [x] **v0.40.3 — importador adaptado al CSV real**: acepta `PRODUCT_ID` y resuelve
       duplicados (`average` por defecto; también `last`/`first`/`error`). Dry-run:
       63 filas → 59 vigencias, 4 duplicados (dos compras/día → promedio), 0 errores.
-      Pendiente aplicar en producción como `postgres`.
+      **Aplicado en producción el 2026-10-26 como `postgres`.**
 - [x] **Importar el CSV real del ERP** — **HECHO 2026-10-26**: 59 vigencias
       `ERP` cargadas (4 fechas de doble compra promediadas) y backfill de **19.625
       detalles** desde el 05-ago. Quedan 12.383 detalles anteriores al 05-ago sin
@@ -38,6 +46,9 @@
       dispatches d`; aplicado y verificado en producción.
 - [x] **Deploy backend + migración `a1b2c3d4e5f6`** — HECHO 2026-10-26.
 - [ ] **Deploy admin v0.40.5** (subir y aplicar; no afecta ventas del POS).
+- [ ] **Revisión con el gerente/directivo** del dashboard de utilidad.
+- [ ] **Costos de junio/julio**: si el ERP los tiene, importarlos para completar la
+      utilidad histórica (hoy quedan 12.383 detalles sin costo).
 - [ ] **Decisión de negocio**: confirmar que “utilidad” = margen bruto (venta neta de
       IVA − costo neto de IVA), sin sueldos, transporte ni merma.
 

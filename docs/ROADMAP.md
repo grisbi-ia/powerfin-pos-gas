@@ -771,6 +771,38 @@ y puesta en producción.
 
 ---
 
+## Post-FASE 17 — Utilidad y costos de compra (2026-10-26)
+
+### Objetivo
+
+Mostrar la **utilidad bruta** del negocio en el Dashboard Admin, desagregada por
+producto y por hora/día/mes, respetando el costo de compra vigente en cada fecha.
+
+### Entregado
+
+```
+✅ Tabla product_cost_history (costo neto sin IVA + valid_from; "hasta" calculado)
+✅ Snapshot dispatch_details.unit_cost al momento de la venta
+✅ Gráfica "Utilidad por Producto" por hora/día/mes (sin IVA)
+✅ Tabla "Utilidad por Día y Producto" con utilidad total y $/galón
+✅ Tooltip con utilidad total, galones y utilidad/galón
+✅ Etiquetas "con IVA" en ventas y "sin IVA" en utilidad
+✅ CRUD de vigencias en Admin → Productos
+✅ Importador CSV (PRODUCT_ID, duplicados con promedio)
+✅ 59 vigencias ERP importadas y 19.625 detalles con backfill
+```
+
+### Pendiente
+
+```
+☐ Subir Admin v0.40.5 a producción
+☐ Revisión con el gerente/directivo
+☐ Importar costos de junio/julio si el ERP los tiene (12.383 detalles sin costo)
+☐ Confirmar definición de utilidad: margen bruto sin IVA, sin sueldos/transporte/merma
+```
+
+---
+
 ## Orden de lectura de documentos para AGENTS Code
 
 **Fase 1 (FusionBridge):**
@@ -841,3 +873,10 @@ y puesta en producción.
 | Post-17      | `v0.37.3` | Cliente obligatorio + plate_raw · Monitor/reconciler SRI              |
 | Post-17      | `v0.38.0` | Validación cédula/RUC + el POS obliga a re-pedir la identificación    |
 | Post-17      | `v0.39.0` | Reintento automático de facturas “nunca enviadas” + clave al cruzar medianoche |
+| Post-17      | `v0.40.0` | Costos con vigencia + utilidad por hora/día/mes + snapshot por despacho |
+| Post-17      | `v0.40.1` | Etiquetas con/sin IVA en el dashboard |
+| Post-17      | `v0.40.2` | Utilidad por producto + tabla Utilidad por Día y Producto |
+| Post-17      | `v0.40.3` | Importador de costos: PRODUCT_ID + promedio de dobles compras |
+| Post-17      | `v0.40.4` | Importación ERP (59 vigencias) + backfill corregido (19.625 detalles) |
+| Post-17      | `v0.40.5` | Utilidad por galón en tabla y tooltip |
+| Post-17      | `v0.40.6` | Documentación de operación, costos ERP y utilidad |

@@ -1,6 +1,40 @@
 # PROGRESS.md — Powerfin POS · Historial cronológico de cambios
 
-> Última actualización: **2026-09-21** · Rama: `main` · HEAD: `v0.39.3`
+> Última actualización: **2026-10-26** · Rama: `main` · HEAD: `v0.40.6`
+
+---
+
+## Operación 2026-10-26 — deploy controlado, costos ERP y utilidad
+
+- **Deploy backend + migración `a1b2c3d4e5f6`**: aplicado en producción. La migración
+  quedó bloqueada por una sesión de **DBVisualizer en `idle in transaction`** (PID
+  2287751, 47 minutos) que retenía un `AccessShareLock` sobre `dispatch_details`.
+  Se terminó esa sesión, Alembic continuó, `pos-backend` reinició y las ventas
+  siguieron. **Sin pérdida de datos ni de ventas.**
+- **Importación real del ERP**: **59 vigencias** (`source='ERP'`) desde el 2026-08-05
+  hasta el 2026-10-22. Las 4 fechas con dos compras el mismo día se resolvieron con
+  **promedio simple** (el CSV no trae galones comprados).
+- **Backfill**: **19.625 detalles** con `unit_cost` congelado desde el 2026-08-05.
+  Quedan **12.383 detalles anteriores al 05-ago** sin costo (utilidad parcial en
+  junio/julio).
+- **Verificación del día**: utilidad **$51,17** sobre venta neta **$1.250,56** (4,1%);
+  Diesel $14,92 · Súper $1,19 · Eco País $35,06.
+- **Pendiente**: subir Admin v0.40.5 (no afecta ventas del POS) y revisión con el
+  gerente/directivo.
+
+---
+
+## v0.40.6 (2026-10-26) — Documentación de operación, costos y utilidad
+
+- **PROGRESS**: bloque “Operación 2026-10-26” con el deploy controlado, el incidente de
+  DBVisualizer (`idle in transaction`, PID 2287751), la importación de 59 vigencias ERP,
+  el backfill de 19.625 detalles y la verificación de utilidad del día.
+- **NEXT_SESSION**: estado real de producción, pendientes (Admin v0.40.5, revisión con
+  el gerente, costos de junio/julio) y aclaración de que producción usa costos ERP, no
+  los datos `EXAMPLE` de desarrollo.
+- **ROADMAP**: nueva sección “Post-FASE 17 — Utilidad y costos de compra” y filas
+  `v0.40.0` → `v0.40.6` en la tabla de versionado.
+- **Sin cambios de código**: solo documentación.
 
 ---
 
@@ -42,9 +76,8 @@
   únicas**, **4 duplicados** y **0 errores**. Las 4 fechas duplicadas son dos
   compras del mismo día; se usa el **promedio simple** (el CSV no trae galones
   comprados). Impacto frente a elegir una sola compra: **< $3** en toda la historia.
-- **Pendiente**: aplicar en producción como `postgres` (la tabla
-  `product_cost_history` no tiene permisos para `agent_llm`) y ejecutar el
-  backfill. Los despachos anteriores al 2026-08-05 quedarán sin costo.
+- **Resuelto en v0.40.4**: se importó en producción como `postgres` y se ejecutó el
+  backfill. Los despachos anteriores al 2026-08-05 quedaron sin costo.
 
 ---
 
