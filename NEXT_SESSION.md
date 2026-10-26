@@ -22,6 +22,10 @@
       producto (Diesel, Súper, Eco País), sin mezclar compra/venta. Se agregó la tabla
       **Utilidad por Día y Producto** en la vista mensual. `gallons-by-period` devuelve
       `net_sales`, `cost`, `utility` y `utility_complete`.
+- [x] **v0.40.3 — importador adaptado al CSV real**: acepta `PRODUCT_ID` y resuelve
+      duplicados (`average` por defecto; también `last`/`first`/`error`). Dry-run:
+      63 filas → 59 vigencias, 4 duplicados (dos compras/día → promedio), 0 errores.
+      Pendiente aplicar en producción como `postgres`.
 - [ ] **Importar el CSV real del ERP**:
       `python scripts/import_product_costs.py --file costos.csv --apply`
       y luego `python scripts/backfill_dispatch_costs.py --apply`.

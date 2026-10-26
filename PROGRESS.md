@@ -4,6 +4,21 @@
 
 ---
 
+## v0.40.3 (2026-10-26) — Importador de costos: PRODUCT_ID y duplicados
+
+- **`scripts/import_product_costs.py`**: acepta `PRODUCT_ID` además de
+  `product_code`/`code`/`codigo`, y resuelve fechas duplicadas con
+  `--on-duplicate average|last|first|error` (default `average`).
+- **Dry-run del CSV real** (`costos_2026-10-26.csv`): 63 filas → **59 vigencias
+  únicas**, **4 duplicados** y **0 errores**. Las 4 fechas duplicadas son dos
+  compras del mismo día; se usa el **promedio simple** (el CSV no trae galones
+  comprados). Impacto frente a elegir una sola compra: **< $3** en toda la historia.
+- **Pendiente**: aplicar en producción como `postgres` (la tabla
+  `product_cost_history` no tiene permisos para `agent_llm`) y ejecutar el
+  backfill. Los despachos anteriores al 2026-08-05 quedarán sin costo.
+
+---
+
 ## v0.40.2 (2026-10-26) — Utilidad por producto y tabla diaria
 
 - **Gráfica**: la tarjeta de margen ahora muestra **una línea de utilidad por producto**
